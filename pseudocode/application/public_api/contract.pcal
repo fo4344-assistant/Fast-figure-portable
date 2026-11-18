@@ -27,6 +27,7 @@ PUBLIC_API_METHODS == [
  "project.importFile" |-> <<"wrapper","importProjectFile">>,
  "project.exportFile" |-> <<"wrapper","downloadProject">>,
  "slots.readSelected" |-> <<"selected-query","slots.readSelected">>,
+ "slots.readDisplay" |-> <<"query","slots.readDisplay">>,
  "slots.select" |-> <<"adapter","dispatchSlotSelection">>,
  "slots.setContentType" |-> <<"wrapper","setSlotContentType">>,
  "slots.reset" |-> <<"wrapper","resetSlotApi">>,
@@ -34,11 +35,14 @@ PUBLIC_API_METHODS == [
  "slots.prepareFileDrop" |-> <<"wrapper","ApplicationApi_prepareDashboardFileDrop">>,
  "slots.finishFileDrop" |-> <<"wrapper","finishDashboardFileDrop">>,
  "images.readEditor" |-> <<"selected-query","images.readEditor">>,
+ "images.readSettings" |-> <<"selected-query","images.readSettings">>,
  "images.setSettings" |-> <<"wrapper","applyImageSettingsFromValues">>,
  "images.insertEmpty" |-> <<"wrapper","insertEmptyImageIntoSelectedSlot">>,
  "assets.readDeletionTarget" |-> <<"query","assets.readDeletionTarget">>,
  "assets.delete" |-> <<"wrapper","deleteProjectAsset">>,
  "assets.readTree" |-> <<"query","assets.readTree">>,
+ "assets.readList" |-> <<"query","assets.readList">>,
+ "assets.readPreview" |-> <<"query","assets.readPreview">>,
  "assets.isTrashed" |-> <<"query","assets.isTrashed">>,
  "assets.movable" |-> <<"query","assets.movable">>,
  "assets.readTrash" |-> <<"query","assets.readTrash">>,
@@ -61,6 +65,8 @@ PUBLIC_API_METHODS == [
  "assets.selectImage" |-> <<"select-asset","image">>,
  "assets.download" |-> <<"wrapper","downloadProjectAsset">>,
  "graphs.readData" |-> <<"selected-query","graphs.readData">>,
+ "graphs.readControls" |-> <<"selected-query","graphs.readControls">>,
+ "graphs.readColumns" |-> <<"query","graphs.readColumns">>,
  "graphs.readLayout" |-> <<"selected-query","graphs.readLayout">>,
  "graphs.readPalette" |-> <<"selected-query","graphs.readPalette">>,
  "graphs.selectCsv" |-> <<"wrapper","selectProjectCsv">>,
@@ -83,6 +89,7 @@ PUBLIC_API_METHODS == [
  "print.save" |-> <<"wrapper","exportDashboardTarget">>,
  "print.capture" |-> <<"wrapper","captureDashboardCurrent">>,
  "captions.readGlobal" |-> <<"query","captions.readGlobal">>,
+ "captions.readSettings" |-> <<"query","captions.readSettings">>,
  "captions.readSlot" |-> <<"query","captions.readSlot">>,
  "captions.setEnabled" |-> <<"wrapper","setCaptionsApiEnabled">>,
  "captions.setGlobalText" |-> <<"wrapper","setGlobalCaptionText">>,
@@ -92,6 +99,7 @@ PUBLIC_API_METHODS == [
  "captions.setNameBold" |-> <<"wrapper","setCaptionsApiNameBold">>,
  "captions.setSettings" |-> <<"wrapper","setCaptionsApiSettings">>,
  "labels.readState" |-> <<"wrapper","ApplicationApi_readLabelsApiState">>,
+ "labels.readSettings" |-> <<"selected-query","labels.readSettings">>,
  "labels.setEnabled" |-> <<"wrapper","setLabelsApiEnabled">>,
  "labels.setSettings" |-> <<"wrapper","setLabelsApiSettings">>,
  "labels.setPosition" |-> <<"wrapper","setLabelsApiPosition">>,
@@ -101,6 +109,7 @@ PUBLIC_API_METHODS == [
  "appearance.setPalette" |-> <<"wrapper","setAppearanceApiPalette">>,
  "appearance.resetPalette" |-> <<"wrapper","resetAppearanceApiPalette">>,
  "layout.readState" |-> <<"wrapper","readLayoutApiState">>,
+ "layout.readControls" |-> <<"wrapper","readLayoutApiControls">>,
  "layout.setStyle" |-> <<"wrapper","setLayoutApiStyle">>,
  "layout.setGrid" |-> <<"wrapper","setLayoutApiGrid">>,
  "layout.setZoom" |-> <<"wrapper","setLayoutApiZoom">>,
@@ -159,10 +168,10 @@ RouteWithoutReenteringLifecycle:
   elsif route[1] = "selected-query" then
     call InterfaceStateMachine_readState(); state := result;
     request := ExplicitReadArgsWithOperation(args,route[2]);
-    if method \in {"slots.readSelected","graphs.readData"} then
+    if method \in {"slots.readSelected","graphs.readData","graphs.readControls"} then
       request.frontendState := CopyOnlySelectedSlotAssetPathAssetKindAndObjectIndex(state);
     else request.selectedSlotId := state.selectedSlotId; end if;
-    if method = "images.readEditor" then request.slotId := state.selectedSlotId; end if;
+    if method \in {"images.readEditor","images.readSettings","labels.readSettings"} then request.slotId := state.selectedSlotId; end if;
     call dispatchProjectQuery("project-api",request);
   elsif route[1] = "select-asset" then
     call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> route[2],path |-> args.path]);
@@ -291,6 +300,8 @@ BindExactSourceInputs:
     call setAppearanceApiPalette(args.values);
   elsif method = "appearance.resetPalette" then
     call resetAppearanceApiPalette();
+  elsif method = "layout.readControls" then
+    call readLayoutApiControls();
   elsif method = "layout.readState" then
     call readLayoutApiState(OptionalArg(args,"previewWidth",NoValue));
   elsif method = "layout.setStyle" then

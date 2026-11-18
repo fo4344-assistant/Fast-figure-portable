@@ -125,19 +125,28 @@ BACKEND_QUERY_KINDS = {
     'project-api': {
         'project.readName': 'project.readName',
         'slots.readSelected': 'slots.readSelected',
+        'slots.readDisplay': 'slots.readDisplay',
         'images.readEditor': 'images.readEditor',
+        'images.readSettings': 'images.readSettings',
         'print.readSettings': 'print.readSettings',
         'appearance.readPalette': 'appearance.readPalette',
         'graphs.readData': 'graphs.readData',
+        'graphs.readControls': 'graphs.readControls',
+        'graphs.readColumns': 'graphs.readColumns',
         'graphs.readLayout': 'graphs.readLayout',
         'graphs.readPalette': 'graphs.readPalette',
         'graphs.hasSelectedSlot': 'graphs.hasSelectedSlot',
         'graphs.defaultColors': 'graphs.defaultColors',
         'captions.readGlobal': 'captions.readGlobal',
+        'captions.readSettings': 'captions.readSettings',
         'captions.readSlot': 'captions.readSlot',
         'labels.readState': 'labels.readState',
+        'labels.readSettings': 'labels.readSettings',
         'layout.readState': 'layout.readState',
+        'layout.readControls': 'layout.readControls',
         'assets.readTree': 'assets.readTree',
+        'assets.readList': 'assets.readList',
+        'assets.readPreview': 'assets.readPreview',
         'assets.readTrash': 'assets.readTrash',
         'assets.isTrashed': 'assets.isTrashed',
         'assets.movable': 'assets.movable',
@@ -296,7 +305,12 @@ def readBackendProjection(kind, request):
         8. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["images.readEditor"]이면: explicit slotId -> visible slot -> image asset; slotId/name/copied bytes와 그 bytes에서 순수 계산한 display URL, normalized slot-local settings copy, 없으면 none. Backend query는 revocable display resource를 할당하거나 runtime handle을 Project에 저장하지 않는다. surface resource lifetime은 supplied input을 소비하는 Frontend renderer가 소유한다.
         9. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["print.readSettings"]이면: export의 width/heightMode/height/dpi/format scalar copy
         10. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["appearance.readPalette"]이면: current appearance.uiPalette의 field copy; persistent palette hex validation과 defaults는 이 파일의 ProjectObject 규칙 사용
-        11. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.readData"]이면: frontendState.selectedSlotId로 graph chart를 resolve; Application의 post-commit read에 explicit chartId가 있으면 유일한 owning slot까지 resolve한다. chart의 detached copy(없으면 none), objects copy와 graphObjectIndex의 valid selectedIndex, assetSelection=csv인 assetPath에서 currentCsv/columns, selected object.csvId에서 별도 objectColumns를 계산. object.csvId를 currentCsv 대체 원천으로 쓰지 않는다. non-editable conversion view는 표시용 copy일 뿐 editable selectedIndex/objectColumns를 만들지 않는다. chart 없으면 objects=[], selectedIndex=none; CSV 없으면 해당 columns=[]
+        11. graphs.readData는 그래프 편집기 표시를 구성한다. frontendState.selectedSlotId 또는 명시 chartId의 유일한 visible 소유 슬롯을 찾는다.
+           chart는 id와 editor의 title·editable만, objects는 실제 편집 필드인 csvId·x·y·type·legendName·color·lineWidth·lineDash·markerSymbol·markerSize·barOpacity·barLineWidth·xAxisSide·yAxisSide만 순서대로 담는다.
+           선택 object index는 현재 editable chart의 범위 안이면 유지하고 그 외에는 None이다. 가져온 원본 JSON의 conversion object는 같은 표시 필드만 제공하며 선택 편집은 허용하지 않는다.
+           currentCsv는 독립 CSV 선택의 assetPath에서 찾은 id/path/name/headerLines/rowCount다. rowCount는 소유 배열 길이로 구한다.
+           chart가 없으면 chart=None, objects=[], selectedIndex=None이며 CSV 부재이면 currentCsv=None이다.
+           chart.graph·imported figure·CSV 행/bytes를 복사하거나 열 정의를 계산하지 않는다. columns/objectColumns 필드는 제거한다.
         12. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.readLayout"]이면: explicit selectedSlotId로 owning chart를 resolve한 title/globalSettings/axis copy; 없으면 none
         13. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.readPalette"]이면: 같은 owning chart의 editor object color sequence copy; 없으면 empty sequence
         14. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.hasSelectedSlot"]이면: explicit selectedSlotId가 visible graph slot인지 boolean; chart가 없어도 graph slot이면 true
@@ -305,13 +319,22 @@ def readBackendProjection(kind, request):
         17. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["captions.readSlot"]이면: explicit slotId의 slot.caption copy; 없는 slot이면 none; placeholder는 반환 presentation일 뿐 저장하지 않음
         18. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["labels.readState"]이면: sourcescript.backend.layout_annotations readLabelsApiState(slotId)의 label settings와 explicit slot reference geometry copy
         19. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["layout.readState"]이면: 같은 current project에서 gridRows/gridCols/slotStyle, visibleSlots, renderedWidth의 previewGeometry를 copy한다. gridLimits에는 backend.defaults.limits.layout의 gridRows/gridCols 범위를 같은 조회에서 분리 복사한다. visibleSlots는 기존 id/row/col/rowSpan/colSpan과 contentType/chart/imageId 및 buildSlotAssetDisplay(slot, project)의 assetDisplay를 포함한다. width는 backend.defaults.preview.widthRange/fallbackWidth를 사용한다. Backend는 session 확대 비율을 읽지 않으며 Application만 public read에 합성한다. DOM 역추론/preview 저장이나 독립 slot/chart authority는 없다.
-        20. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.readTree"]이면: current directories 순서의 directory node와 CSV/image collection 순서의 asset node로 만든 canonical VFS node sequence copy. directory는 kind/path/name/children, asset은 kind/path/id/name/asset detached copy를 갖고 canonical parent의 children으로 연결한다. slot/chart collection을 이 반환에 혼합하거나 legacy directories/data/images/charts/slots 묶음으로 대체하지 않는다.
-        21. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.readTrash"]이면: 같은 tree 계산의 trash subtree copy
+        20. assets.readTree는 directory의 kind/path/name/children과 자산의 kind/id/path/name/referenceCount를 새 노드로 구성한다.
+           CSV에는 headerLines/rowCount를 더한다. rowCount는 소유 배열 길이에서 정규화한 headerLines를 뺀 값과 0 중 큰 값이다.
+           원래 directory·CSV·image 순서와 canonical parent 연결을 유지한다.
+           collectAssetReferences를 이번 호출에서 한 번 실행하여 자산별 수를 배분한다. 노드의 asset 본문 필드는 제거한다.
+           자산 rows/bytes를 읽어 복사하거나 chart/figure를 만들지 않는다. 입력 없이 전체 트리 표시 메타데이터만 반환한다.
+        21. assets.readTrash는 설정된 trash 경로의 directory/asset만 먼저 고른 뒤 같은 표시 필드로 subtree를 구성한다.
+           반환은 root, empty, referenceCount다. 비우기 확인의 referenceCount는 subtree 자산의 참조 수 합이며 같은 호출의 한 참조 수집으로 구한다.
+           비어 있으면 빈 root/empty=True/referenceCount=0을 반환한다. 휴지통 밖의 표시 노드와 자산 본문을 구성하지 않는다.
         22. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.isTrashed"]이면: 요청 path를 canonical 경로로 만들고
            trash root와 같거나 root + slash로 시작하는지 검사한 논리값을 projection에 둔다.
         23. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.movable"]이면: current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음
         24. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.draggableAsset"]이면: 존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별
-        25. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.readDeletionTarget"]이면: explicit path -> target asset의 detached copy와 collectAssetReferences의 사용 count/owner copy; 없으면 none; 생성 wrapper도 성공 뒤 target만 반환할 수 있음
+        25. assets.readDeletionTarget은 explicit canonical path의 자산을 찾아 target={kind,id,path,name}, referenceCount, references를 반환한다.
+           references에는 삭제 확인에 사용하는 kind/slotId/chartId/objectIndex만 담는다. 대상이 없으면 None이다.
+           한 번의 collectAssetReferences로 해당 자산의 참조만 고르고 자산 rows/bytes/figure를 구성하지 않는다.
+           생성 wrapper의 성공 반환도 이 target 메타데이터로 맞춘다. 원본은 assets.download, CSV 값은 readPreview/readControls에서 명시적으로 읽는다.
         26. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.moveOptions"]이면: current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy
         27. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.planMove"]이면: explicit source/destination을 current VFS에서 resolve한 collision/reference-count plan copy; commit 때 반드시 재검증
         28. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.resolveTreeSelection"]이면: path를 resolve한 accepted/kind/canonical path scalar input; invalid면 accepted=False
@@ -353,9 +376,34 @@ def readBackendProjection(kind, request):
         44. kind=interface-reconciliation: ProjectMutationResult 뒤 current Backend authority에서 계산한 Frontend reconciliation input
         45. kind=renderer: DOM/Plotly renderer가 한 projection 작업에 사용할 immutable project view
         46. kind=export: 한 작업용 immutable snapshot. 일반 project export/import 반환은 기존 whole-project snapshot이다. print.save/print.capture 요청은 같은 작업의 project settings/geometry와 renderer contract의 slot별 precomputed figure/image 입력을 함께 제공한다. transient export input이며 Frontend가 whole-project copy에서 graph domain 계산을 재실행하는 경로를 만들지 않는다.
-        47. compatibility/default normalization은 detached copy에서만 수행한다. 중첩 array/object까지 read-only로 반환하고
-           Backend 내부 mutable reference, event handler, DOM node, query/command callback은 projection에 포함하지 않는다.
-        48. projection를 반환한다.
+        47. 추가 project-api 조회를 다음과 같이 처리한다. 모든 분기는 이 호출의 project에서 필요한 필드부터 새로 구성한다.
+           - assets.readList(kind): kind가 csv/image인지 검사한다. 해당 collection의 id/path/name만 기존 순서로 반환한다.
+             CSV 행·bytes·참조 수집·VFS 트리 구성·figure 계산을 실행하지 않는다.
+           - graphs.readControls: 현재 선택 또는 explicit chartId로 유일한 visible 소유 슬롯을 찾는다.
+             slotId/chartId/title/editable/selectedIndex와 그 index의 편집 object 필드 하나, currentCsv 메타데이터를 반환한다.
+             chart는 graphs.readData와 같은 id/editor.title/editor.editable 메타데이터 또는 None으로 제공하여 명령 성공 확인에 사용한다.
+             object 필드는 11번과 같다. explicit csvId가 있으면 후속 헤더 확인의 currentCsv만 그 CSV로 정한다.
+             선택 CSV는 object.csvId로 대체하지 않는다. 누락 chart/object/CSV는 해당 필드 None이며 0은 유효하다.
+             모든 objects·chart.graph·CSV 행/bytes·열 정의를 구성하지 않는다.
+           - graphs.readColumns(csvId,chartId=None): explicit 정수 id의 CSV에 기존 graphs.columnDefinitions를 한 번 적용하여 id/index/label 배열만 반환한다.
+             csvId=None이고 chartId가 있으면 유일한 소유 슬롯의 noneditable conversionRows에서 기존 conversion 열 정의를 구한다.
+             원본 figure와 trace를 복사하거나 CSV를 새로 생성하지 않는다. 해당 CSV/conversion 대상이 없으면 빈 배열이다. 기존 헤더·중복 이름·ragged row·빈 값 규칙에 필요한 행 검사만 허용하며 행/bytes 사본은 반환하지 않는다.
+           - assets.readPreview(csvId,start,count): start는 0 이상 정수, count는 1..30 정수인지 검사한다. 생략값은 0,30이다.
+             없는 CSV는 None이다. csvId/headerLines/rowCount/start와 요청 구간의 rows만 반환한다.
+             start가 끝을 넘으면 rows=[]다. 소유 배열에서 min(start+count,rowCount)까지의 셀만 분리 복사한다.
+             전체 dataTable을 먼저 복사하거나 열·figure를 계산하지 않는다. 원본 bytes도 반환하지 않는다.
+           - images.readSettings(slotId): visible image 슬롯의 slotId/imageId/name과 정규화한 slot-local settings만 반환한다.
+             잘못된 종류·없는 슬롯은 None이고 연결 image가 없으면 imageId/name은 None이다. bytes·URL 생성·decode를 실행하지 않는다.
+           - slots.readDisplay: visible 슬롯의 id/row/col/rowSpan/colSpan/contentType/chart/imageId와 buildSlotAssetDisplay의 식별·이름 메타데이터만 기존 순서로 반환한다. chart는 연결 id다. Slot caption·CSV 행/bytes·previewGeometry·figure는 구성하지 않는다.
+           - layout.readControls: gridRows/gridCols/gridLimits/slotStyle만 반환한다. visibleSlots·assetDisplay·previewGeometry를 구성하지 않는다.
+           - captions.readSettings: annotations.captions의 enabled/settings만 반환한다. text/afterText는 읽어 복사하지 않는다.
+           - labels.readSettings(slotId): enabled·settings와 현재 visible slotId만 반환한다. geometry·labels·자막·figure를 계산하지 않는다.
+             위치 x/y는 settings에서 함께 반환한다. 슬롯 부재는 slotId=None이며 공통 설정은 유지한다.
+           images.readEditor, layout.readState, captions.readGlobal/readSlot, labels.readState는 이미지 표시·레이아웃 미리보기·자막 본문·라벨 위치 표시 소비자에 한정한다.
+        48. 각 분기의 필요한 필드만 authoritative 값에서 분리 생성한다. 큰 원본 전체를 복사한 뒤 필드를 버리는 경로를 만들지 않는다.
+           중첩 반환값의 읽기 전용 처리는 이번 호출의 방문 집합으로 동일 객체를 한 번만 방문한다.
+           Backend 가변 참조를 반환하거나 원본을 freeze하지 않는다. 방문 집합과 결과는 이 호출의 수명에서 끝낸다.
+           compatibility 정규화는 필요한 분리 필드에 적용하고 projection을 반환한다.
     """
     return projection
 

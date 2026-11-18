@@ -46,7 +46,7 @@ CurrentScopedRendererInputs:
     call InterfaceStateMachine_readState(); frontendState := result;
     if FieldOrNoValue(request,"operation") = NoValue then request.operation := "selected-slot"; end if;
     if request.operation = "selected-slot" then request.slotId := frontendState.selectedSlotId; end if;
-    call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
+    call readBackendProjection("project-api",[operation |-> "layout.readControls"]); layout := result;
     width := layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
     request.frontendState := frontendState; request.width := width;
     \* Current reads and final query have no intervening callback/await/command.

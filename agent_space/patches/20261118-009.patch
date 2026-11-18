@@ -1,0 +1,1147 @@
+diff --git a/development-versions.json b/development-versions.json
+index a04151860863b3fd7dbd5e5359f0a1a28d5d445c..594a6001f4530494030dafdbe8ba1c626b6ee3ca 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 162,
++      "revision": 163,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,14 +54,14 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:476accb6be4f04817e8b1ad50375f0fb8ae21966493449abf8e3e8e8d7895d00",
++      "fingerprint": "sha256:d6defd7741b6e4ea39489aa3d59a371ec4f83fe7468cdf0b7a104982ccdc6eda",
+       "derived_from": {
+-        "source-script": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4",
+-        "pseudocode": "sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129",
++        "source-script": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7",
++        "pseudocode": "sha256:a832497cc42a4047f273365ba9b82733cd163425079ef524dbe4938768d7a8ed",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+       "validation_review": null,
+-      "translation_review": "agent_space/reviews/review-20261118-009-plan044-source-code.md"
++      "translation_review": "agent_space/reviews/review-20261118-012-plan045-source-code.md"
+     },
+     "pseudocode": {
+       "revision": 34,
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index f5ec77e544ca7f74fd5ba0db7c83db4b4cb5edd7..01438a9ad1901f48cdc0c2d7568f81dbe80bbd31 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -147,7 +147,7 @@ export function dispatchProjectQuery(query, payload = {}) {
+   const request = { ...payload };
+   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
+     const state = interfaceFSM.readState(),
+-      layout = readBackendProjection("project-api", { operation: "layout.readState" });
++      layout = readBackendProjection("project-api", { operation: "layout.readControls" });
+     request.operation ??= "selected-slot";
+     if (request.operation === "selected-slot") request.slotId = state.selectedSlotId;
+     request.frontendState = state;
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+index 4a9143b7a5ef2ea7dacef6cb6f204499e0f2dfea..59e23c7b22211263a8f15cc72db10ade33caff00 100644
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -27,14 +27,14 @@ export function graphEditorObjectValues(chartId, index, values = {}) {
+     chartId, operation: "graphs.setObjectValues", index, values,
+   });
+   if (!result.committed) return result;
+-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
+ 
+   return chart;
+ }
+ 
+ export function setGraphObjectValuesApi(index, values = {}) {
+   const context = appFSM.query("project-api", {
+-    operation: "graphs.readData", frontendState: interfaceFSM.readState(),
++    operation: "graphs.readControls", frontendState: interfaceFSM.readState(),
+   });
+   return graphEditorObjectValues(context.chart?.id ?? null, index, values);
+ }
+@@ -45,7 +45,7 @@ export function graphEditorAdd(slotId, csvId) {
+   const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
+     [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+   if (!result.committed) return result;
+-  const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
++  const chart = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: { selectedSlotId: slotId } }).chart;
+ 
+   return chart;
+ }
+@@ -53,7 +53,7 @@ export function graphEditorAdd(slotId, csvId) {
+ export function addGraphObjectApi(csvId) {
+   const state = interfaceFSM.readState();
+   if (csvId === undefined) csvId = appFSM.query("project-api", {
+-    operation: "graphs.readData", frontendState: state,
++    operation: "graphs.readControls", frontendState: state,
+   }).currentCsv?.id;
+   return graphEditorAdd(state.selectedSlotId, csvId);
+ }
+@@ -66,7 +66,7 @@ export function graphEditorMove(chartId, from, to) {
+     chartId, operation: "graphs.moveObject", from, to,
+   });
+   if (!result.committed) return result;
+-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
+ 
+   return chart;
+ }
+@@ -76,45 +76,42 @@ export function graphEditorDelete(chartId, index) {
+     chartId, operation: "graphs.deleteObject", index,
+   });
+   if (!result.committed) return result;
+-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
+ 
+   return chart;
+ }
+ 
+ export function moveGraphObjectApi(from, to) {
+   const context = appFSM.query("project-api", {
+-    operation: "graphs.readData", frontendState: interfaceFSM.readState(),
++    operation: "graphs.readControls", frontendState: interfaceFSM.readState(),
+   });
+   return graphEditorMove(context.chart?.id ?? null, from, to);
+ }
+ 
+ export function deleteGraphObjectApi(index) {
+   const context = appFSM.query("project-api", {
+-    operation: "graphs.readData", frontendState: interfaceFSM.readState(),
++    operation: "graphs.readControls", frontendState: interfaceFSM.readState(),
+   });
+   return graphEditorDelete(context.chart?.id ?? null, index);
+ }
+ 
+ export function graphEditorHeaderLines(csvId, value) {
+-  const [result, state, projection] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
++  const [result] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
+   if (!result.committed) return result;
+-  const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
+-    read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
+-
+-  return read.target.headerLines;
++  return appFSM.query("project-api", { operation: "graphs.readControls", csvId }).currentCsv.headerLines;
+ }
+ 
+ export function graphEditorSetEditable(slotId, chartId, editable) {
+   const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
+   if (!result.committed) return result;
+-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
+ 
+   return chart.editor.editable;
+ }
+ 
+ export function setGraphEditableApi(editable = null) {
+   const state = interfaceFSM.readState(),
+-    context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: state });
++    context = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: state });
+   if (!context.chart) return null;
+   const next = typeof editable === "boolean" ? editable : context.chart.editor.editable === false;
+   return graphEditorSetEditable(state.selectedSlotId, context.chart.id, next);
+@@ -143,7 +140,7 @@ export async function importSelectedGraphFile(file, slotId) {
+     [result, state, projection] = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", {
+-    operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
++    operation: "graphs.readControls", frontendState: { selectedSlotId: slotId },
+   }).chart;
+   updateFileAvailability();
+   status(`${file.name}을 슬롯에 불러왔습니다.`);
+@@ -167,13 +164,13 @@ export function updateGraphLayoutApi(values = {}) {
+ export function graphEditorApplyPalette(chartId, colors) {
+   const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+   if (!result.committed) return result;
+-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
++  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
+ 
+   return chart;
+ }
+ 
+ export function applyGraphPaletteApi(colors) {
+-  const context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: interfaceFSM.readState() });
++  const context = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: interfaceFSM.readState() });
+   return graphEditorApplyPalette(context.chart?.id ?? null, colors);
+ }
+ 
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+index b78104926b0a4b41d9d691f34bc0b6898d6b697a..af0ba2867d548e9e5f3b198cd00d5d022ff5e817 100644
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -3,7 +3,7 @@
+ import { appFSM, dispatchProjectCommand, renderProjectObject, renderWholeWorkspace } from '../adapter.js';
+ import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+ import { createEmptyProjectCsvAndSelect, downloadPlotlyJson, downloadSlotFfsx, graphEditorAdd, graphEditorApplyPalette, graphEditorDelete, graphEditorHeaderLines, graphEditorMove, graphEditorObjectValues, graphEditorSelectCsv, graphEditorSelectObject, graphEditorSetEditable, graphEditorUpdateLayout, importSelectedGraphFile, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi } from './graphs.js';
+-import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
++import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiControls, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+ import { downloadExportPayload, status } from '../../frontend/renderer.js';
+ 
+@@ -50,6 +50,7 @@ return Object.freeze({
+   }),
+   slots: Object.freeze({
+     readSelected: readSelectedSlotApi,
++    readDisplay: () => appFSM.query("project-api", { operation: "slots.readDisplay" }),
+     select: (slotId, pendingContentType = null, direction = "ui-to-fsm") =>
+       setSelectedSlot(slotId, direction, pendingContentType),
+     setContentType: setSlotContentType,
+@@ -60,11 +61,14 @@ return Object.freeze({
+   }),
+   images: Object.freeze({
+     readEditor: readImageEditorApi,
++    readSettings: () => appFSM.query("project-api", { operation: "images.readSettings", slotId: interfaceFSM.readState().selectedSlotId }),
+     setSettings: applyImageSettingsFromValues,
+     insertEmpty: insertEmptyImageIntoSelectedSlot,
+   }),
+   assets: Object.freeze({
+     readDeletionTarget: readAssetDeletionTarget,
++    readList: kind => appFSM.query("project-api", { operation: "assets.readList", kind }),
++    readPreview: (csvId, start = 0, count = 30) => appFSM.query("project-api", { operation: "assets.readPreview", csvId, start, count }),
+     delete: deleteProjectAsset,
+     readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
+     isTrashed: (path) => appFSM.query("project-api", { operation: "assets.isTrashed", path }),
+@@ -93,6 +97,8 @@ return Object.freeze({
+   }),
+   graphs: Object.freeze({
+     readData: readGraphDataApi,
++    readControls: (csvId = null) => appFSM.query("project-api", { operation: "graphs.readControls", csvId, frontendState: interfaceFSM.readState() }),
++    readColumns: (csvId, chartId = null) => appFSM.query("project-api", { operation: "graphs.readColumns", csvId, chartId }),
+     readLayout: readGraphLayoutApi,
+     readPalette: readGraphPaletteApi,
+     selectCsv: graphEditorSelectCsv,
+@@ -122,6 +128,7 @@ return Object.freeze({
+   }),
+   captions: Object.freeze({
+     readGlobal: readGlobalCaptionState,
++    readSettings: () => appFSM.query("project-api", { operation: "captions.readSettings" }),
+     readSlot: readSlotCaptionState,
+     setEnabled: setCaptionsApiEnabled,
+     setGlobalText: setGlobalCaptionText,
+@@ -133,6 +140,7 @@ return Object.freeze({
+   }),
+   labels: Object.freeze({
+     readState: readLabelsApiState,
++    readSettings: () => appFSM.query("project-api", { operation: "labels.readSettings", slotId: interfaceFSM.readState().selectedSlotId }),
+     setEnabled: setLabelsApiEnabled,
+     setSettings: setLabelsApiSettings,
+     setPosition: setLabelsApiPosition,
+@@ -146,6 +154,7 @@ return Object.freeze({
+   }),
+   layout: Object.freeze({
+     readState: readLayoutApiState,
++    readControls: readLayoutApiControls,
+     setStyle: setLayoutApiStyle,
+     setGrid: setLayoutApiGrid,
+     setZoom: setLayoutApiZoom,
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+index 131502f22fad27afcf6fc9d30ca3e59c95e99e0f..b2be9e01f5da8cc57905b8002d538b6dca5c3dca 100644
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -20,14 +20,14 @@ export function mergeSlots(slotIds=[]) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
+   if (!result.committed) return false;
+ 
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+ 
+ export function splitSlots(slotIds=[]) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
+   if (!result.committed) return false;
+ 
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+ 
+ export function insertEmptyImageIntoSelectedSlot() {
+@@ -273,6 +273,11 @@ export function resetAppearanceApiPalette() {
+   return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
+ }
+ 
++export function readLayoutApiControls() {
++  return { ...appFSM.query("project-api", { operation: "layout.readControls" }),
++    zoom: interfaceFSM.readState().dashboardZoomIntent };
++}
++
+ export function readLayoutApiState(previewWidth = null) {
+   const layout = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }),
+     session = interfaceFSM.readState();
+@@ -284,7 +289,7 @@ export function setLayoutApiStyle(patch = {}) {
+   if (!result.committed) return false;
+ 
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+ 
+ export function setLayoutApiGrid(rows, cols) {
+@@ -292,24 +297,24 @@ export function setLayoutApiGrid(rows, cols) {
+   if (!result.committed) return false;
+ 
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+ 
+ export function setLayoutApiZoom(value) {
+   const session = interfaceFSM.readState();
+   const state = appFSM.send("SET_DASHBOARD_ZOOM", { value });
+   if (state.revision !== session.revision) transformWorkspace();
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+ 
+ export function commitLayoutApiZoom() {
+   appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+ 
+ export function resetLayoutApiZoom() {
+   const session = interfaceFSM.readState();
+   const state = appFSM.send("RESET_DASHBOARD_ZOOM");
+   if (state.revision !== session.revision) transformWorkspace();
+-  return readLayoutApiState();
++  return readLayoutApiControls();
+ }
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index b03705df2ceb542ea9a76c4a8b5718de29a055e6..554b6f116bcdd05f0fe6893a6ed7467e25632bcb 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -278,6 +278,8 @@ export class ProjectObjectRegistry {
+ const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context",
+   "interface-reconciliation", "renderer", "export"]);
+ const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
++  "slots.readDisplay", "images.readSettings", "graphs.readControls", "graphs.readColumns",
++  "assets.readList", "assets.readPreview", "layout.readControls", "captions.readSettings", "labels.readSettings",
+   "project.readName", "slots.readSelected", "images.readEditor", "print.readSettings", "appearance.readPalette",
+   "graphs.readData", "graphs.readLayout", "graphs.readPalette", "graphs.hasSelectedSlot", "graphs.defaultColors",
+   "captions.readGlobal", "captions.readSlot", "labels.readState", "layout.readState", "assets.readTree",
+@@ -309,18 +311,52 @@ function buildSlotAssetDisplay(slot, source) {
+       if (display.assets.length) display.kind = "assets";
+     }
+   }
+-  return immutableProjectCopy(display);
++  return display;
+ }
+ 
+-function buildBackendVfsTree(source) {
+-  const nodes = new Map(source.fileSystem.directories.map(path => [path, {
+-    kind: "directory", path, name: projectPathName(path), children: [],
+-  }]));
+-  for (const [kind, assets] of [["csv", source.assets.csvFiles], ["image", source.assets.images]]) {
+-    for (const asset of assets) {
+-      const path = projectAssetPath(asset);
+-      nodes.set(path, { kind, path, id: asset.id, name: asset.name, asset: structuredClone(asset) });
+-    }
++const GRAPH_OBJECT_FIELDS = ['csvId','x','y','xAxisSide','yAxisSide','type','color','legendName','lineWidth','lineDash','markerSymbol','markerSize','barOpacity','barLineWidth'];
++function csvMetadata(csv) {
++  return csv ? { id: csv.id, path: projectAssetPath(csv), name: csv.name,
++    headerLines: csv.headerLines, rowCount: csv.rows.length } : null;
++}
++function graphEditorRead(source, request, controls = false) {
++  const state = request.frontendState || {}, slot = request.chartId != null
++    ? resolveOwningSlot(request.chartId, source)
++    : source.slots.find(item => item.id === state.selectedSlotId && !item.hidden);
++  const chart = slot && !slot.hidden && slot.content.contentType === 'graph'
++    ? source.charts.find(item => item.id === slot.content.chart) : null;
++  const objects = chart?.editor?.objects || [], index = state.graphObjectIndex;
++  const selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index)
++    && index >= 0 && index < objects.length ? index : null;
++  const node = state.assetSelection === 'csv' && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null;
++  const csv = request.csvId != null ? source.assets.csvFiles.find(item => item.id === request.csvId)
++    : node?.kind === 'csv' ? node.asset : null;
++  const compactObject = object => object ? Object.fromEntries(GRAPH_OBJECT_FIELDS.map(key => [key, object[key]])) : null;
++  const compactChart = chart ? { id: chart.id, editor: { title: chart.editor.title, editable: chart.editor.editable } } : null;
++  return controls ? { slotId: slot?.id ?? null, chartId: chart?.id ?? null, title: chart?.editor.title ?? '',
++    editable: chart ? chart.editor.editable !== false : false, chart: compactChart, selectedIndex,
++    object: selectedIndex === null ? null : compactObject(objects[selectedIndex]), currentCsv: csvMetadata(csv) }
++    : { chart: compactChart, objects: objects.map(compactObject), selectedIndex, currentCsv: csvMetadata(csv) };
++}
++function assetMetadata(asset, kind, referenceCount = 0) {
++  return { kind, id: asset.id, path: projectAssetPath(asset), name: asset.name, referenceCount,
++    ...(kind === 'csv' ? { rowCount: Math.max(0, asset.rows.length - asset.headerLines) } : {}) };
++}
++function buildBackendVfsTree(source, root = null) {
++  const directories = source.fileSystem.directories.filter(path => root === null || projectPathInDirectory(path, root));
++  const nodes = new Map(directories.map(path => [path, { kind: 'directory', path,
++    name: projectPathName(path), children: [] }]));
++  const assets = [['csv', source.assets.csvFiles], ['image', source.assets.images]].map(([kind, values]) =>
++    [kind, values.filter(asset => root === null || projectPathInDirectory(projectAssetPath(asset), root))]);
++  const references = collectAssetReferences(new Set(assets[0][1].map(asset => asset.id)),
++    new Set(assets[1][1].map(asset => asset.id)), source), counts = new Map();
++  for (const ref of references) {
++    const key = `${ref.kind}:${ref.assetId}`;
++    counts.set(key, (counts.get(key) || 0) + 1);
++  }
++  for (const [kind, values] of assets) for (const asset of values) {
++    const node = assetMetadata(asset, kind, counts.get(`${kind}:${asset.id}`) || 0);
++    nodes.set(node.path, node);
+   }
+   for (const node of nodes.values()) {
+     const parent = nodes.get(projectParentPath(node.path));
+@@ -328,6 +364,53 @@ function buildBackendVfsTree(source) {
+   }
+   return nodes;
+ }
++function readPurposeProjection(source, request) {
++  const operation = request.operation;
++  if (operation === 'graphs.readControls') return graphEditorRead(source, request, true);
++  if (operation === 'graphs.readColumns') {
++    if (request.csvId != null) {
++      const csv = source.assets.csvFiles.find(item => item.id === request.csvId);
++      return csv ? columnDefinitions(csv.rows, csv.headerLines) : [];
++    }
++    const slot = request.chartId == null ? null : resolveOwningSlot(request.chartId, source);
++    const chart = slot && !slot.hidden ? source.charts.find(item => item.id === request.chartId) : null;
++    return chart?.editor.editable === false && Array.isArray(chart.editor.conversionRows)
++      ? columnDefinitions(chart.editor.conversionRows, 1) : [];
++  }
++  if (operation === 'assets.readList') {
++    if (!['csv', 'image'].includes(request.kind)) throw Error('지원하지 않는 자산 종류입니다.');
++    return (request.kind === 'csv' ? source.assets.csvFiles : source.assets.images)
++      .map(asset => ({ id: asset.id, path: projectAssetPath(asset), name: asset.name }));
++  }
++  if (operation === 'assets.readPreview') {
++    const start = Object.hasOwn(request, 'start') ? request.start : 0,
++      count = Object.hasOwn(request, 'count') ? request.count : 30;
++    if (!Number.isInteger(start) || start < 0 || !Number.isInteger(count) || count < 1 || count > 30)
++      throw Error('미리보기 범위가 올바르지 않습니다.');
++    const csv = source.assets.csvFiles.find(item => item.id === request.csvId);
++    return csv ? { csvId: csv.id, headerLines: csv.headerLines, rowCount: csv.rows.length, start,
++      rows: csv.rows.slice(start, start + count) } : null;
++  }
++  if (operation === 'slots.readDisplay') return source.slots.filter(slot => !slot.hidden).map(slot => ({
++    id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
++    assetDisplay: buildSlotAssetDisplay(slot, source) }));
++  if (operation === 'layout.readControls') return { gridRows: source.layout.gridRows,
++    gridCols: source.layout.gridCols, gridLimits: BackendSettings.defaults.limits.layout,
++    slotStyle: source.layout.slotStyle };
++  if (operation === 'captions.readSettings' || operation === 'labels.readSettings') {
++    const value = operation === 'captions.readSettings' ? source.annotations.captions : source.annotations.labels;
++    return { enabled: value.enabled, settings: value.settings,
++      ...(operation === 'labels.readSettings' ? { selectedSlotId: request.slotId ?? null } : {}) };
++  }
++  if (operation === 'images.readSettings') {
++    const slot = source.slots.find(item => item.id === request.slotId && !item.hidden && item.content.contentType === 'image');
++    if (!slot) return null;
++    const image = source.assets.images.find(item => item.id === slot.content.imageId);
++    return { slotId: slot.id, imageId: image?.id ?? null, name: image?.name ?? '',
++      settings: slot.content.imageSettings };
++  }
++  throw Error('알 수 없는 목적별 조회입니다.');
++}
+ 
+ export function readBackendProjection(kind, request = {}) {
+   if (!BACKEND_QUERY_KINDS.has(kind) ||
+@@ -337,6 +420,10 @@ export function readBackendProjection(kind, request = {}) {
+     return readBackendProjection("export", request);
+   if (kind === "interface-reconciliation")
+     return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
++  if (kind === "project-api" && ["slots.readDisplay", "images.readSettings", "graphs.readControls",
++      "graphs.readColumns", "assets.readList", "assets.readPreview", "layout.readControls",
++      "captions.readSettings", "labels.readSettings"].includes(request.operation))
++    return immutableProjectCopy(readPurposeProjection(activeProject._state, request));
+   if (kind === "project-api" && request.operation === "project.readName")
+     return activeProject._state.meta.projectName;
+   if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
+@@ -415,8 +502,12 @@ export function readBackendProjection(kind, request = {}) {
+     const references = collectAssetReferences(
+       new Set(node.kind === "csv" ? [node.asset.id] : []),
+       new Set(node.kind === "image" ? [node.asset.id] : []), source);
+-    return immutableProjectCopy({ target: node.asset, kind: node.kind,
+-      path: projectAssetPath(node.asset), referenceCount: references.length, references });
++    return immutableProjectCopy({ target: { kind: node.kind, id: node.asset.id,
++      path: projectAssetPath(node.asset), name: node.asset.name }, kind: node.kind,
++      path: projectAssetPath(node.asset), referenceCount: references.length,
++      references: references.map(ref => ({ kind: ref.kind,
++        slotId: ref.kind === "csv" ? resolveOwningSlot(ref.chartId, source)?.id ?? null : ref.slotId,
++        chartId: ref.chartId ?? null, objectIndex: ref.originalObjectIndex ?? null })) });
+   }
+   if (kind === "project-api" && request.operation === "slots.readSelected") {
+     const source = activeProject._state,
+@@ -426,8 +517,10 @@ export function readBackendProjection(kind, request = {}) {
+       content: slot.content, caption: slot.caption }) : null;
+   }
+   if (kind === "project-api" && request.operation === "assets.readTrash") {
+-    const source = activeProject._state, tree = buildBackendVfsTree(source);
+-    return immutableProjectCopy(tree.get(BackendSettings.defaults.vfs.trash) ?? null);
++    const source = activeProject._state, root = BackendSettings.defaults.vfs.trash,
++      tree = buildBackendVfsTree(source, root), node = tree.get(root);
++    return immutableProjectCopy(node ? { ...node, empty: node.children.length === 0,
++      referenceCount: [...tree.values()].reduce((sum, item) => sum + (item.referenceCount || 0), 0) } : null);
+   }
+   if (kind === "project-api" && request.operation === "assets.readTree") {
+     const source = activeProject._state;
+@@ -450,23 +543,8 @@ export function readBackendProjection(kind, request = {}) {
+     return chart ? immutableProjectCopy({ chartId: chart.id, editable: chart.editor?.editable !== false,
+       title: chart.editor?.title ?? "", settings: normalizeGraphLayoutSettings(chart.editor?.globalSettings) }) : null;
+   }
+-  if (kind === "project-api" && request.operation === "graphs.readData") {
+-    const source = activeProject._state, state = request.frontendState || {},
+-      slot = Object.hasOwn(request, "chartId") ? resolveOwningSlot(request.chartId, source)
+-        : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
+-      chartId = slot?.content.chart,
+-      chart = slot && slot.content.contentType === "graph"
+-        ? source.charts.find((item) => item.id === chartId) || null : null,
+-      objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
+-      selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
+-        ? index : null,
+-      node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null,
+-      csv = node?.kind === "csv" ? node.asset : null,
+-      objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
+-    return immutableProjectCopy({ chart, objects, selectedIndex, currentCsv: csv,
+-      columns: csv ? columnDefinitions(csv.rows, csv.headerLines) : [],
+-      objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [] });
+-  }
++  if (kind === "project-api" && request.operation === "graphs.readData")
++    return immutableProjectCopy(graphEditorRead(activeProject._state, request));
+   if (kind === "project-api" && request.operation === "print.readSettings")
+     return immutableProjectCopy(activeProject._state.export);
+   if ((kind === "project-api" && request.operation === "images.readEditor") ||
+@@ -695,8 +773,10 @@ export function buildFrontendReconciliationInput(event, result, references) {
+ }
+ 
+ export function immutableProjectCopy(value) {
++  const visited = new WeakSet();
+   const freeze = (copy) => {
+-    if (copy && typeof copy === "object") {
++    if (copy && typeof copy === "object" && !visited.has(copy)) {
++      visited.add(copy);
+       Object.values(copy).forEach(freeze);
+       Object.freeze(copy);
+     }
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 2523a58895adfb01d761a2cb85fc91928501eedb..58b159e8d9d6aab8e4a57ea19b9ed2a3cdbef6b2 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -29,79 +29,81 @@ export function prepareNumericInput(text, current, allowEmpty = false, emptyValu
+   return Number.isFinite(number) ? [true, number] : [false, current];
+ }
+ export class UiCommand {
+-  constructor(readTarget, readValue, prepare, invoke, stepSize = null) {
+-    Object.assign(this, { readTarget, readValue, prepare, invoke, stepSize, text: "", editTarget: null,
++  constructor(readCurrent, prepare, invoke, stepSize = null) {
++    Object.assign(this, { readCurrent, prepare, invoke, stepSize, text: '', editTarget: null,
+       editing: false, composing: false, running: false, active: true, changed: () => {} });
+   }
+   input(text, composing = false) {
+     if (!this.active || this.running) return this.text;
+-    const target = this.readTarget();
+-    if (target === null) { this.cancel(); return this.text; }
+-    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
+-    if (!this.editing) { this.editTarget = target; this.editing = true; }
+-    this.text = text; this.composing = composing; this.changed(); return text;
+-  }
+-  refresh(target) {
+-    if (!this.active || !this.readValue || !sameUiTarget(this.readTarget(), target)) return;
+-    const value = this.readValue(target);
+-    this.text = value == null ? "" : String(value); this.changed(); return value;
++    const current = this.readCurrent();
++    if (current.target === null) { this.cancel(); return this.text; }
++    if (!this.editing || !sameUiTarget(this.editTarget, current.target)) {
++      this.editTarget = current.target; this.editing = true;
++    }
++    this.text = text; this.composing = composing; this.changed(); return this.text;
+   }
+   cancel() {
+-    this.editing = false; this.composing = false; this.editTarget = null; this.text = "";
+-    const target = this.active ? this.readTarget() : null;
+-    const value = target !== null && this.readValue ? this.readValue(target) : "";
+-    this.text = value == null ? "" : String(value); this.changed(); return value;
++    this.editing = false; this.composing = false; this.editTarget = null;
++    const current = this.active ? this.readCurrent() : null;
++    this.text = current?.value == null ? '' : String(current.value);
++    this.changed(); return this.text;
+   }
+   send(value, target = null) {
+-    if (!this.active || this.running || appFSM.readState().lifecycle !== "ready") return null;
+-    const current = this.readTarget();
+-    if (current === null || (target !== null && !sameUiTarget(current, target))) return null;
+-    if (this.readValue && this.readValue(current) === value) { this.refresh(current); return null; }
++    if (!this.active || this.running) return null;
++    const current = this.readCurrent();
++    return this.sendCurrent(value, target ?? current.target, current);
++  }
++  sendCurrent(value, target, current) {
++    if (!this.active || this.running || !current.ready || current.target === null || !sameUiTarget(target, current.target)) return null;
++    if (this.prepare && current.value === value) {
++      this.text = value == null ? '' : String(value); this.changed(); return null;
++    }
+     this.running = true; this.changed();
+     const settle = (failed, outcome) => {
+-      this.running = false; if (this.active) this.changed();
+-      let refreshError, refreshFailed = false;
+-      try { this.refresh(current); } catch (error) { refreshFailed = true; refreshError = error; }
++      this.running = false; let refreshFailed = false, refreshError;
++      try {
++        if (this.active) {
++          const fresh = this.readCurrent();
++          if (!this.editing && sameUiTarget(fresh.target, target)) {
++            this.text = fresh.value == null ? '' : String(fresh.value);
++            if (this.prepare && fresh.value !== value) status(`입력값 ${value} → 적용값 ${fresh.value}`);
++          }
++          this.changed();
++        }
++      } catch (error) { refreshFailed = true; refreshError = error; }
+       if (failed) throw outcome;
+       if (refreshFailed) throw refreshError;
+       return outcome;
+     };
+     let outcome;
+-    try { outcome = this.invoke(current, value); }
++    try { outcome = this.invoke(target, value, current.companions); }
+     catch (error) { return settle(true, error); }
+-    if (outcome && typeof outcome.then === "function")
+-      return Promise.resolve(outcome).then(value => settle(false, value), error => settle(true, error));
+-    return settle(false, outcome);
++    return outcome && typeof outcome.then === 'function'
++      ? Promise.resolve(outcome).then(value => settle(false, value), error => settle(true, error))
++      : settle(false, outcome);
+   }
+   commit() {
+     if (!this.active || !this.editing || this.running || this.composing) return null;
+-    const target = this.editTarget;
+-    if (appFSM.readState().lifecycle !== "ready" || target === null || !sameUiTarget(this.readTarget(), target)) {
+-      this.cancel(); return null;
+-    }
+-    const [valid, value] = this.prepare(this.text, this.readValue(target));
+-    if (!valid) { this.cancel(); status("완성된 숫자를 입력하세요."); return null; }
++    const current = this.readCurrent(), target = this.editTarget;
++    if (!current.ready || target === null || !sameUiTarget(current.target, target)) { this.cancel(); return null; }
++    const [valid, value] = this.prepare(this.text, current.value);
++    if (!valid) { this.cancel(); status('완성된 숫자를 입력하세요.'); return null; }
+     this.editing = false; this.composing = false;
+-    const report = outcome => {
+-      if (this.active && sameUiTarget(this.readTarget(), target)) {
+-        const applied = this.readValue(target);
+-        if (applied !== value) status(`입력값 ${value} → 적용값 ${applied}`);
+-      }
+-      return outcome;
+-    };
+-    const outcome = this.send(value, target);
+-    return outcome && typeof outcome.then === "function" ? outcome.then(report) : report(outcome);
++    return this.sendCurrent(value, target, current);
+   }
+   step(direction) {
+     if (!this.active || this.running || this.composing || this.stepSize === null) return null;
+-    const target = this.readTarget();
+-    if (target === null) { this.cancel(); return null; }
+-    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
+-    let value = this.readValue(target);
+-    if (this.editing) { const parsed = prepareNumericInput(this.text, value); if (parsed[0]) value = parsed[1]; }
+-    if (typeof value !== "number" || !Number.isFinite(value)) value = 0;
+-    this.input(String(value + (direction === "increase" ? this.stepSize : -this.stepSize)));
+-    return this.commit();
++    const current = this.readCurrent();
++    if (!current.ready || current.target === null) { this.cancel(); return null; }
++    let value = current.value;
++    if (this.editing && sameUiTarget(this.editTarget, current.target)) {
++      const parsed = prepareNumericInput(this.text, value); if (parsed[0]) value = parsed[1];
++    }
++    if (typeof value !== 'number' || !Number.isFinite(value)) value = 0;
++    value += direction === 'increase' ? this.stepSize : -this.stepSize;
++    this.text = String(value); this.editTarget = current.target;
++    this.editing = false; this.composing = false;
++    return this.sendCurrent(value, current.target, current);
+   }
+   dispose() { this.changed = () => {}; this.cancel(); this.active = false; }
+ }
+@@ -213,59 +215,59 @@ Modal: Modal.extend({
+   function numericBinding(group, field, axis = null) {
+     const read = () => {
+       const api = window.FastFigureApi, state = appFSM.readState();
+-      if (state.lifecycle !== "ready") return null;
++      if (state.lifecycle !== "ready") return { target: null, value: null, companions: null, ready: false };
+       let view, target, value;
+       if (group === "image") {
+-        view = api.images.readEditor(); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
++        view = api.images.readSettings(); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
+         value = view?.settings?.[field];
+       } else if (group === "csv" || group === "object") {
+-        view = api.graphs.readData();
++        view = api.graphs.readControls();
+         target = group === "csv" ? (view.currentCsv ? [group, view.currentCsv.id] : null)
+           : (view.chart?.editor?.editable !== false && view.selectedIndex != null
+             ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null);
+-        value = group === "csv" ? view.currentCsv?.headerLines : view.objects?.[view.selectedIndex]?.[field];
++        value = group === "csv" ? view.currentCsv?.headerLines : view.object?.[field];
+       } else if (group === "axis" || group === "global") {
+         view = api.graphs.readLayout();
+         target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
+         value = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
+       } else if (group === "label") {
+-        view = api.labels.readState(); target = state.overlay === "label" ? [group] : null; value = view.settings[field];
++        view = api.labels.readSettings(); target = state.overlay === "label" ? [group] : null; value = view.settings[field];
+       } else if (group === "caption") {
+-        view = api.captions.readGlobal(); target = state.overlay === "caption" ? [group] : null; value = view.settings[field];
++        view = api.captions.readSettings(); target = state.overlay === "caption" ? [group] : null; value = view.settings[field];
+       } else if (group === "print") {
+         view = api.print.readSettings(); target = state.overlay === "print" ? [group] : null;
+         value = field === "height" && view.heightMode !== "explicit" ? null : view[field];
+       } else {
+-        view = api.layout.readState(); target = state.overlay === "layout" ? [group] : null;
++        view = api.layout.readControls(); target = state.overlay === "layout" ? [group] : null;
+         value = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"]
+           : group === "zoom" ? view.zoom : view.slotStyle[field];
+       }
+       if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) value = Number(value);
+-      return { target: target === null ? null : [...target, field], value, view };
++      return { target: target === null ? null : [...target, field], value, ready: true,
++        companions: group === "grid" ? { gridRows: view.gridRows, gridCols: view.gridCols, gridLimits: view.gridLimits }
++          : group === "label" ? { x: view.settings.x, y: view.settings.y } : null };
+     };
+     const allowEmpty = (group === "axis" && ["min", "max", "tick"].includes(field))
+       || group === "global" || (group === "print" && field === "height");
+     return {
+-      readTarget: () => read()?.target ?? null,
+-      readValue: () => read()?.value,
++      readCurrent: read,
+       prepare: (text, current) => prepareNumericInput(text, current, allowEmpty,
+         group === "print" && field === "height" ? null : ""),
+-      invoke: (target, value) => {
+-        const api = window.FastFigureApi, current = read();
+-        if (!current || !sameUiTarget(current.target, target)) return null;
++      invoke: (target, value, companions) => {
++        const api = window.FastFigureApi;
+         if (group === "image") return api.images.setSettings(target[1], { [field]: value });
+         if (group === "csv") return api.graphs.setHeaderLines(target[1], value);
+         if (group === "object") return api.graphs.setObjectValues(target[2], target[3], { [field]: value });
+-        if (group === "axis") return updateSelectedGraphLayout({ axisKey: axis, axisValues: { [field]: String(value) } });
+-        if (group === "global") return updateSelectedGraphLayout({ globalSettings: { [field]: String(value) } });
++        if (group === "axis") return api.graphs.updateLayout(target[1], target[2], { axisKey: axis, axisValues: { [field]: String(value) } });
++        if (group === "global") return api.graphs.updateLayout(target[1], target[2], { globalSettings: { [field]: String(value) } });
+         if (group === "label") return ["x", "y"].includes(field)
+-          ? api.labels.setPosition(field === "x" ? value : current.view.settings.x, field === "y" ? value : current.view.settings.y)
++          ? api.labels.setPosition(field === "x" ? value : companions.x, field === "y" ? value : companions.y)
+           : api.labels.setSettings({ [field]: value });
+         if (group === "caption") return api.captions.setSettings({ [field]: value });
+         if (group === "print") return api.print.setSettings(field === "height"
+           ? { heightMode: value === null ? "auto" : "explicit", height: value } : { [field]: value });
+         if (group === "grid") {
+-          const layout = current.view, bounds = layout.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
++          const layout = companions, bounds = layout.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
+           value = Math.max(bounds[0], Math.min(bounds[1], value));
+           return api.layout.setGrid(field === "rows" ? value : layout.gridRows, field === "cols" ? value : layout.gridCols);
+         }
+@@ -274,29 +276,30 @@ Modal: Modal.extend({
+       }
+     };
+   }
++  function useControlSnapshot(readCurrent) {
++    const ref = useRef(readCurrent); ref.current = readCurrent;
++    const snapshot = React.useCallback(() => JSON.stringify(ref.current()), []);
++    return JSON.parse(useSyncExternalStore(subscribeAppState, snapshot, snapshot));
++  }
+   function useUiCommand(binding, stepSize = null) {
+     const [, render] = useState(0), ref = useRef(null);
+-    if (!ref.current) ref.current = new UiCommand(binding.readTarget, binding.readValue, binding.prepare, binding.invoke, stepSize);
+-    const command = ref.current;
+-    Object.assign(command, binding, { stepSize });
++    if (!ref.current) ref.current = new UiCommand(binding.readCurrent, binding.prepare, binding.invoke, stepSize);
++    const command = ref.current; Object.assign(command, binding, { stepSize });
+     command.changed = () => render(value => value + 1);
+-    const state = useAppState(), target = JSON.stringify(command.readTarget());
+-    useEffect(() => { command.cancel(); }, [target, state.lifecycle]);
++    const current = useControlSnapshot(binding.readCurrent), target = JSON.stringify(current.target);
++    useEffect(() => { command.cancel(); }, [target, current.ready]);
+     useEffect(() => {
+       command.active = true; command.changed = () => render(value => value + 1);
+-      const unsubscribe = appFSM.subscribe(() => {
+-        if (appFSM.readState().lifecycle !== "ready" || (command.editing &&
+-            !sameUiTarget(command.editTarget, command.readTarget()))) command.cancel();
+-      });
+-      return () => { unsubscribe(); command.dispose(); };
++      return () => command.dispose();
+     }, []);
++    command.displayCurrent = current;
+     return command;
+   }
+   function CommandNumberInput({ command: descriptor, onApplied, ...props }) {
+     const [group, field, axis] = descriptor, binding = numericBinding(group, field, axis);
+     const invoke = binding.invoke;
+-    binding.invoke = (target, value) => {
+-      const outcome = invoke(target, value);
++    binding.invoke = (target, value, companions) => {
++      const outcome = invoke(target, value, companions);
+       const applied = result => { if (result !== false && result != null) onApplied?.(result); return result; };
+       return outcome && typeof outcome.then === "function" ? outcome.then(applied) : applied(outcome);
+     };
+@@ -304,9 +307,9 @@ Modal: Modal.extend({
+     const { value, onChange, onBlur, min, max, step, allowDecimal, clampBehavior, ...inputProps } = props;
+     const run = callback => { try { const result = callback(); if (result?.catch) result.catch(error => reportTaskError("UI_COMMAND", error)); }
+       catch (error) { reportTaskError("UI_COMMAND", error); } };
+-    const editing = command.editing && sameUiTarget(command.editTarget, command.readTarget());
++    const editing = command.editing && sameUiTarget(command.editTarget, command.displayCurrent.target);
+     const control = React.createElement(TextInput, { ...inputProps, type: "text", inputMode: "decimal",
+-      value: editing ? command.text : (binding.readValue() ?? ""), disabled: props.disabled || command.running,
++      value: editing ? command.text : (command.displayCurrent.value ?? ""), disabled: props.disabled || command.running,
+       onChange: event => command.input(event.currentTarget.value, event.nativeEvent.isComposing),
+       onCompositionStart: () => { command.composing = true; },
+       onCompositionEnd: event => command.input(event.currentTarget.value, false),
+@@ -332,7 +335,8 @@ Modal: Modal.extend({
+       const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
+       return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
+     };
+-    const command = useUiCommand({ readTarget, readValue: null, prepare: null, invoke: (_target, event) => onClick?.(event) });
++    const command = useUiCommand({ readCurrent: () => ({ target: readTarget(), value: null, companions: null,
++      ready: appFSM.readState().lifecycle === "ready" }), prepare: null, invoke: (_target, event) => onClick?.(event) });
+     return React.createElement(control, { ...props, ref: controlRef, disabled: props.disabled || command.running,
+       onClick: onClick ? event => localAction ? onClick(event) : command.send(event) : undefined });
+   }
+@@ -407,7 +411,9 @@ label: option.label,
+   }
+ 
+   function getAppStateSnapshot() {
+-    return appFSM.readState().revision;
++    const state = appFSM.readState();
++    return JSON.stringify([state.lifecycle, state.workspace, state.overlay, state.selectedSlotId,
++      state.assetSelection, state.assetPath, state.graphObjectIndex]);
+   }
+ 
+   function useAppState() {
+@@ -418,7 +424,7 @@ label: option.label,
+   function addSelectedGraphObject() {
+     const current = appFSM.readState();
+     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+-    const context = window.FastFigureApi.graphs.readData();
++    const context = window.FastFigureApi.graphs.readControls();
+     if (!context.currentCsv || context.chart?.editor.editable === false) return null;
+     return window.FastFigureApi.graphs.addObject(current.selectedSlotId, context.currentCsv.id);
+   }
+@@ -426,7 +432,7 @@ label: option.label,
+   function setSelectedGraphEditable(editable) {
+     const current = appFSM.readState();
+     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+-    const context = window.FastFigureApi.graphs.readData();
++    const context = window.FastFigureApi.graphs.readControls();
+     if (!context.chart) return null;
+     return window.FastFigureApi.graphs.setEditable(current.selectedSlotId, context.chart.id, editable);
+   }
+@@ -434,7 +440,7 @@ label: option.label,
+   function updateSelectedGraphLayout(values) {
+     const current = appFSM.readState();
+     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
+-    const context = window.FastFigureApi.graphs.readData();
++    const context = window.FastFigureApi.graphs.readControls();
+     if (!context.chart || context.chart.editor.editable === false) return null;
+     return window.FastFigureApi.graphs.updateLayout(current.selectedSlotId, context.chart.id, values);
+   }
+@@ -562,6 +568,7 @@ collision
+ 
+   function FastFigureToolbar() {
+     const state = useAppState();
++    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
+     const activeOverlay = state.overlay;
+     const buttonProps = (overlay) => ({
+ variant: activeOverlay === overlay ? "filled" : "light",
+@@ -591,6 +598,7 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
+ 
+   function FastFigureDataActions() {
+     const state = useAppState();
++    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
+     const busy = state.lifecycle !== "ready";
+     const slotApi = window.FastFigureApi.slots;
+     const slot = state.workspace === "project" ? null : slotApi.readSelected();
+@@ -771,6 +779,7 @@ React.createElement(
+ 
+   function FastFigureImageEditor() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().workspace === "slot.image" ? window.FastFigureApi.images.readEditor() : null);
+     if (state.workspace !== "slot.image") return null;
+     const busy = state.lifecycle !== "ready";
+     const imageApi = window.FastFigureApi.images;
+@@ -870,25 +879,25 @@ command: ["image","y"],
+ 
+   function readProjectAssetDisplay() {
+     const assetNodes = window.FastFigureApi.assets.readTree();
+-    const slotRows = window.FastFigureApi.layout.readState().visibleSlots;
++    const slotRows = window.FastFigureApi.slots.readDisplay();
+     return { assetNodes, slotRows };
+   }
+ 
+   function FastFigureProjectDataTree() {
+     const state = useAppState();
++    useControlSnapshot(() => [window.FastFigureApi.assets.readTree(), window.FastFigureApi.slots.readDisplay()]);
+     const assetApi = window.FastFigureApi.assets;
+     const { assetNodes, slotRows } = readProjectAssetDisplay();
+     const snapshot = {
+       directories: assetNodes.filter(node => node.kind === "directory").map(node => node.path),
+       data: assetNodes.filter(node => node.kind === "csv").map(node => ({
+-        id: node.id, name: node.name, path: node.path, readable: Array.isArray(node.asset.rows),
+-        rowCount: Math.max(0, node.asset.rows.length - (Number(node.asset.headerLines) || 0)),
++        id: node.id, name: node.name, path: node.path, readable: true, rowCount: node.rowCount,
+       })),
+       images: assetNodes.filter(node => node.kind === "image").map(node => ({
+         id: node.id, name: node.name, path: node.path,
+       })),
+     };
+-    const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
++    const selectedSlotId = state.selectedSlotId;
+     const assetTreeController = useTree({
+ initialExpandedState: { "/assets": true },
+     });
+@@ -935,11 +944,8 @@ try {
+     const trashSelected =
+ state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
+     const trash = assetApi.readTrash();
+-    const trashHasContents = !!trash?.children.length;
+-    const countTrashReferences = node => node.kind === "directory"
+-? node.children.reduce((count, child) => count + countTrashReferences(child), 0)
+-: assetApi.readDeletionTarget(node.path)?.referenceCount ?? 0;
+-    const trashReferenceCount = trash ? countTrashReferences(trash) : 0;
++    const trashHasContents = trash ? !trash.empty : false;
++    const trashReferenceCount = trash?.referenceCount ?? 0;
+     const openTrashDialog = () => {
+ if (!trashSelected || !trashHasContents) return;
+ setTrashDialog({ referenceCount: trashReferenceCount });
+@@ -987,8 +993,8 @@ try {
+   status(`프로젝트 항목 이동 오류: ${error.message}`);
+ }
+     };
+-    const assetReferenceCount = (path) =>
+-assetApi.readDeletionTarget(path)?.referenceCount ?? 0;
++    const referenceCounts = new Map(assetNodes.map(node => [node.path, node.referenceCount ?? 0]));
++    const assetReferenceCount = path => referenceCounts.get(path) ?? 0;
+     const dataByPath = new Map(
+ snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }]),
+     );
+@@ -1556,6 +1562,7 @@ slotsExpanded
+   }
+   function FastFigureProjectActions() {
+     const state = useAppState();
++    useControlSnapshot(() => window.FastFigureApi.project.readName());
+     const busy = state.lifecycle !== "ready";
+     const importResetRef = useRef(null);
+     const projectApi = window.FastFigureApi.project;
+@@ -1628,6 +1635,7 @@ React.createElement(
+ 
+   function FastFigureGraphDataEditor() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readData(), window.FastFigureApi.assets.readList("csv")] : null);
+     const busy = state.lifecycle !== "ready";
+     const dragRef = useRef(null);
+     if (state.workspace !== "slot.graph") return null;
+@@ -1635,14 +1643,14 @@ React.createElement(
+     const assetApi = window.FastFigureApi.assets;
+     const editor = graphApi.readData();
+     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
+-    const csvAssets = assetApi.readTree().filter(node => node.kind === "csv").map(node => node.asset);
++    const csvAssets = assetApi.readList("csv");
+     const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
+     const objects = editor.objects;
+     const selectedIndex = editor.selectedIndex;
+     const selected = selectedIndex === null ? null : objects[selectedIndex];
+     const activeCsv = editor.currentCsv;
+-    const columns = editor.columns;
+-    const objectColumns = editor.objectColumns || [];
++    const columns = activeCsv ? graphApi.readColumns(activeCsv.id) : [];
++    const objectColumns = selected ? graphApi.readColumns(selected.csvId, chartId) : [];
+     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
+     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
+     const selectField = (label, key, data) => React.createElement(Select, {
+@@ -1677,7 +1685,7 @@ React.createElement(Select, {
+ }),
+ activeCsv ? React.createElement(CommandNumberInput, {
+ 
+-  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
++  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
+   allowDecimal: false, disabled: busy,
+ command: ["csv","headerLines"],
+ }) : null,
+@@ -1702,7 +1710,7 @@ activeCsv && columns.length
+         React.createElement(
+           TableTbody,
+           null,
+-          ...activeCsv.rows.slice(0, 30).map((row, rowIndex) =>
++          ...(assetApi.readPreview(activeCsv.id, 0, 30)?.rows ?? []).map((row, rowIndex) =>
+             React.createElement(
+               TableTr,
+               { key: rowIndex },
+@@ -1726,7 +1734,7 @@ React.createElement(Group, { gap: "xs", grow: true },
+   React.createElement(Button, {
+     variant: editable ? "filled" : "light", disabled: busy || chartId === null,
+     onClick: () => {
+-      const context = graphApi.readData();
++      const context = graphApi.readControls();
+       if (context.chart) return setSelectedGraphEditable(!context.chart.editor.editable);
+     },
+   }, editable ? "편집 가능" : "원본 JSON"),
+@@ -1822,6 +1830,7 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
+   }
+   function FastFigureGraphLayoutEditor() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? window.FastFigureApi.graphs.readLayout() : null);
+     const busy = state.lifecycle !== "ready";
+     if (state.workspace !== "slot.graph") return null;
+     const graphApi = window.FastFigureApi.graphs;
+@@ -2024,11 +2033,12 @@ React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEdi
+   }
+   function FastFigureGraphPaletteActions() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readControls(), window.FastFigureApi.graphs.readPalette()] : null);
+     const busy = state.lifecycle !== "ready";
+     const importResetRef = useRef(null);
+     if (state.workspace !== "slot.graph") return null;
+     const graphApi = window.FastFigureApi.graphs;
+-    const editor = graphApi.readData(), colors = graphApi.readPalette();
++    const editor = graphApi.readControls(), colors = graphApi.readPalette();
+     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
+     const commitColors = (colors) => graphApi.applyPalette(editor.chart?.id ?? null, colors);
+     const resetPalette = () => {
+@@ -2524,6 +2534,7 @@ React.createElement(
+ 
+   function FastFigureLabelOverlay() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().overlay === "label" ? window.FastFigureApi.labels.readState() : null);
+     const previewRef = useRef(null);
+     const dragRef = useRef(null);
+     const [, setPreviewRevision] = useState(0);
+@@ -2731,6 +2742,11 @@ command: ["label","y"],
+   function FastFigureCaptionOverlay() {
+     const state = useAppState();
+     const [targetMode, setTargetMode] = useState("global");
++    useControlSnapshot(() => {
++      const current = appFSM.readState();
++      return current.overlay === "caption" ? [window.FastFigureApi.captions.readGlobal(),
++        targetMode === "slot" && current.selectedSlotId != null ? window.FastFigureApi.captions.readSlot(current.selectedSlotId) : null] : null;
++    });
+     useEffect(() => {
+ if (state.overlay !== "caption") setTargetMode("global");
+     }, [state.overlay]);
+@@ -2874,6 +2890,7 @@ command: ["caption","lineHeight"],
+ 
+   function FastFigurePrintOverlay() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().overlay === "print" ? window.FastFigureApi.print.readSettings() : null);
+     const printApi = window.FastFigureApi.print;
+     const initial = printApi.readSettings();
+     const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
+@@ -2982,6 +2999,7 @@ command: ["print","height"],
+ 
+   function FastFigureLayoutOverlay() {
+     const state = useAppState();
++    useControlSnapshot(() => appFSM.readState().overlay === "layout" ? window.FastFigureApi.layout.readControls() : null);
+     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
+     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
+     const previewFrameRef = useRef(null);
+@@ -3381,12 +3399,10 @@ React.createElement(FastFigureDashboardFileDrop),
+ 
+   function FastFigureApp() {
+     useAppState();
+-    const palette = window.FastFigureApi.appearance.readPalette();
+-    const theme = createTheme({
+-...fastFigureTheme,
+-colors: { ffui: Array(10).fill(palette.uiColor) },
+-primaryColor: "ffui",
+-    });
++    const palette = useControlSnapshot(() => window.FastFigureApi.appearance.readPalette());
++    const paletteKey = JSON.stringify(palette);
++    const theme = useMemo(() => createTheme({ ...fastFigureTheme,
++      colors: { ffui: Array(10).fill(palette.uiColor) }, primaryColor: "ffui" }), [paletteKey]);
+     const channels = [1, 3, 5].map((index) => {
+ const value = parseInt(palette.uiColor.slice(index, index + 2), 16) / 255;
+ return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+@@ -3395,12 +3411,7 @@ return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+ 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2] > 0.179
+   ? "#000000"
+   : "#FFFFFF";
+-    return React.createElement(
+-MantineProvider,
+-{
+-  defaultColorScheme: "light",
+-  theme,
+-  cssVariablesResolver: (theme) => ({
++    const cssVariablesResolver = useMemo(() => (theme) => ({
+     variables: {
+       "--ff-header-height": `${theme.other.shell.headerHeight}px`,
+       "--ff-navbar-width": `${theme.other.shell.navbarWidth}px`,
+@@ -3439,7 +3450,13 @@ MantineProvider,
+       "--mantine-color-ffui-contrast": "var(--mantine-primary-color-contrast)",
+     },
+     dark: {},
+-  }),
++  }), [paletteKey]);
++    return React.createElement(
++MantineProvider,
++{
++  defaultColorScheme: "light",
++  theme,
++  cssVariablesResolver,
+ },
+ React.createElement(FastFigureShell),
+     );
+diff --git a/agent_space/reviews/review-20261118-012-plan045-source-code.md b/agent_space/reviews/review-20261118-012-plan045-source-code.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..4697005f0a2b4741e78babb7e304811230fe4294
+--- /dev/null
++++ b/agent_space/reviews/review-20261118-012-plan045-source-code.md
+@@ -0,0 +1,45 @@
++# Plan045 — 목적별 API의 source code 번역 검토
++
++## 기준
++
++- Source Script 57, pseudocode 34를 기준으로 source code 163을 검토했다.
++- API 제공자가 필요한 필드를 먼저 구성하고 그 결과를 분리·읽기 전용으로 반환하도록 수정했다.
++- 목록·설정 입력에서 전체 자산·CSV 행·graph/imported figure를 받은 뒤 UI에서 버리는 경로를 제거했다.
++
++## 변경 대응
++
++- 구현 파일: `sourcecode/backend/project_state.js`, `sourcecode/application/adapter.js`.
++- API 연결: `sourcecode/application/public_api/index.js`, `sourcecode/application/public_api/graphs.js`, `sourcecode/application/public_api/layout_annotations.js`.
++- UI 호출·구독: `sourcecode/frontend/mantine_ui.js`.
++
++| 구간 | 실제 변경과 호출부 |
++|---|---|
++| Backend 자산 | `sourcecode/backend/project_state.js`의 tree/trash/deletion 반환을 메타데이터와 참조 정보로 제한. 참조 수는 조회별 한 번 수집하고 종류/id별로 집계한다. trash는 해당 경로를 먼저 제한한다. |
++| Backend 그래프 | readData는 목록용 객체 필드와 chart/CSV 메타데이터, readControls는 현재 객체 하나와 설정 입력 문맥만 반환한다. plotlyTrace·행·bytes·figure는 포함하지 않는다. |
++| 명시적 표 조회 | readColumns는 지정 CSV 또는 raw chart의 conversionRows에서 열 정의만 만든다. readPreview는 start/count를 검증하고 최대 30행만 복사한다. 명시한 null 범위도 거부한다. |
++| 나머지 목적별 조회 | slots.readDisplay, images.readSettings, layout.readControls, captions/labels.readSettings를 등록하고 Application의 현재 선택 전달을 연결했다. 기존 실제 이미지·치수·텍스트·렌더·파일 조회는 해당 표시·출력용으로 유지한다. |
++| 읽기 전용 결과 | immutableProjectCopy는 결과를 한 번 복사한 뒤 호출 안의 WeakSet으로 이미 방문한 객체를 건너뛴다. Project 원본을 freeze하거나 전역 read cache를 두지 않는다. |
++| Application | renderer 너비 계산은 layout.readControls를 사용한다. layout 후속 반환은 공통 readLayoutApiControls를 재사용한다. graph 성공 후 조회와 header 후속 조회를 좁은 조회로 바꿨다. 이동의 same-index 검증에 필요한 목록 조회는 유지한다. |
++| UI 자산·표 | 트리와 슬롯 표시는 메타데이터만 사용하고 행마다 deletion 조회를 하지 않는다. CSV 선택지는 readList, 열은 readColumns, 실제 표 미리보기는 readPreview를 사용한다. header 상한은 total rowCount를 사용한다. |
++| 공통 입력 | UiCommand의 readCurrent 한 번으로 target/value/companions/ready를 얻고 commit/send/step의 같은 판정에 전달한다. grid의 동반 치수와 label의 x/y를 재조회하지 않는다. |
++| 구독·표시 | 구조 구독은 필요한 Frontend 필드의 primitive key, 개별 입력과 표시 구독은 필요한 API 결과의 primitive key를 사용한다. 실제 image preview와 caption text/slot text 등 표시가 필요한 별도 구독은 유지한다. 닫힌 overlay는 해당 표시 조회를 생략한다. |
++| theme | palette key가 바뀔 때만 theme/CSS resolver를 다시 구성한다. 기존 component와 스타일, 입력·취소·명령 동작은 유지한다. |
++
++## 논리적 타당성
++
++- id 0, 현재 선택과 명시적 csvId/chartId, missing/hidden 대상, 빈 preview와 범위 검증을 구분했다.
++- 입력 문자열·IME·Enter 뒤 blur·동일 값·비동기 완료와 원래 오류의 우선순위를 유지한다. 버튼의 null 값은 숫자 동일 값 생략 조건에 포함하지 않는다.
++- CSV 트리 행 수는 header를 제외하며, header 입력의 currentCsv.rowCount는 전체 행 수다.
++- Project 명령의 candidate·전체 검증·현재 참조 재확인·단일 commit·참조 보정은 변경하지 않았다.
++
++## 목적과 중복
++
++- 비용이 큰 자료는 필요한 API에서만 생성·반환하며, 소비자가 전체 결과를 먼저 받아 걸러내는 방식으로 대체하지 않았다.
++- 새 Project 복제 저장소, 공통 getter registry, UI 범위 정규화 소유자 또는 새 명령 경계를 추가하지 않았다.
++- 실제 렌더의 선택 슬롯 제한·명시적 전체 렌더·CSS 변환, 파일 형식과 export/resource 수명은 유지한다.
++- 중복 candidate 복사·전체 검증·명령 결과 비교 최적화는 이번 API 번역에 섞지 않았다.
++
++## 확인 범위
++
++- 전체 실제 변경과 후속 조정, 호출·반환 shape, 6개 JS 문법, local import/export, fingerprint·메타데이터·변경 범위·native patch를 정적으로 확인했다.
++- 앱·브라우저·성능 프로파일·테스트·빌드·checker main은 실행하지 않았다. 실제 처리 시간 개선이나 전체 계층 closure를 확정하지 않는다.
+diff --git a/agent_space/patches/20261118-009.md b/agent_space/patches/20261118-009.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3caa993ff8b4dd21813d5274ccebe2dd8614024f
+--- /dev/null
++++ b/agent_space/patches/20261118-009.md
+@@ -0,0 +1,12 @@
++# Plan045 — source code 목적별 API 번역
++
++- Source Script 57 / pseudocode 34에 맞춰 source code 163을 수정했다.
++- API에서 필드를 먼저 제한하고 그 결과만 복사한다. 트리·휴지통·삭제 확인·그래프 목록/입력·설정과 명시적 열/최대 30행 미리보기의 반환을 분리했다.
++- 공통 입력은 같은 판정의 현재 문맥을 한 번 전달한다. 소비자 구독과 theme 생성을 필요한 값으로 제한하고, 실제 표시·출력에 필요한 조회는 유지했다.
++- 기존 API/Backend 명령 경계·검증·단일 반영·참조 보정·선택 슬롯 렌더·CSS 변환·파일 형식은 유지했다. 전역 Project cache나 새 getter registry를 추가하지 않았다.
++- 기준 snapshot: `79778485a35c05fa32aac5d2fd3c82a87154d6a3`. HEAD: `561a0df77895d3c58007fdb02516c7cdb6175c55`.
++- 실제 native Git diff는 JS 6개·source-code 메타데이터·신규 검토 문서와 이 설명으로 구성한다. 앞선 Source Script 007 / pseudocode 008 변경은 이 incremental patch에서 제외했다.
++- source code fingerprint: `sha256:d6defd7741b6e4ea39489aa3d59a371ec4f83fe7468cdf0b7a104982ccdc6eda`.
++- 검토: `../reviews/review-20261118-012-plan045-source-code.md`.
++- 문법·호출/반환·실제 diff·hash·변경 범위를 정적으로 확인했다. 테스트·앱·브라우저·프로파일·빌드·checker main·추가 commit/push는 실행하지 않았다.
++- 지연 개선 수치는 아직 측정하지 않았다. 명령 내부의 중복 복사·검증·비교 최적화는 별도 연구 범위로 유지한다.

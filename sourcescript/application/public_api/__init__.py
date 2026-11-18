@@ -39,15 +39,16 @@ def readSelectedSlot():
 
 def readGraphData():
     current = "Frontend 상태 읽기 딕셔너리."
-    graphData = "chart·objects·선택 index·currentCsv·열 정의 딕셔너리."
+    graphData = "chart 식별·편집 목록·선택 index·CSV 메타데이터 딕셔너리."
     """
     Args:
     - 없음.
 
     Return:
     - graphData:
-      chart·objects·선택 index·currentCsv·열 정의 딕셔너리.
-      기존 graphs.readData record. chart는 selectedSlotId가 가리키는 slot의 소유 chart,
+      chart 식별·편집 목록·선택 index·CSV 메타데이터 딕셔너리.
+      chart는 id/editor.title/editor.editable, objects는 표시할 편집 설정 배열이다.
+      chart는 selectedSlotId가 가리키는 slot의 소유 chart,
       currentCsv는 assetSelection=csv이고 assetPath가 가리키는 현재 CSV다.
       record의 나머지 필드는 sourcescript/backend/project_state.py의 graphs.readData 계약을 따른다.
 
@@ -57,11 +58,37 @@ def readGraphData():
     처리:
         1. adapter.appFSM.readState()를 current에 두고 selectedSlotId·assetSelection·assetPath·graphObject·graphObjectIndex를 읽는다.
         2. 그 필드만 frontendState에 넣고 operation=BACKEND_QUERY_KINDS['project-api']['graphs.readData']로 adapter.dispatchProjectQuery("project-api", 요청)를 호출한다.
-        3. Backend는 같은 현재 프로젝트의 visible Slot.content["chart"]로 chart를 찾는다. CSV 선택이면 assetPath로 currentCsv와 columns를 찾는다.
-           선택 object의 csvId로 objectColumns를 별도로 구하며 각 누락 결과는 backend.project_state.readBackendProjection의 처리["graphs.readData"]를 따른다.
+        3. Backend는 같은 현재 프로젝트의 visible Slot.content["chart"]로 chart 식별·편집 필드만 구성한다.
+           CSV 선택이면 assetPath로 currentCsv의 id/path/name/headerLines/rowCount만 구한다.
+           열과 표는 graphs.readColumns와 assets.readPreview의 명시적인 소비자가 별도로 요청한다.
+           각 누락 결과는 backend.project_state.readBackendProjection의 graphs.readData 계약을 따른다.
         4. 반환값을 graphData에 두고 반환한다. 조회 오류는 호출자에게 전달한다.
     """
     return graphData
+
+
+def readGraphControls(csvId=None):
+    current = "현재 Frontend 상태 읽기 딕셔너리."
+    controls = "대상 식별자·현재 편집 값·CSV 메타데이터 딕셔너리."
+    """
+    Args:
+    - csvId:
+      명시적 헤더 변경 후 확인할 CSV id 또는 None.
+
+    Return:
+    - controls:
+      graphs.readControls의 읽기 전용 결과.
+
+    변경:
+    - 없음.
+
+    처리:
+        1. appFSM.readState()에서 현재 selectedSlotId·assetSelection·assetPath·graphObjectIndex를 읽는다.
+        2. 그 식별 필드와 csvId를 graphs.readControls operation에 담아 dispatchProjectQuery를 한 번 호출한다.
+        3. Backend는 같은 현재 프로젝트에서 필요한 설정과 메타데이터만 구성한다.
+           원래 조회 오류를 전파하고 controls를 반환한다.
+    """
+    return controls
 
 
 PUBLIC_API_METHODS = {
@@ -76,6 +103,7 @@ PUBLIC_API_METHODS = {
     },
     'slots': {
         'readSelected': readSelectedSlot,
+        'readDisplay': ('query', BACKEND_QUERY_KINDS['project-api']['slots.readDisplay'], ()),
         'select': adapter.dispatchSlotSelection,
         'setContentType': layout_annotations.setSlotContentType,
         'reset': layout_annotations.resetSlotApi,
@@ -85,6 +113,7 @@ PUBLIC_API_METHODS = {
     },
     'images': {
         'readEditor': ('query', BACKEND_QUERY_KINDS['project-api']['images.readEditor'], ()),
+        'readSettings': ('query', BACKEND_QUERY_KINDS['project-api']['images.readSettings'], ()),
         'setSettings': layout_annotations.applyImageSettingsFromValues,
         'insertEmpty': layout_annotations.insertEmptyImageIntoSelectedSlot,
     },
@@ -92,6 +121,8 @@ PUBLIC_API_METHODS = {
         'readDeletionTarget': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readDeletionTarget'], ('path',)),
         'delete': assets.deleteProjectAsset,
         'readTree': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readTree'], ()),
+        'readList': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readList'], ('kind',)),
+        'readPreview': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readPreview'], ('csvId', 'start', 'count')),
         'isTrashed': ('query', BACKEND_QUERY_KINDS['project-api']['assets.isTrashed'], ('path',)),
         'movable': ('query', BACKEND_QUERY_KINDS['project-api']['assets.movable'], ('path',)),
         'readTrash': ('query', BACKEND_QUERY_KINDS['project-api']['assets.readTrash'], ()),
@@ -116,6 +147,8 @@ PUBLIC_API_METHODS = {
     },
     'graphs': {
         'readData': readGraphData,
+        'readControls': readGraphControls,
+        'readColumns': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.readColumns'], ('csvId', 'chartId')),
         'readLayout': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.readLayout'], ()),
         'readPalette': ('query', BACKEND_QUERY_KINDS['project-api']['graphs.readPalette'], ()),
         'selectCsv': assets.selectProjectCsv,
@@ -142,6 +175,7 @@ PUBLIC_API_METHODS = {
     },
     'captions': {
         'readGlobal': ('query', BACKEND_QUERY_KINDS['project-api']['captions.readGlobal'], ()),
+        'readSettings': ('query', BACKEND_QUERY_KINDS['project-api']['captions.readSettings'], ()),
         'readSlot': ('query', BACKEND_QUERY_KINDS['project-api']['captions.readSlot'], ('slotId',)),
         'setEnabled': layout_annotations.setCaptionsApiEnabled,
         'setGlobalText': layout_annotations.setGlobalCaptionText,
@@ -153,6 +187,7 @@ PUBLIC_API_METHODS = {
     },
     'labels': {
         'readState': layout_annotations.readLabelsApiState,
+        'readSettings': ('query', BACKEND_QUERY_KINDS['project-api']['labels.readSettings'], ()),
         'setEnabled': layout_annotations.setLabelsApiEnabled,
         'setSettings': layout_annotations.setLabelsApiSettings,
         'setPosition': layout_annotations.setLabelsApiPosition,
@@ -166,6 +201,7 @@ PUBLIC_API_METHODS = {
     },
     'layout': {
         'readState': layout_annotations.readLayoutApiState,
+        'readControls': layout_annotations.readLayoutApiControls,
         'setStyle': layout_annotations.setLayoutApiStyle,
         'setGrid': layout_annotations.setLayoutApiGrid,
         'setZoom': layout_annotations.setLayoutApiZoom,
@@ -215,7 +251,7 @@ def createPublicApi():
            반환값 또는 오류를 호출자에게 전달한다.
         3. query binding의 두 번째 원소는 operation, 세 번째 원소는 위치 인자의 필드 이름 tuple이다.
            callable은 그 이름과 입력을 짝지어 request를 만들고 operation을 넣는다.
-           images.readEditor이면 adapter.appFSM.readState()의 selectedSlotId를 request의 slotId에 넣는다.
+           images.readEditor/readSettings와 labels.readSettings이면 adapter.appFSM.readState()의 selectedSlotId를 request의 slotId에 넣는다.
            graphs.readLayout/readPalette/hasSelectedSlot이면 현재 selectedSlotId를 request에 넣는다.
            adapter.dispatchProjectQuery("project-api", request)를 한 번 호출하고 결과 또는 오류를 전달한다.
         4. event binding이면 callable이 adapter.dispatchInterfaceEvent를 한 번 호출하도록 연결한다.

@@ -213,7 +213,7 @@ def createProjectCsv(data, name, id, bytesBase64, mime, headerLines, path):
     Return:
     - csv:
       CSV 딕셔너리 또는 미반영 명령 결과.
-      성공 뒤 공식 query로 읽은 등록 CSV의 immutable projection; 미commit이면 해당 command failure를 반환한다.
+      성공 뒤 공식 query가 제공하는 등록 CSV의 kind/id/path/name 메타데이터. 미commit이면 해당 command failure를 반환한다.
 
     변경:
     - DATA_OBJECT_CREATED event를 통해 activeProject._state['assets']['csvFiles']와 next csv id를 변경한다.
@@ -238,7 +238,7 @@ def createEmptyProjectCsv():
     Return:
     - csv:
       CSV 딕셔너리 또는 미반영 명령 결과.
-      EMPTY_CSV_TEMPLATE에서 생성되어 activeProject에 등록된 일반 CSV asset.
+      EMPTY_CSV_TEMPLATE에서 생성되어 activeProject에 등록된 CSV의 kind/id/path/name 메타데이터.
 
     변경:
     - DATA_OBJECT_CREATED event를 통해 activeProject._state['assets']['csvFiles']와 next csv id를 변경한다.
@@ -283,7 +283,7 @@ def createProjectImage(bytes, name, mime, id, path):
     Return:
     - image:
       이미지 딕셔너리 또는 미반영 명령 결과.
-      성공 뒤 공식 query로 읽은 등록 image의 immutable projection; 미commit이면 해당 command failure를 반환한다.
+      성공 뒤 공식 query가 제공하는 등록 이미지의 kind/id/path/name 메타데이터. 미commit이면 해당 command failure를 반환한다.
 
     변경:
     - IMAGE_OBJECT_CREATED event를 통해 activeProject._state['assets']['images']와 next image id를 변경한다.

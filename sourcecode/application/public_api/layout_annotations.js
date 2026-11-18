@@ -20,14 +20,14 @@ export function mergeSlots(slotIds=[]) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
   if (!result.committed) return false;
 
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 export function splitSlots(slotIds=[]) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
   if (!result.committed) return false;
 
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 export function insertEmptyImageIntoSelectedSlot() {
@@ -273,6 +273,11 @@ export function resetAppearanceApiPalette() {
   return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
 }
 
+export function readLayoutApiControls() {
+  return { ...appFSM.query("project-api", { operation: "layout.readControls" }),
+    zoom: interfaceFSM.readState().dashboardZoomIntent };
+}
+
 export function readLayoutApiState(previewWidth = null) {
   const layout = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }),
     session = interfaceFSM.readState();
@@ -284,7 +289,7 @@ export function setLayoutApiStyle(patch = {}) {
   if (!result.committed) return false;
 
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 export function setLayoutApiGrid(rows, cols) {
@@ -292,24 +297,24 @@ export function setLayoutApiGrid(rows, cols) {
   if (!result.committed) return false;
 
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 export function setLayoutApiZoom(value) {
   const session = interfaceFSM.readState();
   const state = appFSM.send("SET_DASHBOARD_ZOOM", { value });
   if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 export function commitLayoutApiZoom() {
   appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 export function resetLayoutApiZoom() {
   const session = interfaceFSM.readState();
   const state = appFSM.send("RESET_DASHBOARD_ZOOM");
   if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }

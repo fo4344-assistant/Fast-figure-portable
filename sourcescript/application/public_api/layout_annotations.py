@@ -128,7 +128,7 @@ def insertEmptyImageIntoSelectedSlot():
 
     Return:
     - outcome:
-      생성된 이미지의 분리된 자산 읽기 결과. 대상 부재·종류 불일치·미반영이면 None.
+      생성된 이미지의 kind/id/path/name 메타데이터. 대상 부재·종류 불일치·미반영이면 None.
 
     변경:
     - 새 이미지 자산·다음 id·VFS 위치와 대상 슬롯의 이미지 참조 및 소유 chart.
@@ -225,8 +225,30 @@ def readLayoutApiState(previewWidth=None):
     return layoutState
 
 
+def readLayoutApiControls():
+    controls = "gridRows/gridCols/gridLimits/slotStyle/zoom 딕셔너리."
+    """
+    Args:
+    - 없음.
+
+    Return:
+    - controls:
+      레이아웃 입력에 필요한 현재 값과 기존 한계.
+
+    변경:
+    - 없음.
+
+    처리:
+        1. layout.readControls operation으로 dispatchProjectQuery를 한 번 호출한다.
+           Backend는 현재 layout의 grid·한계·style 필드만 분리하여 반환한다.
+        2. 같은 동기 처리에서 interfaceFSM.readState()의 dashboardZoomIntent를 zoom으로 합성한다.
+           visibleSlots·assetDisplay·previewGeometry를 요청하지 않는다. controls를 반환하고 조회 오류를 전파한다.
+    """
+    return controls
+
+
 def setLayoutApiZoom(value):
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - value:
@@ -234,7 +256,7 @@ def setLayoutApiZoom(value):
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - Frontend dashboardZoomIntent.
@@ -244,20 +266,20 @@ def setLayoutApiZoom(value):
            renderer.applyWorkspaceTransform에 전달하여 기존 화면만 확대·축소한다.
            Plotly 내용 갱신·resize·이미지 재해석을 실행하지 않는다. 현재 layout을 읽어 반환한다.
            dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})를 호출한다.
-           readLayoutApiState()를 반환한다.
+           readLayoutApiControls()를 반환한다.
     """
     return layoutState
 
 
 def commitLayoutApiZoom():
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - 없음.
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - 없음.
@@ -265,21 +287,21 @@ def commitLayoutApiZoom():
     처리:
         1. 기존 layout zoom completion 알림 한 번 후 fresh read; 두 번째 저장/commit/Project field 없음.
            interfaceFSM.notify('layout', 'DASHBOARD_ZOOM_CHANGED', {})를 호출한다.
-           readLayoutApiState()를 반환한다.
+           readLayoutApiControls()를 반환한다.
     """
     return layoutState
 
 
 
 def resetLayoutApiZoom():
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - 없음.
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - Frontend dashboardZoomIntent.
@@ -289,13 +311,13 @@ def resetLayoutApiZoom():
            workspace-structure와 현재 Frontend 상태를 renderer.applyWorkspaceTransform에 전달한다.
            기존 내용의 CSS 배율만 바꾸고 현재 layout을 읽는다.
            dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})를 호출한다.
-           readLayoutApiState()를 반환한다.
+           readLayoutApiControls()를 반환한다.
     """
     return layoutState
 
 
 def setLayoutApiStyle(values):
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - values:
@@ -303,7 +325,7 @@ def setLayoutApiStyle(values):
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - activeProject._state["layout"].slotStyle.
@@ -317,13 +339,13 @@ def setLayoutApiStyle(values):
            dispatchProjectCommand('LAYOUT_STYLE_CHANGED', values)의 값을 (result, interfaceState, rendererInput)에 대입한다.
            not result["committed"]인 경우:
            False를 반환한다.
-           readLayoutApiState()를 반환한다.
+           readLayoutApiControls()를 반환한다.
     """
     return layoutState
 
 
 def setLayoutApiGrid(rows, cols):
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - rows:
@@ -334,7 +356,7 @@ def setLayoutApiGrid(rows, cols):
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
@@ -353,7 +375,7 @@ def setLayoutApiGrid(rows, cols):
 
 
 def mergeSlots(slotIds):
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - slotIds:
@@ -361,7 +383,7 @@ def mergeSlots(slotIds):
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - 검증된 candidate에서 선택 직사각형의 top-left anchor span과 covered slot visibility/content를 변경한다.
@@ -383,7 +405,7 @@ def mergeSlots(slotIds):
 
 
 def splitSlots(slotIds):
-    layoutState = "layout.readState 딕셔너리 또는 False."
+    layoutState = "layout.readControls 딕셔너리 또는 False."
     """
     Args:
     - slotIds:
@@ -391,7 +413,7 @@ def splitSlots(slotIds):
 
     Return:
     - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
+      layout["readControls"] 딕셔너리 또는 False.
 
     변경:
     - merged anchor를 1x1로 되돌리고 covered cell을 visible empty slot로 복원한다.

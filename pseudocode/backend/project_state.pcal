@@ -21,7 +21,9 @@ PUBLIC_BACKEND_READ_OPERATIONS == {"project.readName","slots.readSelected","imag
   "assets.isTrashed","assets.movable","assets.draggableAsset","assets.readDeletionTarget",
   "assets.moveOptions","assets.planMove","assets.resolveTreeSelection","assets.fileKind",
   "assets.collisionModel","assets.resolveImportPlan","project.exportFile","assets.download",
-  "graphs.exportFfsx","graphs.exportPlotlyJson"}
+  "graphs.exportFfsx","graphs.exportPlotlyJson","slots.readDisplay","images.readSettings",
+  "graphs.readControls","graphs.readColumns","assets.readList","assets.readPreview",
+  "layout.readControls","captions.readSettings","labels.readSettings"}
 SequenceSet(seq) == {seq[i] : i \in 1..Len(seq)}
 VisibleSlot(project, id) ==
   IF \E s \in SequenceSet(project.slots): s.id = id /\ ~s.hidden
@@ -586,41 +588,87 @@ end procedure;
 
 procedure BuildGraphEditorRead(source,request)
 variables state = FieldOrEmptyRecord(request,"frontendState"), slot = NoValue,
-          chart = NoValue, csv = NoValue, objectCsv = NoValue, currentCsv = NoValue,
-          objects = <<>>, columns = <<>>, objectColumns = <<>>, selectedIndex = NoValue,
-          target = NoValue, index = NoValue;
+ chart = NoValue, csv = NoValue, node = NoValue, objects = <<>>, selectedIndex = NoValue,
+ currentCsv = NoValue, chartMeta = NoValue, selected = NoValue, i = 1;
 begin
-ExplicitPostCommitChartOrSelectedSlot:
-  if HasField(request,"chartId") then
-    call resolveOwningSlot(request.chartId,source); slot := result;
+CurrentIdentityBeforeFieldConstruction:
+  if HasField(request,"chartId") then call resolveOwningSlot(request.chartId,source); slot := result;
   else slot := VisibleSlot(source,FieldOrNoValue(state,"selectedSlotId")); end if;
-  if slot # NoValue then chart := ChartById(source,slot.content.chart); end if;
-  if chart # NoValue then objects := DeepCopy(chart.editor.objects); end if;
-IndependentCurrentCsvOnlyFromAssetSelection:
-  if FieldOrNoValue(state,"assetSelection") = "csv" then
-    call projectVfsResolve(FieldOrNoValue(state,"assetPath"),source); target := result;
-    if target # NoValue then
-      if target.kind = "csv" then csv := CsvById(source,target.id); end if;
-    end if;
+  if slot # NoValue then
+    if slot.hidden then slot := NoValue;
+    else chart := ChartById(source,slot.content.chart); end if;
   end if;
-  if csv # NoValue then
-    currentCsv := DeepCopy(csv);
-    call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+  if FieldOrNoValue(request,"csvId") # NoValue then csv := CsvById(source,request.csvId);
+  elsif FieldOrNoValue(state,"assetSelection") = "csv" then
+    call projectVfsResolve(FieldOrNoValue(state,"assetPath"),source); node := result;
+    if node # NoValue /\ node.kind = "csv" then csv := CsvById(source,node.id); end if;
   end if;
-ObjectColumnsNotCsvSelectionReplacement:
-  index := FieldOrNoValue(state,"graphObjectIndex");
+  if csv # NoValue then currentCsv := [id |-> csv.id,path |-> CanonicalAssetPath(csv),
+    name |-> csv.name,headerLines |-> csv.headerLines,rowCount |-> Len(csv.rows)]; end if;
   if chart # NoValue then
-    if chart.editor.editable # FALSE /\ ValidIndex(index,objects) then
-      selectedIndex := index;
-      objectCsv := CsvById(source,objects[index + 1].csvId);
-      if objectCsv # NoValue then call columnDefinitions(objectCsv.rows,objectCsv.headerLines); objectColumns := result; end if;
+    chartMeta := [id |-> chart.id,editor |-> [title |-> chart.editor.title,editable |-> chart.editor.editable]];
+    if chart.editor.editable /\ ValidIndex(FieldOrNoValue(state,"graphObjectIndex"),chart.editor.objects) then
+      selectedIndex := state.graphObjectIndex;
+      selected := SelectFields(chart.editor.objects[selectedIndex+1],
+        <<"csvId","x","y","xAxisSide","yAxisSide","type","color","legendName","lineWidth",
+          "lineDash","markerSymbol","markerSize","barOpacity","barLineWidth">>);
     end if;
   end if;
-GraphEditorReadReturn:
-  result := [chart |-> DeepCopy(chart),objects |-> objects,selectedIndex |-> selectedIndex,
-             currentCsv |-> currentCsv,columns |-> columns,objectColumns |-> objectColumns];
+OnlyRequestedEditorFields:
+  if request.operation = "graphs.readControls" then
+    result := [slotId |-> IF slot = NoValue THEN NoValue ELSE slot.id,
+      chartId |-> IF chart = NoValue THEN NoValue ELSE chart.id,
+      title |-> IF chart = NoValue THEN "" ELSE chart.editor.title,
+      editable |-> IF chart = NoValue THEN FALSE ELSE chart.editor.editable,
+      chart |-> chartMeta,selectedIndex |-> selectedIndex,object |-> selected,currentCsv |-> currentCsv];
+    return;
+  end if;
+  if chart # NoValue then
+    while i <= Len(chart.editor.objects) do
+      objects := Append(objects,SelectFields(chart.editor.objects[i],
+        <<"csvId","x","y","xAxisSide","yAxisSide","type","color","legendName","lineWidth",
+          "lineDash","markerSymbol","markerSize","barOpacity","barLineWidth">>));
+      i := i+1;
+    end while;
+  end if;
+  result := [chart |-> chartMeta,objects |-> objects,selectedIndex |-> selectedIndex,currentCsv |-> currentCsv];
   return;
 end procedure;
+
+procedure ReadExplicitColumns(source,request)
+variables csv = NoValue, chart = NoValue, rows = <<>>, header = 0;
+begin
+ExplicitTableOnly:
+  if FieldOrNoValue(request,"csvId") # NoValue then
+    csv := CsvById(source,request.csvId);
+    if csv = NoValue then result := <<>>; return; end if;
+    rows := csv.rows; header := csv.headerLines;
+  else
+    chart := ChartById(source,FieldOrNoValue(request,"chartId"));
+    if chart = NoValue then result := <<>>; return; end if;
+    if chart.editor.editable then result := <<>>; return; end if;
+    if ~HasField(chart.editor,"conversionRows") then result := <<>>; return; end if;
+    rows := chart.editor.conversionRows;
+  end if;
+  call columnDefinitions(rows,header);
+  return;
+end procedure;
+
+procedure ReadBoundedPreview(source,request)
+variables csv = CsvById(source,request.csvId), start = IF HasField(request,"start") THEN request.start ELSE 0,
+ count = IF HasField(request,"count") THEN request.count ELSE 30, rows = <<>>, i = 1;
+begin
+ValidateBeforeCopy:
+  Require(IsInteger(start) /\ start >= 0 /\ IsInteger(count) /\ count >= 1 /\ count <= 30);
+  if csv = NoValue then result := NoValue; return; end if;
+  i := start+1;
+  while i <= Len(csv.rows) /\ i <= start+count do
+    rows := Append(rows,DeepCopy(csv.rows[i])); i := i+1;
+  end while;
+  result := [csvId |-> csv.id,headerLines |-> csv.headerLines,rowCount |-> Len(csv.rows),start |-> start,rows |-> rows];
+  return;
+end procedure;
+
 
 procedure BuildImageEditorRead(source,slotId)
 variables slot = VisibleSlot(source,slotId), image = NoValue, bytes = NoValue, settings = NoValue;
@@ -675,22 +723,62 @@ SameCurrentProjectWithoutMutationOrResource:
   return;
 end procedure;
 
+procedure AssetMetadata(asset,kind,counts)
+variables node = [kind |-> kind,id |-> asset.id,path |-> CanonicalAssetPath(asset),name |-> asset.name], key = <<kind,asset.id>>;
+begin
+OnlyMetadataBeforeDetach:
+  node.referenceCount := IF HasField(counts,key) THEN counts[key] ELSE 0;
+  if kind = "csv" then
+    node.headerLines := asset.headerLines;
+    node.rowCount := Maximum(0,Len(asset.rows)-asset.headerLines);
+  end if;
+  result := node; return;
+end procedure;
+
 procedure BuildVfsRead(source,operation,request)
 variables path = "", node = NoValue, tree = <<>>, refs = <<>>, target = NoValue,
-          csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "";
+ csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "", item = NoValue,
+ directories = source.fileSystem.directories, csvs = source.assets.csvFiles, images = source.assets.images,
+ onlyTrash = operation = "assets.readTrash", counts = [], key = NoValue, owner = NoValue;
 begin
-TreeFromExistingDirectoriesAndAssetLocations:
+MetadataLists:
+  if operation = "assets.readList" then
+    Require(request.kind \in {"csv","image"});
+    if request.kind = "csv" then csvs := source.assets.csvFiles; else csvs := source.assets.images; end if;
+    while i <= Len(csvs) do
+      item := csvs[i]; options := Append(options,[id |-> item.id,path |-> CanonicalAssetPath(item),name |-> item.name]);
+      i := i+1;
+    end while;
+    result := options; return;
+  end if;
+TreeScopeBeforeConstruction:
   if operation \in {"assets.readTree","assets.readTrash"} then
-    tree := DetachedDirectoryNodesInExistingOrder(source.fileSystem.directories);
-    while i <= Len(source.assets.csvFiles) do
-      AppendDetachedAssetTreeNode(tree,"csv",source.assets.csvFiles[i]); i := i + 1;
+    if onlyTrash then
+      directories := SelectSeq(directories,LAMBDA d : SegmentDescendantOrSame(CanonicalDirectoryPath(d),BackendSettings.defaults.vfs.trash));
+      csvs := SelectSeq(csvs,LAMBDA a : SegmentDescendantOrSame(CanonicalAssetPath(a),BackendSettings.defaults.vfs.trash));
+      images := SelectSeq(images,LAMBDA a : SegmentDescendantOrSame(CanonicalAssetPath(a),BackendSettings.defaults.vfs.trash));
+    end if;
+    csvIds := SetOfField(csvs,"id"); imageIds := SetOfField(images,"id");
+    call collectAssetReferences(csvIds,imageIds,source); refs := result;
+    while i <= Len(refs) do
+      key := <<refs[i].kind,refs[i].assetId>>;
+      counts[key] := (IF HasField(counts,key) THEN counts[key] ELSE 0)+1; i := i+1;
     end while;
     i := 1;
-    while i <= Len(source.assets.images) do
-      AppendDetachedAssetTreeNode(tree,"image",source.assets.images[i]); i := i + 1;
+    tree := DetachedDirectoryNodesInExistingOrder(directories);
+    while i <= Len(csvs) do
+      call AssetMetadata(csvs[i],"csv",counts);
+      AppendDetachedMetadataTreeNode(tree,result); i := i+1;
+    end while;
+    i := 1;
+    while i <= Len(images) do
+      call AssetMetadata(images[i],"image",counts);
+      AppendDetachedMetadataTreeNode(tree,result); i := i+1;
     end while;
     AttachNodesByCanonicalParentPath(tree);
-    if operation = "assets.readTrash" then result := TreeAtExactPath(tree,BackendSettings.defaults.vfs.trash);
+    if onlyTrash then
+      node := TreeAtExactPath(tree,BackendSettings.defaults.vfs.trash);
+      result := [root |-> node,empty |-> NoAssetOrChildDirectoryUnderRoot(node),referenceCount |-> Len(refs)];
     else result := tree; end if;
     return;
   end if;
@@ -710,11 +798,19 @@ CanonicalPathAndCurrentNode:
   elsif operation = "assets.readDeletionTarget" then
     if node = NoValue then result := NoValue; return; end if;
     if node.kind \notin {"csv","image"} then result := NoValue; return; end if;
-    if node.kind = "csv" then csvIds := {node.id}; target := CsvById(source,node.id);
-    else imageIds := {node.id}; target := ImageById(source,node.id); end if;
+    if node.kind = "csv" then csvIds := {node.id}; else imageIds := {node.id}; end if;
     call collectAssetReferences(csvIds,imageIds,source); refs := result;
-    result := [target |-> DeepCopy(target),kind |-> node.kind,path |-> node.canonicalPath,
-               referenceCount |-> Len(refs),references |-> DeepCopy(refs)]; return;
+    i := 1; options := <<>>;
+    while i <= Len(refs) do
+      if refs[i].kind = "csv" then
+        call resolveOwningSlot(refs[i].chartId,source); owner := result;
+        options := Append(options,[kind |-> "csv",slotId |-> IF owner = NoValue THEN NoValue ELSE owner.id,
+          chartId |-> refs[i].chartId,objectIndex |-> refs[i].originalObjectIndex]);
+      else options := Append(options,[kind |-> "image",slotId |-> refs[i].slotId,chartId |-> NoValue,objectIndex |-> NoValue]); end if;
+      i := i+1;
+    end while;
+    target := [kind |-> node.kind,id |-> node.id,path |-> node.canonicalPath,name |-> node.name];
+    result := [target |-> target,kind |-> node.kind,path |-> node.canonicalPath,referenceCount |-> Len(refs),references |-> options]; return;
   elsif operation = "assets.moveOptions" then
     if node = NoValue then result := options; return; end if;
     if IsFixedDirectoryPath(path,BackendSettings.defaults.vfs) then result := options; return; end if;
@@ -722,11 +818,12 @@ CanonicalPathAndCurrentNode:
       directory := CanonicalDirectoryPath(source.fileSystem.directories[i]);
       if node.kind # "directory" then options := Append(options,DeepCopy(source.fileSystem.directories[i]));
       elsif ~SegmentDescendantOrSame(directory,path) then options := Append(options,DeepCopy(source.fileSystem.directories[i])); end if;
-      i := i + 1;
+      i := i+1;
     end while;
     result := options; return;
   else FailQuery("unregistered VFS query"); end if;
 end procedure;
+
 
 procedure BuildSlotContentRead(source,sourceSlot)
 variables slot = DeepCopy(sourceSlot), chart = NoValue, csv = NoValue, j = 1, columns = <<>>;
@@ -805,15 +902,45 @@ PublicReadRegisteredOperation:
   end if;
   if operation = "project.readName" then output := source.meta.projectName;
   elsif operation = "slots.readSelected" then output := SelectedSlotIdentityGeometryContentCopy(source,request.frontendState.selectedSlotId);
+  elsif operation = "slots.readDisplay" then
+    output := <<>>; i := 1;
+    while i <= Len(source.slots) do
+      slot := source.slots[i];
+      if ~slot.hidden then
+        call buildSlotAssetDisplay(slot,source);
+        output := Append(output,[id |-> slot.id,row |-> slot.row,col |-> slot.col,
+          rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan,contentType |-> slot.content.contentType,
+          chartId |-> slot.content.chart,imageId |-> slot.content.imageId,assetDisplay |-> result]);
+      end if;
+      i := i+1;
+    end while;
+  elsif operation = "images.readSettings" then
+    slot := VisibleSlot(source,request.slotId); output := NoValue;
+    if slot # NoValue then
+      if slot.content.contentType = "image" then
+        image := ImageById(source,slot.content.imageId);
+        output := [slotId |-> slot.id,imageId |-> slot.content.imageId,
+          name |-> IF image = NoValue THEN "" ELSE image.name,settings |-> slot.content.imageSettings];
+      end if;
+    end if;
   elsif operation = "images.readEditor" then call BuildImageEditorRead(source,request.slotId); output := result;
   elsif operation = "print.readSettings" then output := DeepCopy(source.export);
   elsif operation = "appearance.readPalette" then output := DeepCopy(source.appearance.uiPalette);
   elsif operation = "graphs.defaultColors" then output := DeepCopy(BackendSettings.defaults.graphColors);
   elsif operation = "graphs.hasSelectedSlot" then output := IsVisibleGraphSlot(source,request.selectedSlotId);
-  elsif operation = "graphs.readData" then
+  elsif operation \in {"graphs.readData","graphs.readControls"} then
     call BuildGraphEditorRead(source,request); output := result;
-    \* Selected object CSV supplies objectColumns only, NEVER replaces currentCsv.
-    \* Imported conversion chart has no editable selectedIndex/objectColumns.
+  elsif operation = "graphs.readColumns" then call ReadExplicitColumns(source,request); output := result;
+  elsif operation = "assets.readPreview" then call ReadBoundedPreview(source,request); output := result;
+  elsif operation = "layout.readControls" then
+    output := [gridRows |-> source.layout.gridRows,gridCols |-> source.layout.gridCols,
+      gridLimits |-> [gridRows |-> BackendSettings.defaults.limits.layout.gridRows,
+                     gridCols |-> BackendSettings.defaults.limits.layout.gridCols],slotStyle |-> source.layout.slotStyle];
+  elsif operation = "captions.readSettings" then
+    output := [enabled |-> source.annotations.captions.enabled,settings |-> source.annotations.captions.settings];
+  elsif operation = "labels.readSettings" then
+    output := [enabled |-> source.annotations.labels.enabled,settings |-> source.annotations.labels.settings,
+      slotId |-> request.slotId];
   elsif operation \in {"graphs.readLayout","graphs.readPalette"} then
     slot := VisibleSlot(source,request.selectedSlotId); chart := ChartOfSlotOrNone(source,slot);
     output := IF operation = "graphs.readLayout" THEN ChartTitleGlobalAxesCopyOrNone(chart) ELSE ObjectColorsCopyOrEmpty(chart);
@@ -906,6 +1033,8 @@ ExportRead:
   else FailQuery("unknown export operation"); end if;
 ImmutableReturn:
   result := ImmutableCopy(output);
+  \* Copy once, then traverse detached objects with one call-local identity visit set.
+  \* Each shared child is marked read-only once; the authoritative source is untouched.
   \* Recursively detached: no callbacks/DOM/mutable handles, allocation/revocable URLs,
   \* query-time authority normalization, saved frontend state or cross-task read store.
   return;

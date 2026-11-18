@@ -29,79 +29,81 @@ export function prepareNumericInput(text, current, allowEmpty = false, emptyValu
   return Number.isFinite(number) ? [true, number] : [false, current];
 }
 export class UiCommand {
-  constructor(readTarget, readValue, prepare, invoke, stepSize = null) {
-    Object.assign(this, { readTarget, readValue, prepare, invoke, stepSize, text: "", editTarget: null,
+  constructor(readCurrent, prepare, invoke, stepSize = null) {
+    Object.assign(this, { readCurrent, prepare, invoke, stepSize, text: '', editTarget: null,
       editing: false, composing: false, running: false, active: true, changed: () => {} });
   }
   input(text, composing = false) {
     if (!this.active || this.running) return this.text;
-    const target = this.readTarget();
-    if (target === null) { this.cancel(); return this.text; }
-    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
-    if (!this.editing) { this.editTarget = target; this.editing = true; }
-    this.text = text; this.composing = composing; this.changed(); return text;
-  }
-  refresh(target) {
-    if (!this.active || !this.readValue || !sameUiTarget(this.readTarget(), target)) return;
-    const value = this.readValue(target);
-    this.text = value == null ? "" : String(value); this.changed(); return value;
+    const current = this.readCurrent();
+    if (current.target === null) { this.cancel(); return this.text; }
+    if (!this.editing || !sameUiTarget(this.editTarget, current.target)) {
+      this.editTarget = current.target; this.editing = true;
+    }
+    this.text = text; this.composing = composing; this.changed(); return this.text;
   }
   cancel() {
-    this.editing = false; this.composing = false; this.editTarget = null; this.text = "";
-    const target = this.active ? this.readTarget() : null;
-    const value = target !== null && this.readValue ? this.readValue(target) : "";
-    this.text = value == null ? "" : String(value); this.changed(); return value;
+    this.editing = false; this.composing = false; this.editTarget = null;
+    const current = this.active ? this.readCurrent() : null;
+    this.text = current?.value == null ? '' : String(current.value);
+    this.changed(); return this.text;
   }
   send(value, target = null) {
-    if (!this.active || this.running || appFSM.readState().lifecycle !== "ready") return null;
-    const current = this.readTarget();
-    if (current === null || (target !== null && !sameUiTarget(current, target))) return null;
-    if (this.readValue && this.readValue(current) === value) { this.refresh(current); return null; }
+    if (!this.active || this.running) return null;
+    const current = this.readCurrent();
+    return this.sendCurrent(value, target ?? current.target, current);
+  }
+  sendCurrent(value, target, current) {
+    if (!this.active || this.running || !current.ready || current.target === null || !sameUiTarget(target, current.target)) return null;
+    if (this.prepare && current.value === value) {
+      this.text = value == null ? '' : String(value); this.changed(); return null;
+    }
     this.running = true; this.changed();
     const settle = (failed, outcome) => {
-      this.running = false; if (this.active) this.changed();
-      let refreshError, refreshFailed = false;
-      try { this.refresh(current); } catch (error) { refreshFailed = true; refreshError = error; }
+      this.running = false; let refreshFailed = false, refreshError;
+      try {
+        if (this.active) {
+          const fresh = this.readCurrent();
+          if (!this.editing && sameUiTarget(fresh.target, target)) {
+            this.text = fresh.value == null ? '' : String(fresh.value);
+            if (this.prepare && fresh.value !== value) status(`입력값 ${value} → 적용값 ${fresh.value}`);
+          }
+          this.changed();
+        }
+      } catch (error) { refreshFailed = true; refreshError = error; }
       if (failed) throw outcome;
       if (refreshFailed) throw refreshError;
       return outcome;
     };
     let outcome;
-    try { outcome = this.invoke(current, value); }
+    try { outcome = this.invoke(target, value, current.companions); }
     catch (error) { return settle(true, error); }
-    if (outcome && typeof outcome.then === "function")
-      return Promise.resolve(outcome).then(value => settle(false, value), error => settle(true, error));
-    return settle(false, outcome);
+    return outcome && typeof outcome.then === 'function'
+      ? Promise.resolve(outcome).then(value => settle(false, value), error => settle(true, error))
+      : settle(false, outcome);
   }
   commit() {
     if (!this.active || !this.editing || this.running || this.composing) return null;
-    const target = this.editTarget;
-    if (appFSM.readState().lifecycle !== "ready" || target === null || !sameUiTarget(this.readTarget(), target)) {
-      this.cancel(); return null;
-    }
-    const [valid, value] = this.prepare(this.text, this.readValue(target));
-    if (!valid) { this.cancel(); status("완성된 숫자를 입력하세요."); return null; }
+    const current = this.readCurrent(), target = this.editTarget;
+    if (!current.ready || target === null || !sameUiTarget(current.target, target)) { this.cancel(); return null; }
+    const [valid, value] = this.prepare(this.text, current.value);
+    if (!valid) { this.cancel(); status('완성된 숫자를 입력하세요.'); return null; }
     this.editing = false; this.composing = false;
-    const report = outcome => {
-      if (this.active && sameUiTarget(this.readTarget(), target)) {
-        const applied = this.readValue(target);
-        if (applied !== value) status(`입력값 ${value} → 적용값 ${applied}`);
-      }
-      return outcome;
-    };
-    const outcome = this.send(value, target);
-    return outcome && typeof outcome.then === "function" ? outcome.then(report) : report(outcome);
+    return this.sendCurrent(value, target, current);
   }
   step(direction) {
     if (!this.active || this.running || this.composing || this.stepSize === null) return null;
-    const target = this.readTarget();
-    if (target === null) { this.cancel(); return null; }
-    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
-    let value = this.readValue(target);
-    if (this.editing) { const parsed = prepareNumericInput(this.text, value); if (parsed[0]) value = parsed[1]; }
-    if (typeof value !== "number" || !Number.isFinite(value)) value = 0;
-    this.input(String(value + (direction === "increase" ? this.stepSize : -this.stepSize)));
-    return this.commit();
+    const current = this.readCurrent();
+    if (!current.ready || current.target === null) { this.cancel(); return null; }
+    let value = current.value;
+    if (this.editing && sameUiTarget(this.editTarget, current.target)) {
+      const parsed = prepareNumericInput(this.text, value); if (parsed[0]) value = parsed[1];
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value)) value = 0;
+    value += direction === 'increase' ? this.stepSize : -this.stepSize;
+    this.text = String(value); this.editTarget = current.target;
+    this.editing = false; this.composing = false;
+    return this.sendCurrent(value, current.target, current);
   }
   dispose() { this.changed = () => {}; this.cancel(); this.active = false; }
 }
@@ -213,59 +215,59 @@ Modal: Modal.extend({
   function numericBinding(group, field, axis = null) {
     const read = () => {
       const api = window.FastFigureApi, state = appFSM.readState();
-      if (state.lifecycle !== "ready") return null;
+      if (state.lifecycle !== "ready") return { target: null, value: null, companions: null, ready: false };
       let view, target, value;
       if (group === "image") {
-        view = api.images.readEditor(); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
+        view = api.images.readSettings(); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
         value = view?.settings?.[field];
       } else if (group === "csv" || group === "object") {
-        view = api.graphs.readData();
+        view = api.graphs.readControls();
         target = group === "csv" ? (view.currentCsv ? [group, view.currentCsv.id] : null)
           : (view.chart?.editor?.editable !== false && view.selectedIndex != null
             ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null);
-        value = group === "csv" ? view.currentCsv?.headerLines : view.objects?.[view.selectedIndex]?.[field];
+        value = group === "csv" ? view.currentCsv?.headerLines : view.object?.[field];
       } else if (group === "axis" || group === "global") {
         view = api.graphs.readLayout();
         target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
         value = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
       } else if (group === "label") {
-        view = api.labels.readState(); target = state.overlay === "label" ? [group] : null; value = view.settings[field];
+        view = api.labels.readSettings(); target = state.overlay === "label" ? [group] : null; value = view.settings[field];
       } else if (group === "caption") {
-        view = api.captions.readGlobal(); target = state.overlay === "caption" ? [group] : null; value = view.settings[field];
+        view = api.captions.readSettings(); target = state.overlay === "caption" ? [group] : null; value = view.settings[field];
       } else if (group === "print") {
         view = api.print.readSettings(); target = state.overlay === "print" ? [group] : null;
         value = field === "height" && view.heightMode !== "explicit" ? null : view[field];
       } else {
-        view = api.layout.readState(); target = state.overlay === "layout" ? [group] : null;
+        view = api.layout.readControls(); target = state.overlay === "layout" ? [group] : null;
         value = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"]
           : group === "zoom" ? view.zoom : view.slotStyle[field];
       }
       if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) value = Number(value);
-      return { target: target === null ? null : [...target, field], value, view };
+      return { target: target === null ? null : [...target, field], value, ready: true,
+        companions: group === "grid" ? { gridRows: view.gridRows, gridCols: view.gridCols, gridLimits: view.gridLimits }
+          : group === "label" ? { x: view.settings.x, y: view.settings.y } : null };
     };
     const allowEmpty = (group === "axis" && ["min", "max", "tick"].includes(field))
       || group === "global" || (group === "print" && field === "height");
     return {
-      readTarget: () => read()?.target ?? null,
-      readValue: () => read()?.value,
+      readCurrent: read,
       prepare: (text, current) => prepareNumericInput(text, current, allowEmpty,
         group === "print" && field === "height" ? null : ""),
-      invoke: (target, value) => {
-        const api = window.FastFigureApi, current = read();
-        if (!current || !sameUiTarget(current.target, target)) return null;
+      invoke: (target, value, companions) => {
+        const api = window.FastFigureApi;
         if (group === "image") return api.images.setSettings(target[1], { [field]: value });
         if (group === "csv") return api.graphs.setHeaderLines(target[1], value);
         if (group === "object") return api.graphs.setObjectValues(target[2], target[3], { [field]: value });
-        if (group === "axis") return updateSelectedGraphLayout({ axisKey: axis, axisValues: { [field]: String(value) } });
-        if (group === "global") return updateSelectedGraphLayout({ globalSettings: { [field]: String(value) } });
+        if (group === "axis") return api.graphs.updateLayout(target[1], target[2], { axisKey: axis, axisValues: { [field]: String(value) } });
+        if (group === "global") return api.graphs.updateLayout(target[1], target[2], { globalSettings: { [field]: String(value) } });
         if (group === "label") return ["x", "y"].includes(field)
-          ? api.labels.setPosition(field === "x" ? value : current.view.settings.x, field === "y" ? value : current.view.settings.y)
+          ? api.labels.setPosition(field === "x" ? value : companions.x, field === "y" ? value : companions.y)
           : api.labels.setSettings({ [field]: value });
         if (group === "caption") return api.captions.setSettings({ [field]: value });
         if (group === "print") return api.print.setSettings(field === "height"
           ? { heightMode: value === null ? "auto" : "explicit", height: value } : { [field]: value });
         if (group === "grid") {
-          const layout = current.view, bounds = layout.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
+          const layout = companions, bounds = layout.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
           value = Math.max(bounds[0], Math.min(bounds[1], value));
           return api.layout.setGrid(field === "rows" ? value : layout.gridRows, field === "cols" ? value : layout.gridCols);
         }
@@ -274,29 +276,30 @@ Modal: Modal.extend({
       }
     };
   }
+  function useControlSnapshot(readCurrent) {
+    const ref = useRef(readCurrent); ref.current = readCurrent;
+    const snapshot = React.useCallback(() => JSON.stringify(ref.current()), []);
+    return JSON.parse(useSyncExternalStore(subscribeAppState, snapshot, snapshot));
+  }
   function useUiCommand(binding, stepSize = null) {
     const [, render] = useState(0), ref = useRef(null);
-    if (!ref.current) ref.current = new UiCommand(binding.readTarget, binding.readValue, binding.prepare, binding.invoke, stepSize);
-    const command = ref.current;
-    Object.assign(command, binding, { stepSize });
+    if (!ref.current) ref.current = new UiCommand(binding.readCurrent, binding.prepare, binding.invoke, stepSize);
+    const command = ref.current; Object.assign(command, binding, { stepSize });
     command.changed = () => render(value => value + 1);
-    const state = useAppState(), target = JSON.stringify(command.readTarget());
-    useEffect(() => { command.cancel(); }, [target, state.lifecycle]);
+    const current = useControlSnapshot(binding.readCurrent), target = JSON.stringify(current.target);
+    useEffect(() => { command.cancel(); }, [target, current.ready]);
     useEffect(() => {
       command.active = true; command.changed = () => render(value => value + 1);
-      const unsubscribe = appFSM.subscribe(() => {
-        if (appFSM.readState().lifecycle !== "ready" || (command.editing &&
-            !sameUiTarget(command.editTarget, command.readTarget()))) command.cancel();
-      });
-      return () => { unsubscribe(); command.dispose(); };
+      return () => command.dispose();
     }, []);
+    command.displayCurrent = current;
     return command;
   }
   function CommandNumberInput({ command: descriptor, onApplied, ...props }) {
     const [group, field, axis] = descriptor, binding = numericBinding(group, field, axis);
     const invoke = binding.invoke;
-    binding.invoke = (target, value) => {
-      const outcome = invoke(target, value);
+    binding.invoke = (target, value, companions) => {
+      const outcome = invoke(target, value, companions);
       const applied = result => { if (result !== false && result != null) onApplied?.(result); return result; };
       return outcome && typeof outcome.then === "function" ? outcome.then(applied) : applied(outcome);
     };
@@ -304,9 +307,9 @@ Modal: Modal.extend({
     const { value, onChange, onBlur, min, max, step, allowDecimal, clampBehavior, ...inputProps } = props;
     const run = callback => { try { const result = callback(); if (result?.catch) result.catch(error => reportTaskError("UI_COMMAND", error)); }
       catch (error) { reportTaskError("UI_COMMAND", error); } };
-    const editing = command.editing && sameUiTarget(command.editTarget, command.readTarget());
+    const editing = command.editing && sameUiTarget(command.editTarget, command.displayCurrent.target);
     const control = React.createElement(TextInput, { ...inputProps, type: "text", inputMode: "decimal",
-      value: editing ? command.text : (binding.readValue() ?? ""), disabled: props.disabled || command.running,
+      value: editing ? command.text : (command.displayCurrent.value ?? ""), disabled: props.disabled || command.running,
       onChange: event => command.input(event.currentTarget.value, event.nativeEvent.isComposing),
       onCompositionStart: () => { command.composing = true; },
       onCompositionEnd: event => command.input(event.currentTarget.value, false),
@@ -332,7 +335,8 @@ Modal: Modal.extend({
       const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
       return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
     };
-    const command = useUiCommand({ readTarget, readValue: null, prepare: null, invoke: (_target, event) => onClick?.(event) });
+    const command = useUiCommand({ readCurrent: () => ({ target: readTarget(), value: null, companions: null,
+      ready: appFSM.readState().lifecycle === "ready" }), prepare: null, invoke: (_target, event) => onClick?.(event) });
     return React.createElement(control, { ...props, ref: controlRef, disabled: props.disabled || command.running,
       onClick: onClick ? event => localAction ? onClick(event) : command.send(event) : undefined });
   }
@@ -407,7 +411,9 @@ label: option.label,
   }
 
   function getAppStateSnapshot() {
-    return appFSM.readState().revision;
+    const state = appFSM.readState();
+    return JSON.stringify([state.lifecycle, state.workspace, state.overlay, state.selectedSlotId,
+      state.assetSelection, state.assetPath, state.graphObjectIndex]);
   }
 
   function useAppState() {
@@ -418,7 +424,7 @@ label: option.label,
   function addSelectedGraphObject() {
     const current = appFSM.readState();
     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
-    const context = window.FastFigureApi.graphs.readData();
+    const context = window.FastFigureApi.graphs.readControls();
     if (!context.currentCsv || context.chart?.editor.editable === false) return null;
     return window.FastFigureApi.graphs.addObject(current.selectedSlotId, context.currentCsv.id);
   }
@@ -426,7 +432,7 @@ label: option.label,
   function setSelectedGraphEditable(editable) {
     const current = appFSM.readState();
     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
-    const context = window.FastFigureApi.graphs.readData();
+    const context = window.FastFigureApi.graphs.readControls();
     if (!context.chart) return null;
     return window.FastFigureApi.graphs.setEditable(current.selectedSlotId, context.chart.id, editable);
   }
@@ -434,7 +440,7 @@ label: option.label,
   function updateSelectedGraphLayout(values) {
     const current = appFSM.readState();
     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
-    const context = window.FastFigureApi.graphs.readData();
+    const context = window.FastFigureApi.graphs.readControls();
     if (!context.chart || context.chart.editor.editable === false) return null;
     return window.FastFigureApi.graphs.updateLayout(current.selectedSlotId, context.chart.id, values);
   }
@@ -562,6 +568,7 @@ collision
 
   function FastFigureToolbar() {
     const state = useAppState();
+    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
     const activeOverlay = state.overlay;
     const buttonProps = (overlay) => ({
 variant: activeOverlay === overlay ? "filled" : "light",
@@ -591,6 +598,7 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
 
   function FastFigureDataActions() {
     const state = useAppState();
+    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
     const busy = state.lifecycle !== "ready";
     const slotApi = window.FastFigureApi.slots;
     const slot = state.workspace === "project" ? null : slotApi.readSelected();
@@ -771,6 +779,7 @@ React.createElement(
 
   function FastFigureImageEditor() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.image" ? window.FastFigureApi.images.readEditor() : null);
     if (state.workspace !== "slot.image") return null;
     const busy = state.lifecycle !== "ready";
     const imageApi = window.FastFigureApi.images;
@@ -870,25 +879,25 @@ command: ["image","y"],
 
   function readProjectAssetDisplay() {
     const assetNodes = window.FastFigureApi.assets.readTree();
-    const slotRows = window.FastFigureApi.layout.readState().visibleSlots;
+    const slotRows = window.FastFigureApi.slots.readDisplay();
     return { assetNodes, slotRows };
   }
 
   function FastFigureProjectDataTree() {
     const state = useAppState();
+    useControlSnapshot(() => [window.FastFigureApi.assets.readTree(), window.FastFigureApi.slots.readDisplay()]);
     const assetApi = window.FastFigureApi.assets;
     const { assetNodes, slotRows } = readProjectAssetDisplay();
     const snapshot = {
       directories: assetNodes.filter(node => node.kind === "directory").map(node => node.path),
       data: assetNodes.filter(node => node.kind === "csv").map(node => ({
-        id: node.id, name: node.name, path: node.path, readable: Array.isArray(node.asset.rows),
-        rowCount: Math.max(0, node.asset.rows.length - (Number(node.asset.headerLines) || 0)),
+        id: node.id, name: node.name, path: node.path, readable: true, rowCount: node.rowCount,
       })),
       images: assetNodes.filter(node => node.kind === "image").map(node => ({
         id: node.id, name: node.name, path: node.path,
       })),
     };
-    const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
+    const selectedSlotId = state.selectedSlotId;
     const assetTreeController = useTree({
 initialExpandedState: { "/assets": true },
     });
@@ -935,11 +944,8 @@ try {
     const trashSelected =
 state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
     const trash = assetApi.readTrash();
-    const trashHasContents = !!trash?.children.length;
-    const countTrashReferences = node => node.kind === "directory"
-? node.children.reduce((count, child) => count + countTrashReferences(child), 0)
-: assetApi.readDeletionTarget(node.path)?.referenceCount ?? 0;
-    const trashReferenceCount = trash ? countTrashReferences(trash) : 0;
+    const trashHasContents = trash ? !trash.empty : false;
+    const trashReferenceCount = trash?.referenceCount ?? 0;
     const openTrashDialog = () => {
 if (!trashSelected || !trashHasContents) return;
 setTrashDialog({ referenceCount: trashReferenceCount });
@@ -987,8 +993,8 @@ try {
   status(`프로젝트 항목 이동 오류: ${error.message}`);
 }
     };
-    const assetReferenceCount = (path) =>
-assetApi.readDeletionTarget(path)?.referenceCount ?? 0;
+    const referenceCounts = new Map(assetNodes.map(node => [node.path, node.referenceCount ?? 0]));
+    const assetReferenceCount = path => referenceCounts.get(path) ?? 0;
     const dataByPath = new Map(
 snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }]),
     );
@@ -1556,6 +1562,7 @@ slotsExpanded
   }
   function FastFigureProjectActions() {
     const state = useAppState();
+    useControlSnapshot(() => window.FastFigureApi.project.readName());
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     const projectApi = window.FastFigureApi.project;
@@ -1628,6 +1635,7 @@ React.createElement(
 
   function FastFigureGraphDataEditor() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readData(), window.FastFigureApi.assets.readList("csv")] : null);
     const busy = state.lifecycle !== "ready";
     const dragRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
@@ -1635,14 +1643,14 @@ React.createElement(
     const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
-    const csvAssets = assetApi.readTree().filter(node => node.kind === "csv").map(node => node.asset);
+    const csvAssets = assetApi.readList("csv");
     const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
     const activeCsv = editor.currentCsv;
-    const columns = editor.columns;
-    const objectColumns = editor.objectColumns || [];
+    const columns = activeCsv ? graphApi.readColumns(activeCsv.id) : [];
+    const objectColumns = selected ? graphApi.readColumns(selected.csvId, chartId) : [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
@@ -1677,7 +1685,7 @@ React.createElement(Select, {
 }),
 activeCsv ? React.createElement(CommandNumberInput, {
 
-  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
+  label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rowCount,
   allowDecimal: false, disabled: busy,
 command: ["csv","headerLines"],
 }) : null,
@@ -1702,7 +1710,7 @@ activeCsv && columns.length
         React.createElement(
           TableTbody,
           null,
-          ...activeCsv.rows.slice(0, 30).map((row, rowIndex) =>
+          ...(assetApi.readPreview(activeCsv.id, 0, 30)?.rows ?? []).map((row, rowIndex) =>
             React.createElement(
               TableTr,
               { key: rowIndex },
@@ -1726,7 +1734,7 @@ React.createElement(Group, { gap: "xs", grow: true },
   React.createElement(Button, {
     variant: editable ? "filled" : "light", disabled: busy || chartId === null,
     onClick: () => {
-      const context = graphApi.readData();
+      const context = graphApi.readControls();
       if (context.chart) return setSelectedGraphEditable(!context.chart.editor.editable);
     },
   }, editable ? "편집 가능" : "원본 JSON"),
@@ -1822,6 +1830,7 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
   }
   function FastFigureGraphLayoutEditor() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? window.FastFigureApi.graphs.readLayout() : null);
     const busy = state.lifecycle !== "ready";
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
@@ -2024,11 +2033,12 @@ React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEdi
   }
   function FastFigureGraphPaletteActions() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readControls(), window.FastFigureApi.graphs.readPalette()] : null);
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readData(), colors = graphApi.readPalette();
+    const editor = graphApi.readControls(), colors = graphApi.readPalette();
     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
     const commitColors = (colors) => graphApi.applyPalette(editor.chart?.id ?? null, colors);
     const resetPalette = () => {
@@ -2524,6 +2534,7 @@ React.createElement(
 
   function FastFigureLabelOverlay() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().overlay === "label" ? window.FastFigureApi.labels.readState() : null);
     const previewRef = useRef(null);
     const dragRef = useRef(null);
     const [, setPreviewRevision] = useState(0);
@@ -2731,6 +2742,11 @@ command: ["label","y"],
   function FastFigureCaptionOverlay() {
     const state = useAppState();
     const [targetMode, setTargetMode] = useState("global");
+    useControlSnapshot(() => {
+      const current = appFSM.readState();
+      return current.overlay === "caption" ? [window.FastFigureApi.captions.readGlobal(),
+        targetMode === "slot" && current.selectedSlotId != null ? window.FastFigureApi.captions.readSlot(current.selectedSlotId) : null] : null;
+    });
     useEffect(() => {
 if (state.overlay !== "caption") setTargetMode("global");
     }, [state.overlay]);
@@ -2874,6 +2890,7 @@ command: ["caption","lineHeight"],
 
   function FastFigurePrintOverlay() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().overlay === "print" ? window.FastFigureApi.print.readSettings() : null);
     const printApi = window.FastFigureApi.print;
     const initial = printApi.readSettings();
     const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
@@ -2982,6 +2999,7 @@ command: ["print","height"],
 
   function FastFigureLayoutOverlay() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().overlay === "layout" ? window.FastFigureApi.layout.readControls() : null);
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
     const previewFrameRef = useRef(null);
@@ -3381,12 +3399,10 @@ React.createElement(FastFigureDashboardFileDrop),
 
   function FastFigureApp() {
     useAppState();
-    const palette = window.FastFigureApi.appearance.readPalette();
-    const theme = createTheme({
-...fastFigureTheme,
-colors: { ffui: Array(10).fill(palette.uiColor) },
-primaryColor: "ffui",
-    });
+    const palette = useControlSnapshot(() => window.FastFigureApi.appearance.readPalette());
+    const paletteKey = JSON.stringify(palette);
+    const theme = useMemo(() => createTheme({ ...fastFigureTheme,
+      colors: { ffui: Array(10).fill(palette.uiColor) }, primaryColor: "ffui" }), [paletteKey]);
     const channels = [1, 3, 5].map((index) => {
 const value = parseInt(palette.uiColor.slice(index, index + 2), 16) / 255;
 return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
@@ -3395,12 +3411,7 @@ return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2] > 0.179
   ? "#000000"
   : "#FFFFFF";
-    return React.createElement(
-MantineProvider,
-{
-  defaultColorScheme: "light",
-  theme,
-  cssVariablesResolver: (theme) => ({
+    const cssVariablesResolver = useMemo(() => (theme) => ({
     variables: {
       "--ff-header-height": `${theme.other.shell.headerHeight}px`,
       "--ff-navbar-width": `${theme.other.shell.navbarWidth}px`,
@@ -3439,7 +3450,13 @@ MantineProvider,
       "--mantine-color-ffui-contrast": "var(--mantine-primary-color-contrast)",
     },
     dark: {},
-  }),
+  }), [paletteKey]);
+    return React.createElement(
+MantineProvider,
+{
+  defaultColorScheme: "light",
+  theme,
+  cssVariablesResolver,
 },
 React.createElement(FastFigureShell),
     );

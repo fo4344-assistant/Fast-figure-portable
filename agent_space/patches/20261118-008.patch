@@ -1,0 +1,1214 @@
+diff --git a/development-versions.json b/development-versions.json
+index c979a4d0ce61a7ef11eb51dba1cc4ed3b9af31e7..a04151860863b3fd7dbd5e5359f0a1a28d5d445c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -64,14 +64,14 @@
+       "translation_review": "agent_space/reviews/review-20261118-009-plan044-source-code.md"
+     },
+     "pseudocode": {
+-      "revision": 33,
++      "revision": 34,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129",
++      "fingerprint": "sha256:a832497cc42a4047f273365ba9b82733cd163425079ef524dbe4938768d7a8ed",
+       "derived_from": {
+-        "source-script": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4"
++        "source-script": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7"
+       },
+-      "translation_review": "agent_space/reviews/review-20261118-008-plan044-pseudocode.md"
++      "translation_review": "agent_space/reviews/review-20261118-011-plan045-pseudocode.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/adapter.pcal b/pseudocode/application/adapter.pcal
+index 48c69eb3300aabbf578be9884c018e4cdbf53fc7..c94c51bac0bafa7b3861197189befaba17bcdd55 100644
+--- a/pseudocode/application/adapter.pcal
++++ b/pseudocode/application/adapter.pcal
+@@ -46,7 +46,7 @@ CurrentScopedRendererInputs:
+     call InterfaceStateMachine_readState(); frontendState := result;
+     if FieldOrNoValue(request,"operation") = NoValue then request.operation := "selected-slot"; end if;
+     if request.operation = "selected-slot" then request.slotId := frontendState.selectedSlotId; end if;
+-    call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
++    call readBackendProjection("project-api",[operation |-> "layout.readControls"]); layout := result;
+     width := layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
+     request.frontendState := frontendState; request.width := width;
+     \* Current reads and final query have no intervening callback/await/command.
+diff --git a/pseudocode/application/public_api/contract.pcal b/pseudocode/application/public_api/contract.pcal
+index 30130b20123ef03e6fc46a88dde49f6c902bef99..74697d0ef884cd2d83fd107b02e4f0f0e3a41f5d 100644
+--- a/pseudocode/application/public_api/contract.pcal
++++ b/pseudocode/application/public_api/contract.pcal
+@@ -27,6 +27,7 @@ PUBLIC_API_METHODS == [
+  "project.importFile" |-> <<"wrapper","importProjectFile">>,
+  "project.exportFile" |-> <<"wrapper","downloadProject">>,
+  "slots.readSelected" |-> <<"selected-query","slots.readSelected">>,
++ "slots.readDisplay" |-> <<"query","slots.readDisplay">>,
+  "slots.select" |-> <<"adapter","dispatchSlotSelection">>,
+  "slots.setContentType" |-> <<"wrapper","setSlotContentType">>,
+  "slots.reset" |-> <<"wrapper","resetSlotApi">>,
+@@ -34,11 +35,14 @@ PUBLIC_API_METHODS == [
+  "slots.prepareFileDrop" |-> <<"wrapper","ApplicationApi_prepareDashboardFileDrop">>,
+  "slots.finishFileDrop" |-> <<"wrapper","finishDashboardFileDrop">>,
+  "images.readEditor" |-> <<"selected-query","images.readEditor">>,
++ "images.readSettings" |-> <<"selected-query","images.readSettings">>,
+  "images.setSettings" |-> <<"wrapper","applyImageSettingsFromValues">>,
+  "images.insertEmpty" |-> <<"wrapper","insertEmptyImageIntoSelectedSlot">>,
+  "assets.readDeletionTarget" |-> <<"query","assets.readDeletionTarget">>,
+  "assets.delete" |-> <<"wrapper","deleteProjectAsset">>,
+  "assets.readTree" |-> <<"query","assets.readTree">>,
++ "assets.readList" |-> <<"query","assets.readList">>,
++ "assets.readPreview" |-> <<"query","assets.readPreview">>,
+  "assets.isTrashed" |-> <<"query","assets.isTrashed">>,
+  "assets.movable" |-> <<"query","assets.movable">>,
+  "assets.readTrash" |-> <<"query","assets.readTrash">>,
+@@ -61,6 +65,8 @@ PUBLIC_API_METHODS == [
+  "assets.selectImage" |-> <<"select-asset","image">>,
+  "assets.download" |-> <<"wrapper","downloadProjectAsset">>,
+  "graphs.readData" |-> <<"selected-query","graphs.readData">>,
++ "graphs.readControls" |-> <<"selected-query","graphs.readControls">>,
++ "graphs.readColumns" |-> <<"query","graphs.readColumns">>,
+  "graphs.readLayout" |-> <<"selected-query","graphs.readLayout">>,
+  "graphs.readPalette" |-> <<"selected-query","graphs.readPalette">>,
+  "graphs.selectCsv" |-> <<"wrapper","selectProjectCsv">>,
+@@ -83,6 +89,7 @@ PUBLIC_API_METHODS == [
+  "print.save" |-> <<"wrapper","exportDashboardTarget">>,
+  "print.capture" |-> <<"wrapper","captureDashboardCurrent">>,
+  "captions.readGlobal" |-> <<"query","captions.readGlobal">>,
++ "captions.readSettings" |-> <<"query","captions.readSettings">>,
+  "captions.readSlot" |-> <<"query","captions.readSlot">>,
+  "captions.setEnabled" |-> <<"wrapper","setCaptionsApiEnabled">>,
+  "captions.setGlobalText" |-> <<"wrapper","setGlobalCaptionText">>,
+@@ -92,6 +99,7 @@ PUBLIC_API_METHODS == [
+  "captions.setNameBold" |-> <<"wrapper","setCaptionsApiNameBold">>,
+  "captions.setSettings" |-> <<"wrapper","setCaptionsApiSettings">>,
+  "labels.readState" |-> <<"wrapper","ApplicationApi_readLabelsApiState">>,
++ "labels.readSettings" |-> <<"selected-query","labels.readSettings">>,
+  "labels.setEnabled" |-> <<"wrapper","setLabelsApiEnabled">>,
+  "labels.setSettings" |-> <<"wrapper","setLabelsApiSettings">>,
+  "labels.setPosition" |-> <<"wrapper","setLabelsApiPosition">>,
+@@ -101,6 +109,7 @@ PUBLIC_API_METHODS == [
+  "appearance.setPalette" |-> <<"wrapper","setAppearanceApiPalette">>,
+  "appearance.resetPalette" |-> <<"wrapper","resetAppearanceApiPalette">>,
+  "layout.readState" |-> <<"wrapper","readLayoutApiState">>,
++ "layout.readControls" |-> <<"wrapper","readLayoutApiControls">>,
+  "layout.setStyle" |-> <<"wrapper","setLayoutApiStyle">>,
+  "layout.setGrid" |-> <<"wrapper","setLayoutApiGrid">>,
+  "layout.setZoom" |-> <<"wrapper","setLayoutApiZoom">>,
+@@ -159,10 +168,10 @@ RouteWithoutReenteringLifecycle:
+   elsif route[1] = "selected-query" then
+     call InterfaceStateMachine_readState(); state := result;
+     request := ExplicitReadArgsWithOperation(args,route[2]);
+-    if method \in {"slots.readSelected","graphs.readData"} then
++    if method \in {"slots.readSelected","graphs.readData","graphs.readControls"} then
+       request.frontendState := CopyOnlySelectedSlotAssetPathAssetKindAndObjectIndex(state);
+     else request.selectedSlotId := state.selectedSlotId; end if;
+-    if method = "images.readEditor" then request.slotId := state.selectedSlotId; end if;
++    if method \in {"images.readEditor","images.readSettings","labels.readSettings"} then request.slotId := state.selectedSlotId; end if;
+     call dispatchProjectQuery("project-api",request);
+   elsif route[1] = "select-asset" then
+     call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> route[2],path |-> args.path]);
+@@ -291,6 +300,8 @@ BindExactSourceInputs:
+     call setAppearanceApiPalette(args.values);
+   elsif method = "appearance.resetPalette" then
+     call resetAppearanceApiPalette();
++  elsif method = "layout.readControls" then
++    call readLayoutApiControls();
+   elsif method = "layout.readState" then
+     call readLayoutApiState(OptionalArg(args,"previewWidth",NoValue));
+   elsif method = "layout.setStyle" then
+diff --git a/pseudocode/application/public_api/graphs.pcal b/pseudocode/application/public_api/graphs.pcal
+index 1e140d89fd0cf8a9f9cfbe900f19bd06eb9aef88..32e5e1731f470be4c76602fc06f72b748df3e140 100644
+--- a/pseudocode/application/public_api/graphs.pcal
++++ b/pseudocode/application/public_api/graphs.pcal
+@@ -16,7 +16,7 @@ ReadForRoutingNotCandidate:
+   event := IF HasOwningChart(slot) THEN "GRAPH_OBJECTS_REPLACED" ELSE "SLOT_DATA_CONNECTED";
+   call dispatchProjectCommand(event,[slotId |-> slotId,csvId |-> csvId,operation |-> "graphs.addObject"]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",frontendState |-> [selectedSlotId |-> slotId]]);
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",frontendState |-> [selectedSlotId |-> slotId]]);
+   result := result.chart;
+   return;
+ end procedure;
+@@ -27,7 +27,7 @@ begin
+ NewValuesNotObjectsProjection:
+   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.setObjectValues",index |-> index,values |-> values]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
+   return;
+ end procedure;
+ 
+@@ -41,7 +41,7 @@ OnlyValidEqualIndexIsNoOp:
+   end if;
+   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.moveObject",from |-> fromIndex,to |-> toIndex]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
+   return;
+ end procedure;
+ 
+@@ -51,7 +51,7 @@ begin
+ BackendCalculatesRemovalAndExplicitNoneHint:
+   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.deleteObject",index |-> index]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
+   \* Last deletion returns empty chart, not a fabricated default object.
+   return;
+ end procedure;
+@@ -62,7 +62,7 @@ begin
+ CsvAndChartShareOneCommand:
+   call dispatchProjectCommand("CHART_MODEL_REPLACED",[slotId |-> slotId,chartId |-> chartId,editable |-> editable]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart.editor.editable;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart.editor.editable;
+   return;
+ end procedure;
+ 
+@@ -72,8 +72,8 @@ begin
+ ScalarEditPreservesCsvIdentityBytesAndRows:
+   call dispatchProjectCommand("DATA_OBJECT_REPLACED",[csvId |-> csvId,headerLines |-> headerLines]); tuple := result; mutation := tuple[1];
+   if ~mutation.committed then result := mutation; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualUpdatedCsvPath(mutation.changed)]);
+-  result := result.target.headerLines;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",csvId |-> csvId]);
++  result := result.currentCsv.headerLines;
+   return;
+ end procedure;
+ 
+@@ -93,7 +93,7 @@ begin
+ ColorOnlyCandidateInBackend:
+   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.applyPalette",colors |-> colors]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
+   return;
+ end procedure;
+ 
+@@ -103,7 +103,7 @@ begin
+ NoApplicationParseOrCandidate:
+   call dispatchProjectCommand("SLOT_CHART_IMPORTED",[slotId |-> slotId,file |-> file]); tuple := result;
+   if ~tuple[1].committed then result := tuple[1]; return; end if;
+-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",frontendState |-> [selectedSlotId |-> slotId]]); result := result.chart;
++  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",frontendState |-> [selectedSlotId |-> slotId]]); result := result.chart;
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index 70b6abbb84c49fb54f2ffe2658dfe583f99da9c2..786b1b9c675bf5595d120b1b42712ca58cf8aa43 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -80,6 +80,16 @@ OnlyCurrentDragBookkeeping:
+   return;
+ end procedure;
+ 
++procedure readLayoutApiControls()
++variables controls = NoValue, session = NoValue;
++begin
++ScalarControlsOnly:
++  call dispatchProjectQuery("project-api",[operation |-> "layout.readControls"]); controls := result;
++  call InterfaceStateMachine_readState(); session := result;
++  result := ImmutableRecordWith(controls,[zoom |-> session.dashboardZoomIntent]);
++  return;
++end procedure;
++
+ procedure readLayoutApiState(previewWidth)
+ variables layout = NoValue, session = NoValue;
+ begin
+@@ -97,7 +107,7 @@ begin
+ SessionOnly:
+   call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM",[value |-> value]);
+   call transformWorkspace();
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+@@ -105,7 +115,7 @@ procedure commitLayoutApiZoom()
+ begin
+ CompletionNotSecondCommit:
+   call InterfaceStateMachine_notify("layout","DASHBOARD_ZOOM_CHANGED",[]);
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+@@ -114,7 +124,7 @@ begin
+ OneResetTransition:
+   call dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM",[]);
+   call transformWorkspace();
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+@@ -124,7 +134,7 @@ begin
+ CurrentStyleCandidateOwnedByCommand:
+   call dispatchProjectCommand("LAYOUT_STYLE_CHANGED",values); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+@@ -134,7 +144,7 @@ begin
+ ResizeCandidateRejectsNonDefaultLoss:
+   call dispatchProjectCommand("GRID_LAYOUT_CHANGED",[rows |-> rows,cols |-> cols]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+@@ -144,7 +154,7 @@ begin
+ BackendRectangleAndSingleNonDefaultPayloadValidation:
+   call dispatchProjectCommand("SLOTS_MERGED",[slotIds |-> slotIds]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+@@ -154,7 +164,7 @@ begin
+ PreserveAnchorPayloadRestoreCoveredDefaults:
+   call dispatchProjectCommand("SLOTS_SPLIT",[slotIds |-> slotIds]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call readLayoutApiState(NoValue);
++  call readLayoutApiControls();
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index 6aa0c47183a0c5a42a405036b9f13bf60a084262..98cba1891360dd5d788ee98afb87795e023975e8 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -21,7 +21,9 @@ PUBLIC_BACKEND_READ_OPERATIONS == {"project.readName","slots.readSelected","imag
+   "assets.isTrashed","assets.movable","assets.draggableAsset","assets.readDeletionTarget",
+   "assets.moveOptions","assets.planMove","assets.resolveTreeSelection","assets.fileKind",
+   "assets.collisionModel","assets.resolveImportPlan","project.exportFile","assets.download",
+-  "graphs.exportFfsx","graphs.exportPlotlyJson"}
++  "graphs.exportFfsx","graphs.exportPlotlyJson","slots.readDisplay","images.readSettings",
++  "graphs.readControls","graphs.readColumns","assets.readList","assets.readPreview",
++  "layout.readControls","captions.readSettings","labels.readSettings"}
+ SequenceSet(seq) == {seq[i] : i \in 1..Len(seq)}
+ VisibleSlot(project, id) ==
+   IF \E s \in SequenceSet(project.slots): s.id = id /\ ~s.hidden
+@@ -586,42 +588,88 @@ end procedure;
+ 
+ procedure BuildGraphEditorRead(source,request)
+ variables state = FieldOrEmptyRecord(request,"frontendState"), slot = NoValue,
+-          chart = NoValue, csv = NoValue, objectCsv = NoValue, currentCsv = NoValue,
+-          objects = <<>>, columns = <<>>, objectColumns = <<>>, selectedIndex = NoValue,
+-          target = NoValue, index = NoValue;
++ chart = NoValue, csv = NoValue, node = NoValue, objects = <<>>, selectedIndex = NoValue,
++ currentCsv = NoValue, chartMeta = NoValue, selected = NoValue, i = 1;
+ begin
+-ExplicitPostCommitChartOrSelectedSlot:
+-  if HasField(request,"chartId") then
+-    call resolveOwningSlot(request.chartId,source); slot := result;
++CurrentIdentityBeforeFieldConstruction:
++  if HasField(request,"chartId") then call resolveOwningSlot(request.chartId,source); slot := result;
+   else slot := VisibleSlot(source,FieldOrNoValue(state,"selectedSlotId")); end if;
+-  if slot # NoValue then chart := ChartById(source,slot.content.chart); end if;
+-  if chart # NoValue then objects := DeepCopy(chart.editor.objects); end if;
+-IndependentCurrentCsvOnlyFromAssetSelection:
+-  if FieldOrNoValue(state,"assetSelection") = "csv" then
+-    call projectVfsResolve(FieldOrNoValue(state,"assetPath"),source); target := result;
+-    if target # NoValue then
+-      if target.kind = "csv" then csv := CsvById(source,target.id); end if;
+-    end if;
++  if slot # NoValue then
++    if slot.hidden then slot := NoValue;
++    else chart := ChartById(source,slot.content.chart); end if;
+   end if;
+-  if csv # NoValue then
+-    currentCsv := DeepCopy(csv);
+-    call columnDefinitions(csv.rows,csv.headerLines); columns := result;
++  if FieldOrNoValue(request,"csvId") # NoValue then csv := CsvById(source,request.csvId);
++  elsif FieldOrNoValue(state,"assetSelection") = "csv" then
++    call projectVfsResolve(FieldOrNoValue(state,"assetPath"),source); node := result;
++    if node # NoValue /\ node.kind = "csv" then csv := CsvById(source,node.id); end if;
+   end if;
+-ObjectColumnsNotCsvSelectionReplacement:
+-  index := FieldOrNoValue(state,"graphObjectIndex");
++  if csv # NoValue then currentCsv := [id |-> csv.id,path |-> CanonicalAssetPath(csv),
++    name |-> csv.name,headerLines |-> csv.headerLines,rowCount |-> Len(csv.rows)]; end if;
+   if chart # NoValue then
+-    if chart.editor.editable # FALSE /\ ValidIndex(index,objects) then
+-      selectedIndex := index;
+-      objectCsv := CsvById(source,objects[index + 1].csvId);
+-      if objectCsv # NoValue then call columnDefinitions(objectCsv.rows,objectCsv.headerLines); objectColumns := result; end if;
++    chartMeta := [id |-> chart.id,editor |-> [title |-> chart.editor.title,editable |-> chart.editor.editable]];
++    if chart.editor.editable /\ ValidIndex(FieldOrNoValue(state,"graphObjectIndex"),chart.editor.objects) then
++      selectedIndex := state.graphObjectIndex;
++      selected := SelectFields(chart.editor.objects[selectedIndex+1],
++        <<"csvId","x","y","xAxisSide","yAxisSide","type","color","legendName","lineWidth",
++          "lineDash","markerSymbol","markerSize","barOpacity","barLineWidth">>);
+     end if;
+   end if;
+-GraphEditorReadReturn:
+-  result := [chart |-> DeepCopy(chart),objects |-> objects,selectedIndex |-> selectedIndex,
+-             currentCsv |-> currentCsv,columns |-> columns,objectColumns |-> objectColumns];
++OnlyRequestedEditorFields:
++  if request.operation = "graphs.readControls" then
++    result := [slotId |-> IF slot = NoValue THEN NoValue ELSE slot.id,
++      chartId |-> IF chart = NoValue THEN NoValue ELSE chart.id,
++      title |-> IF chart = NoValue THEN "" ELSE chart.editor.title,
++      editable |-> IF chart = NoValue THEN FALSE ELSE chart.editor.editable,
++      chart |-> chartMeta,selectedIndex |-> selectedIndex,object |-> selected,currentCsv |-> currentCsv];
++    return;
++  end if;
++  if chart # NoValue then
++    while i <= Len(chart.editor.objects) do
++      objects := Append(objects,SelectFields(chart.editor.objects[i],
++        <<"csvId","x","y","xAxisSide","yAxisSide","type","color","legendName","lineWidth",
++          "lineDash","markerSymbol","markerSize","barOpacity","barLineWidth">>));
++      i := i+1;
++    end while;
++  end if;
++  result := [chart |-> chartMeta,objects |-> objects,selectedIndex |-> selectedIndex,currentCsv |-> currentCsv];
++  return;
++end procedure;
++
++procedure ReadExplicitColumns(source,request)
++variables csv = NoValue, chart = NoValue, rows = <<>>, header = 0;
++begin
++ExplicitTableOnly:
++  if FieldOrNoValue(request,"csvId") # NoValue then
++    csv := CsvById(source,request.csvId);
++    if csv = NoValue then result := <<>>; return; end if;
++    rows := csv.rows; header := csv.headerLines;
++  else
++    chart := ChartById(source,FieldOrNoValue(request,"chartId"));
++    if chart = NoValue then result := <<>>; return; end if;
++    if chart.editor.editable then result := <<>>; return; end if;
++    if ~HasField(chart.editor,"conversionRows") then result := <<>>; return; end if;
++    rows := chart.editor.conversionRows;
++  end if;
++  call columnDefinitions(rows,header);
++  return;
++end procedure;
++
++procedure ReadBoundedPreview(source,request)
++variables csv = CsvById(source,request.csvId), start = IF HasField(request,"start") THEN request.start ELSE 0,
++ count = IF HasField(request,"count") THEN request.count ELSE 30, rows = <<>>, i = 1;
++begin
++ValidateBeforeCopy:
++  Require(IsInteger(start) /\ start >= 0 /\ IsInteger(count) /\ count >= 1 /\ count <= 30);
++  if csv = NoValue then result := NoValue; return; end if;
++  i := start+1;
++  while i <= Len(csv.rows) /\ i <= start+count do
++    rows := Append(rows,DeepCopy(csv.rows[i])); i := i+1;
++  end while;
++  result := [csvId |-> csv.id,headerLines |-> csv.headerLines,rowCount |-> Len(csv.rows),start |-> start,rows |-> rows];
+   return;
+ end procedure;
+ 
++
+ procedure BuildImageEditorRead(source,slotId)
+ variables slot = VisibleSlot(source,slotId), image = NoValue, bytes = NoValue, settings = NoValue;
+ begin
+@@ -675,22 +723,62 @@ SameCurrentProjectWithoutMutationOrResource:
+   return;
+ end procedure;
+ 
++procedure AssetMetadata(asset,kind,counts)
++variables node = [kind |-> kind,id |-> asset.id,path |-> CanonicalAssetPath(asset),name |-> asset.name], key = <<kind,asset.id>>;
++begin
++OnlyMetadataBeforeDetach:
++  node.referenceCount := IF HasField(counts,key) THEN counts[key] ELSE 0;
++  if kind = "csv" then
++    node.headerLines := asset.headerLines;
++    node.rowCount := Maximum(0,Len(asset.rows)-asset.headerLines);
++  end if;
++  result := node; return;
++end procedure;
++
+ procedure BuildVfsRead(source,operation,request)
+ variables path = "", node = NoValue, tree = <<>>, refs = <<>>, target = NoValue,
+-          csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "";
++ csvIds = {}, imageIds = {}, options = <<>>, i = 1, directory = "", item = NoValue,
++ directories = source.fileSystem.directories, csvs = source.assets.csvFiles, images = source.assets.images,
++ onlyTrash = operation = "assets.readTrash", counts = [], key = NoValue, owner = NoValue;
+ begin
+-TreeFromExistingDirectoriesAndAssetLocations:
++MetadataLists:
++  if operation = "assets.readList" then
++    Require(request.kind \in {"csv","image"});
++    if request.kind = "csv" then csvs := source.assets.csvFiles; else csvs := source.assets.images; end if;
++    while i <= Len(csvs) do
++      item := csvs[i]; options := Append(options,[id |-> item.id,path |-> CanonicalAssetPath(item),name |-> item.name]);
++      i := i+1;
++    end while;
++    result := options; return;
++  end if;
++TreeScopeBeforeConstruction:
+   if operation \in {"assets.readTree","assets.readTrash"} then
+-    tree := DetachedDirectoryNodesInExistingOrder(source.fileSystem.directories);
+-    while i <= Len(source.assets.csvFiles) do
+-      AppendDetachedAssetTreeNode(tree,"csv",source.assets.csvFiles[i]); i := i + 1;
++    if onlyTrash then
++      directories := SelectSeq(directories,LAMBDA d : SegmentDescendantOrSame(CanonicalDirectoryPath(d),BackendSettings.defaults.vfs.trash));
++      csvs := SelectSeq(csvs,LAMBDA a : SegmentDescendantOrSame(CanonicalAssetPath(a),BackendSettings.defaults.vfs.trash));
++      images := SelectSeq(images,LAMBDA a : SegmentDescendantOrSame(CanonicalAssetPath(a),BackendSettings.defaults.vfs.trash));
++    end if;
++    csvIds := SetOfField(csvs,"id"); imageIds := SetOfField(images,"id");
++    call collectAssetReferences(csvIds,imageIds,source); refs := result;
++    while i <= Len(refs) do
++      key := <<refs[i].kind,refs[i].assetId>>;
++      counts[key] := (IF HasField(counts,key) THEN counts[key] ELSE 0)+1; i := i+1;
+     end while;
+     i := 1;
+-    while i <= Len(source.assets.images) do
+-      AppendDetachedAssetTreeNode(tree,"image",source.assets.images[i]); i := i + 1;
++    tree := DetachedDirectoryNodesInExistingOrder(directories);
++    while i <= Len(csvs) do
++      call AssetMetadata(csvs[i],"csv",counts);
++      AppendDetachedMetadataTreeNode(tree,result); i := i+1;
++    end while;
++    i := 1;
++    while i <= Len(images) do
++      call AssetMetadata(images[i],"image",counts);
++      AppendDetachedMetadataTreeNode(tree,result); i := i+1;
+     end while;
+     AttachNodesByCanonicalParentPath(tree);
+-    if operation = "assets.readTrash" then result := TreeAtExactPath(tree,BackendSettings.defaults.vfs.trash);
++    if onlyTrash then
++      node := TreeAtExactPath(tree,BackendSettings.defaults.vfs.trash);
++      result := [root |-> node,empty |-> NoAssetOrChildDirectoryUnderRoot(node),referenceCount |-> Len(refs)];
+     else result := tree; end if;
+     return;
+   end if;
+@@ -710,11 +798,19 @@ CanonicalPathAndCurrentNode:
+   elsif operation = "assets.readDeletionTarget" then
+     if node = NoValue then result := NoValue; return; end if;
+     if node.kind \notin {"csv","image"} then result := NoValue; return; end if;
+-    if node.kind = "csv" then csvIds := {node.id}; target := CsvById(source,node.id);
+-    else imageIds := {node.id}; target := ImageById(source,node.id); end if;
++    if node.kind = "csv" then csvIds := {node.id}; else imageIds := {node.id}; end if;
+     call collectAssetReferences(csvIds,imageIds,source); refs := result;
+-    result := [target |-> DeepCopy(target),kind |-> node.kind,path |-> node.canonicalPath,
+-               referenceCount |-> Len(refs),references |-> DeepCopy(refs)]; return;
++    i := 1; options := <<>>;
++    while i <= Len(refs) do
++      if refs[i].kind = "csv" then
++        call resolveOwningSlot(refs[i].chartId,source); owner := result;
++        options := Append(options,[kind |-> "csv",slotId |-> IF owner = NoValue THEN NoValue ELSE owner.id,
++          chartId |-> refs[i].chartId,objectIndex |-> refs[i].originalObjectIndex]);
++      else options := Append(options,[kind |-> "image",slotId |-> refs[i].slotId,chartId |-> NoValue,objectIndex |-> NoValue]); end if;
++      i := i+1;
++    end while;
++    target := [kind |-> node.kind,id |-> node.id,path |-> node.canonicalPath,name |-> node.name];
++    result := [target |-> target,kind |-> node.kind,path |-> node.canonicalPath,referenceCount |-> Len(refs),references |-> options]; return;
+   elsif operation = "assets.moveOptions" then
+     if node = NoValue then result := options; return; end if;
+     if IsFixedDirectoryPath(path,BackendSettings.defaults.vfs) then result := options; return; end if;
+@@ -722,12 +818,13 @@ CanonicalPathAndCurrentNode:
+       directory := CanonicalDirectoryPath(source.fileSystem.directories[i]);
+       if node.kind # "directory" then options := Append(options,DeepCopy(source.fileSystem.directories[i]));
+       elsif ~SegmentDescendantOrSame(directory,path) then options := Append(options,DeepCopy(source.fileSystem.directories[i])); end if;
+-      i := i + 1;
++      i := i+1;
+     end while;
+     result := options; return;
+   else FailQuery("unregistered VFS query"); end if;
+ end procedure;
+ 
++
+ procedure BuildSlotContentRead(source,sourceSlot)
+ variables slot = DeepCopy(sourceSlot), chart = NoValue, csv = NoValue, j = 1, columns = <<>>;
+ begin
+@@ -805,15 +902,45 @@ PublicReadRegisteredOperation:
+   end if;
+   if operation = "project.readName" then output := source.meta.projectName;
+   elsif operation = "slots.readSelected" then output := SelectedSlotIdentityGeometryContentCopy(source,request.frontendState.selectedSlotId);
++  elsif operation = "slots.readDisplay" then
++    output := <<>>; i := 1;
++    while i <= Len(source.slots) do
++      slot := source.slots[i];
++      if ~slot.hidden then
++        call buildSlotAssetDisplay(slot,source);
++        output := Append(output,[id |-> slot.id,row |-> slot.row,col |-> slot.col,
++          rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan,contentType |-> slot.content.contentType,
++          chartId |-> slot.content.chart,imageId |-> slot.content.imageId,assetDisplay |-> result]);
++      end if;
++      i := i+1;
++    end while;
++  elsif operation = "images.readSettings" then
++    slot := VisibleSlot(source,request.slotId); output := NoValue;
++    if slot # NoValue then
++      if slot.content.contentType = "image" then
++        image := ImageById(source,slot.content.imageId);
++        output := [slotId |-> slot.id,imageId |-> slot.content.imageId,
++          name |-> IF image = NoValue THEN "" ELSE image.name,settings |-> slot.content.imageSettings];
++      end if;
++    end if;
+   elsif operation = "images.readEditor" then call BuildImageEditorRead(source,request.slotId); output := result;
+   elsif operation = "print.readSettings" then output := DeepCopy(source.export);
+   elsif operation = "appearance.readPalette" then output := DeepCopy(source.appearance.uiPalette);
+   elsif operation = "graphs.defaultColors" then output := DeepCopy(BackendSettings.defaults.graphColors);
+   elsif operation = "graphs.hasSelectedSlot" then output := IsVisibleGraphSlot(source,request.selectedSlotId);
+-  elsif operation = "graphs.readData" then
++  elsif operation \in {"graphs.readData","graphs.readControls"} then
+     call BuildGraphEditorRead(source,request); output := result;
+-    \* Selected object CSV supplies objectColumns only, NEVER replaces currentCsv.
+-    \* Imported conversion chart has no editable selectedIndex/objectColumns.
++  elsif operation = "graphs.readColumns" then call ReadExplicitColumns(source,request); output := result;
++  elsif operation = "assets.readPreview" then call ReadBoundedPreview(source,request); output := result;
++  elsif operation = "layout.readControls" then
++    output := [gridRows |-> source.layout.gridRows,gridCols |-> source.layout.gridCols,
++      gridLimits |-> [gridRows |-> BackendSettings.defaults.limits.layout.gridRows,
++                     gridCols |-> BackendSettings.defaults.limits.layout.gridCols],slotStyle |-> source.layout.slotStyle];
++  elsif operation = "captions.readSettings" then
++    output := [enabled |-> source.annotations.captions.enabled,settings |-> source.annotations.captions.settings];
++  elsif operation = "labels.readSettings" then
++    output := [enabled |-> source.annotations.labels.enabled,settings |-> source.annotations.labels.settings,
++      slotId |-> request.slotId];
+   elsif operation \in {"graphs.readLayout","graphs.readPalette"} then
+     slot := VisibleSlot(source,request.selectedSlotId); chart := ChartOfSlotOrNone(source,slot);
+     output := IF operation = "graphs.readLayout" THEN ChartTitleGlobalAxesCopyOrNone(chart) ELSE ObjectColorsCopyOrEmpty(chart);
+@@ -906,6 +1033,8 @@ ExportRead:
+   else FailQuery("unknown export operation"); end if;
+ ImmutableReturn:
+   result := ImmutableCopy(output);
++  \* Copy once, then traverse detached objects with one call-local identity visit set.
++  \* Each shared child is marked read-only once; the authoritative source is untouched.
+   \* Recursively detached: no callbacks/DOM/mutable handles, allocation/revocable URLs,
+   \* query-time authority normalization, saved frontend state or cross-task read store.
+   return;
+diff --git a/pseudocode/frontend/mantine_ui.pcal b/pseudocode/frontend/mantine_ui.pcal
+index 5e87e374fa2826780370db968bc469f4e267aead..6595ed3fffb0d181d0d479876aa53c7a77dbf748 100644
+--- a/pseudocode/frontend/mantine_ui.pcal
++++ b/pseudocode/frontend/mantine_ui.pcal
+@@ -44,57 +44,46 @@ variables result = NoValue,
+   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
+ 
+ procedure readProjectAssetDisplay()
+-variables nodes = NoValue, layout = NoValue;
++variables nodes = NoValue, slots = NoValue;
+ begin
+-OfficialReadsInOneSynchronousDisplay:
++OneMetadataReadPerPurpose:
+   nodes := InvokePublicApi("assets.readTree",[]);
+-  layout := InvokePublicApi("layout.readState",[]);
+-  result := [nodes |-> nodes,slotRows |-> layout.visibleSlots];
+-  \* No await/callback/command between reads, retained mirror or flat public tree contract.
+-  \* Canonical node kind/asset supplies directory and CSV/image UI candidates.
+-  \* Slot rows consume Backend assetDisplay, including empty and embedded rows.
+-  return;
++  slots := InvokePublicApi("slots.readDisplay",[]);
++  result := [nodes |-> nodes,slotRows |-> slots]; return;
+ end procedure;
+ 
+ procedure readAssetRowDisplay(node)
+-variables target = NoValue, rows = NoValue, header = NoValue;
+ begin
+-OfficialReferenceCountNotSlotDisplayDeduplication:
+-  target := InvokePublicApi("assets.readDeletionTarget",[path |-> node.path]);
+-  if node.kind = "csv" then
+-    header := TryScalarNumber(FieldOrNoValue(node.asset,"headerLines"));
+-    rows := Maximum(0,Len(node.asset.rows) - (IF header.valid THEN header.value ELSE 0));
+-  end if;
+-  result := [referenceCount |-> IF target = NoValue THEN 0 ELSE target.referenceCount,rowCount |-> rows];
+-  \* Display arithmetic only. No new parser, collection ownership or mutation.
++AlreadySuppliedMetadata:
++  result := [referenceCount |-> node.referenceCount,rowCount |-> IF node.kind = "csv" THEN node.rowCount ELSE NoValue];
+   return;
+ end procedure;
+ 
+ \* UiCommand instances are component-owned references. Callback invocation/await
+ \* captures {threw,failure,value}; it calls once synchronously before awaiting.
+ \* BoundProcedure captures only declared arguments; it is function binding.
+-procedure UiCommand_create(readTarget,readValue,prepare,invoke,stepSize)
++procedure UiCommand_create(readCurrent,prepare,invoke,stepSize)
+ variables command = NoValue;
+ begin
+ CreateOwnedControl:
+-  command := NewUiCommandInstance();
+-  command.readTarget := readTarget; command.readValue := readValue;
++  command := NewUiCommandInstance(); command.readCurrent := readCurrent;
+   command.prepare := prepare; command.invoke := invoke; command.stepSize := stepSize;
+   command.text := ""; command.editTarget := NoValue;
+-  command.editing := FALSE; command.composing := FALSE;
+-  command.running := FALSE; command.active := TRUE;
++  command.editing := FALSE; command.composing := FALSE; command.running := FALSE; command.active := TRUE;
+   result := command; return;
+ end procedure;
+ 
+ procedure UiCommand_input(command,text,composing)
+-variables target = NoValue;
++variables current = NoValue;
+ begin
+ RetainLexicalInput:
+   if ~command.active \/ command.running then result := command.text; return; end if;
+-  target := InvokeCallback(command.readTarget,<<>>);
+-  if target = NoValue then call UiCommand_cancel(command); result := command.text; return; end if;
+-  if command.editing /\ command.editTarget # target then call UiCommand_cancel(command); end if;
+-  if ~command.editing then command.editTarget := target; command.editing := TRUE; end if;
++  current := InvokeCallback(command.readCurrent,<<>>);
++  if current.target = NoValue then call UiCommand_cancel(command); result := command.text; return; end if;
++  if command.editing /\ command.editTarget # current.target then
++    command.editing := FALSE; command.composing := FALSE; command.editTarget := NoValue;
++  end if;
++  command.editTarget := current.target; command.editing := TRUE;
+   command.text := text; command.composing := composing;
+   PreserveWidgetCursorSelectionAndRawText(command,text);
+   result := command.text; return;
+@@ -103,120 +92,105 @@ end procedure;
+ procedure UiCommand_refresh(command,target)
+ variables current = NoValue;
+ begin
+-RefreshOnlySameLiveTarget:
+-  if command.active /\ command.readValue # NoValue
+-     /\ InvokeCallback(command.readTarget,<<>>) = target then
+-    current := InvokeCallback(command.readValue,<<target>>);
+-    command.text := DisplayTextForOfficialValue(current);
+-    DisplayOfficialControlValue(command,current);
++RefreshSameActiveTarget:
++  if command.active /\ ~command.editing then
++    current := InvokeCallback(command.readCurrent,<<>>);
++    if current.target = target /\ command.prepare # NoValue then
++      command.text := DisplayTextForOfficialValue(current.value);
++      DisplayOfficialControlValue(command,current.value);
++    end if;
+   end if;
+   result := current; return;
+ end procedure;
+ 
+ procedure UiCommand_cancel(command)
+-variables target = NoValue, current = "";
++variables current = NoValue;
+ begin
+ CancelPendingEdit:
+-  command.editing := FALSE; command.composing := FALSE;
+-  command.editTarget := NoValue; command.text := "";
++  command.editing := FALSE; command.composing := FALSE; command.editTarget := NoValue; command.text := "";
+   if command.active then
+-    target := InvokeCallback(command.readTarget,<<>>);
+-    if target # NoValue /\ command.readValue # NoValue then
+-      current := InvokeCallback(command.readValue,<<target>>);
+-    end if;
+-    command.text := DisplayTextForOfficialValue(current);
+-    if command.readValue # NoValue then DisplayOfficialControlValue(command,current); end if;
++    current := InvokeCallback(command.readCurrent,<<>>);
++    command.text := DisplayTextForOfficialValue(current.value);
++    if command.prepare # NoValue then DisplayOfficialControlValue(command,current.value); end if;
+   end if;
+-  \* In-flight invocation and its running flag are settled by that invocation.
+-  result := current; return;
++  result := command.text; return;
+ end procedure;
+ 
+-procedure UiCommand_send(command,value,target)
+-variables state = NoValue, currentTarget = NoValue, completion = NoValue, refresh = NoValue;
++procedure UiCommand_sendCurrent(command,value,target,current)
++variables completion = NoValue, refresh = NoValue;
+ begin
+-CurrentReadyTarget:
+-  if ~command.active \/ command.running then result := NoValue; return; end if;
+-  call ApplicationInterface_readState(); state := result;
+-  if state.lifecycle # "ready" then result := NoValue; return; end if;
+-  currentTarget := InvokeCallback(command.readTarget,<<>>);
+-  if currentTarget = NoValue \/ (target # NoValue /\ currentTarget # target) then
++OneJudgmentCurrent:
++  if ~command.active \/ command.running \/ ~current.ready \/ current.target = NoValue \/ current.target # target then
+     result := NoValue; return;
+   end if;
+-  if command.readValue # NoValue then
+-    if InvokeCallback(command.readValue,<<currentTarget>>) = value then
+-      call UiCommand_refresh(command,currentTarget); result := NoValue; return;
+-    end if;
++  if command.prepare # NoValue /\ current.value = value then
++    command.text := DisplayTextForOfficialValue(current.value);
++    DisplayOfficialControlValue(command,current.value); result := NoValue; return;
+   end if;
+ OneInvocationAndEveryExitCleanup:
+   command.running := TRUE;
+-  completion := InvokeAndAwaitCallbackOnceCaptured(command.invoke,<<currentTarget,value>>);
++  completion := InvokeAndAwaitCallbackOnceCaptured(command.invoke,<<value,target,current.companions>>);
+   command.running := FALSE;
+-  \* Invocation enters the existing API synchronously; its lifecycle remains API-owned.
+-  refresh := CaptureOriginalFailureOfProcedure(UiCommand_refresh,<<command,currentTarget>>);
++  refresh := CaptureOriginalFailureOfProcedure(UiCommand_refresh,<<command,target>>);
+   if completion.threw then PropagateOriginalFailure(completion.failure); end if;
+   if refresh.threw then PropagateOriginalFailure(refresh.failure); end if;
+   result := completion.value; return;
+ end procedure;
+ 
++procedure UiCommand_send(command,value,target)
++variables current = NoValue;
++begin
++OneCurrentRead:
++  if ~command.active \/ command.running then result := NoValue; return; end if;
++  current := InvokeCallback(command.readCurrent,<<>>);
++  if target = NoValue then target := current.target; end if;
++  call UiCommand_sendCurrent(command,value,target,current); return;
++end procedure;
++
+ procedure UiCommand_commit(command)
+-variables state = NoValue, target = NoValue, current = NoValue, prepared = NoValue;
++variables current = NoValue, prepared = NoValue;
+ begin
+ OneCompletedEdit:
+-  if ~command.active \/ ~command.editing \/ command.running \/ command.composing then
+-    result := NoValue; return;
+-  end if;
+-  call ApplicationInterface_readState(); state := result;
+-  target := command.editTarget;
+-  if state.lifecycle # "ready" \/ target = NoValue
+-     \/ InvokeCallback(command.readTarget,<<>>) # target then
++  if ~command.active \/ ~command.editing \/ command.running \/ command.composing then result := NoValue; return; end if;
++  current := InvokeCallback(command.readCurrent,<<>>);
++  if current.target = NoValue \/ current.target # command.editTarget then
+     call UiCommand_cancel(command); result := NoValue; return;
+   end if;
+-  current := InvokeCallback(command.readValue,<<target>>);
+-  prepared := InvokeCallback(command.prepare,<<command.text,current>>);
+-  if ~prepared[1] then
+-    call UiCommand_cancel(command); ShowInvalidNumericInputNotice(command);
+-    result := NoValue; return;
+-  end if;
++  prepared := InvokeCallback(command.prepare,<<command.text,current.value>>);
++  if ~prepared[1] then call UiCommand_cancel(command); result := NoValue; return; end if;
+   command.editing := FALSE; command.composing := FALSE;
+-  \* Enter clears editing before send; subsequent blur cannot send this edit again.
+-  call UiCommand_send(command,prepared[2],target);
+-  \* Same-target official refresh is performed by send; retain the API result/failure.
+-  ReportRequestedAndAppliedValueWhenCorrected(command,target,prepared[2]);
++  call UiCommand_sendCurrent(command,prepared[2],command.editTarget,current);
+   return;
+ end procedure;
+ 
+ procedure UiCommand_step(command,direction)
+-variables target = NoValue, current = NoValue, parsed = NoValue, value = NoValue;
+-begin
+-OneWidgetIncrement:
+-  if ~command.active \/ command.running \/ command.composing \/ command.stepSize = NoValue then
+-    result := NoValue; return;
+-  end if;
+-  target := InvokeCallback(command.readTarget,<<>>);
+-  if target = NoValue then call UiCommand_cancel(command); result := NoValue; return; end if;
+-  if command.editing /\ command.editTarget # target then call UiCommand_cancel(command); end if;
+-  current := InvokeCallback(command.readValue,<<target>>);
++variables current = NoValue, parsed = NoValue, value = NoValue;
++begin
++OneStepCurrent:
++  if ~command.active \/ command.running \/ command.composing \/ command.stepSize = NoValue then result := NoValue; return; end if;
++  current := InvokeCallback(command.readCurrent,<<>>);
++  if current.target = NoValue then call UiCommand_cancel(command); result := NoValue; return; end if;
++  if command.editing /\ command.editTarget # current.target then command.editing := FALSE; command.composing := FALSE; end if;
++  value := current.value;
+   if command.editing then
+-    call prepareNumericInput(command.text,current,FALSE,NoValue); parsed := result;
+-    if parsed[1] then current := parsed[2]; end if;
++    call prepareNumericInput(command.text,current.value,FALSE,NoValue); parsed := result;
++    if parsed[1] then value := parsed[2]; end if;
+   end if;
+-  if ~IsFiniteNumber(current) then current := 0; end if;
+-  value := IF direction = "increase" THEN current + command.stepSize ELSE current - command.stepSize;
+-  call UiCommand_input(command,CompleteDecimalText(value),FALSE);
+-  call UiCommand_commit(command);
+-  \* Widget onChange is suppressed for this same step; each real repeat is a new step.
+-  return;
++  if ~IsFiniteNumber(value) then value := 0; end if;
++  value := IF direction = "increase" THEN value+command.stepSize ELSE value-command.stepSize;
++  command.text := CompleteDecimalText(value); command.editTarget := current.target;
++  command.editing := FALSE; command.composing := FALSE;
++  call UiCommand_sendCurrent(command,value,current.target,current); return;
+ end procedure;
+ 
+ procedure UiCommand_dispose(command)
+ begin
+-EndThisControlLifetime:
+-  call UiCommand_cancel(command);
+-  command.active := FALSE;
+-  RemoveOnlyThisControlEventsAndSubscriptions(command);
+-  result := NoValue; return;
++EndControlLifetime:
++  call UiCommand_cancel(command); command.active := FALSE;
++  RemoveOnlyThisControlEventsAndSubscriptions(command); result := NoValue; return;
+ end procedure;
+ 
++
+ procedure prepareNumericInput(text,current,allowEmpty,emptyValue)
+ variables trimmed = TrimWhitespace(text), value = NoValue;
+ begin
+@@ -235,12 +209,12 @@ EmptyAndCompleteDecimal:
+   return;
+ end procedure;
+ 
+-procedure changeLayoutGridDimension(dimension,value)
+-variables current = NoValue, rows = NoValue, cols = NoValue, range = NoValue;
++procedure changeLayoutGridDimension(dimension,value,companion)
++variables current = companion, rows = NoValue, cols = NoValue, range = NoValue;
+ begin
+ ConfirmedFiniteValueAndCurrentCompanion:
+   Require(dimension \in {"rows","cols"} /\ IsFiniteNumber(value));
+-  current := InvokePublicApi("layout.readState",[]);
++  if current = NoValue then current := InvokePublicApi("layout.readControls",[]); end if;
+   rows := current.gridRows; cols := current.gridCols;
+   range := IF dimension = "rows" THEN current.gridLimits.gridRows ELSE current.gridLimits.gridCols;
+   value := Maximum(range[1],Minimum(range[2],value));
+@@ -280,13 +254,35 @@ CurrentRevisionNumber:
+   return;
+ end procedure;
+ 
++procedure ReadControlKey(readCurrent)
++variables current = NoValue;
++begin
++PurposePrimitiveSnapshot:
++  current := InvokeCallback(readCurrent,<<>>);
++  result := StablePrimitiveKey(current.target,current.value,current.companions,current.ready); return;
++end procedure;
++
++procedure useControlSnapshot(readCurrent)
++begin
++SpecificValueSubscription:
++  ReactUseSyncExternalStore(subscribeAppState,BoundProcedure(ReadControlKey,<<readCurrent>>));
++  result := InvokeCallback(readCurrent,<<>>); return;
++end procedure;
++
++procedure FrontendStructureKey()
++variables state = NoValue;
++begin
++StructureFieldsOnly:
++  call ApplicationInterface_readState(); state := result;
++  result := StablePrimitiveKey(state.lifecycle,state.workspace,state.overlay,state.selectedSlotId,
++    state.assetSelection,state.assetPath,state.graphObjectIndex); return;
++end procedure;
++
+ procedure useAppState()
+ begin
+-RevisionSubscriptionAndFreshRenderRead:
+-  \* React hook plumbing receives these defined procedure references.
+-  ReactUseSyncExternalStore(subscribeAppState,getAppStateSnapshot);
+-  call ApplicationInterface_readState();
+-  return;
++StructureSubscription:
++  ReactUseSyncExternalStore(subscribeAppState,FrontendStructureKey);
++  call ApplicationInterface_readState(); return;
+ end procedure;
+ 
+ procedure addSelectedGraphObject()
+@@ -296,7 +292,7 @@ CurrentReadySlotAndCsv:
+   call ApplicationInterface_readState(); state := result;
+   slotId := state.selectedSlotId;
+   if state.lifecycle # "ready" \/ slotId = NoValue then result := NoValue; return; end if;
+-  context := InvokePublicApi("graphs.readData",[]);
++  context := InvokePublicApi("graphs.readControls",[]);
+   if context.currentCsv = NoValue then result := NoValue; return; end if;
+   if context.chart # NoValue then
+     if context.chart.editor.editable = FALSE then result := NoValue; return; end if;
+@@ -325,7 +321,7 @@ CurrentSlotAndOwningChart:
+   call ApplicationInterface_readState(); state := result;
+   slotId := state.selectedSlotId;
+   if slotId = NoValue then result := NoValue; return; end if;
+-  context := InvokePublicApi("graphs.readData",[]);
++  context := InvokePublicApi("graphs.readControls",[]);
+   if context.chart = NoValue then result := NoValue; return; end if;
+   result := InvokePublicApi("graphs.setEditable",[slotId |-> slotId,chartId |-> context.chart.id,editable |-> editable]);
+   return;
+@@ -338,7 +334,7 @@ CurrentReadySlotAndLayoutInput:
+   call ApplicationInterface_readState(); state := result;
+   slotId := state.selectedSlotId;
+   if state.lifecycle # "ready" \/ slotId = NoValue then result := NoValue; return; end if;
+-  context := InvokePublicApi("graphs.readData",[]);
++  context := InvokePublicApi("graphs.readControls",[]);
+   if context.chart = NoValue then result := NoValue; return; end if;
+   result := InvokePublicApi("graphs.updateLayout",[slotId |-> slotId,chartId |-> context.chart.id,values |-> values]);
+   return;
+@@ -426,23 +422,23 @@ end procedure;
+ 
+ \* Component-local expansions of Source FastFigureApp 14-16.
+ procedure ReadNumericControl(group,field,axis)
+-variables state = NoValue, view = NoValue, target = NoValue, value = NoValue;
++variables state = NoValue, view = NoValue, target = NoValue, value = NoValue, companions = [];
+ begin
+ ReadOfficialCurrentField:
+   call ApplicationInterface_readState(); state := result;
+   if group = "image" then
+-    view := InvokePublicApi("images.readEditor",[]);
++    view := InvokePublicApi("images.readSettings",[]);
+     if state.selectedSlotId # NoValue /\ view # NoValue then
+       target := <<group,state.selectedSlotId,view.imageId,field>>; value := view.settings[field];
+     end if;
+   elsif group \in {"csv","object"} then
+-    view := InvokePublicApi("graphs.readData",[]);
++    view := InvokePublicApi("graphs.readControls",[]);
+     if group = "csv" /\ view.currentCsv # NoValue then
+       target := <<group,view.currentCsv.id,field>>; value := view.currentCsv.headerLines;
+     elsif group = "object" /\ view.chart # NoValue /\ view.selectedIndex # NoValue then
+       if view.chart.editor.editable then
+         target := <<group,state.selectedSlotId,view.chart.id,view.selectedIndex,field>>;
+-        value := view.objects[view.selectedIndex+1][field];
++        value := view.object[field];
+       end if;
+     end if;
+   elsif group \in {"axis","global"} then
+@@ -452,36 +448,24 @@ ReadOfficialCurrentField:
+       value := IF group = "axis" THEN view.axes[axis][field] ELSE view.globalSettings[field];
+     end if;
+   elsif group = "labels" then
+-    view := InvokePublicApi("labels.readState",[]);
++    view := InvokePublicApi("labels.readSettings",[]);
+     target := <<group,field>>; value := view.settings[field];
++    companions := [x |-> view.settings.x,y |-> view.settings.y];
+   elsif group = "captions" then
+-    view := InvokePublicApi("captions.readGlobal",[]);
++    view := InvokePublicApi("captions.readSettings",[]);
+     target := <<group,"global",field>>; value := view.settings[field];
+   elsif group = "print" then
+     view := InvokePublicApi("print.readSettings",[]);
+     target := <<group,field>>; value := view[field];
+   elsif group = "layout" then
+-    view := InvokePublicApi("layout.readState",[]); target := <<group,field>>;
++    view := InvokePublicApi("layout.readControls",[]); target := <<group,field>>;
++    companions := [gridRows |-> view.gridRows,gridCols |-> view.gridCols,gridLimits |-> view.gridLimits];
+     if field = "rows" then value := view.gridRows;
+     elsif field = "cols" then value := view.gridCols;
+     elsif field = "zoom" then value := view.zoom;
+     else value := view.slotStyle[field]; end if;
+   end if;
+-  result := [target |-> target,value |-> value]; return;
+-end procedure;
+-
+-procedure NumericControlTarget(group,field,axis)
+-begin
+-CurrentIdentityTuple:
+-  call ReadNumericControl(group,field,axis); result := result.target; return;
+-end procedure;
+-
+-procedure NumericControlValue(group,field,axis,target)
+-variables current = NoValue;
+-begin
+-SameFieldCurrentValue:
+-  call ReadNumericControl(group,field,axis); current := result;
+-  result := IF current.target = target THEN current.value ELSE NoValue; return;
++  result := [target |-> target,value |-> value,companions |-> companions,ready |-> state.lifecycle = "ready"]; return;
+ end procedure;
+ 
+ procedure PrepareControlNumeric(group,field,text,current)
+@@ -495,7 +479,7 @@ ExistingEmptyMeaning:
+   call prepareNumericInput(text,current,allowEmpty,emptyValue); return;
+ end procedure;
+ 
+-procedure InvokeNumericControl(group,field,axis,target,value)
++procedure InvokeNumericControl(group,field,axis,value,target,companions)
+ variables patch = [], current = NoValue, axes = [];
+ begin
+ OnlyNewFieldAndExplicitIdentity:
+@@ -512,9 +496,9 @@ OnlyNewFieldAndExplicitIdentity:
+   elsif group = "labels" then
+     if field = "fontSize" then result := InvokePublicApi("labels.setSettings",[values |-> patch]);
+     else
+-      current := InvokePublicApi("labels.readState",[]);
+-      result := InvokePublicApi("labels.setPosition",[x |-> IF field = "x" THEN value ELSE current.settings.x,
+-        y |-> IF field = "y" THEN value ELSE current.settings.y]);
++      current := companions;
++      result := InvokePublicApi("labels.setPosition",[x |-> IF field = "x" THEN value ELSE current.x,
++        y |-> IF field = "y" THEN value ELSE current.y]);
+     end if;
+   elsif group = "captions" then result := InvokePublicApi("captions.setSettings",[values |-> patch]);
+   elsif group = "print" then
+@@ -523,7 +507,7 @@ OnlyNewFieldAndExplicitIdentity:
+     end if;
+     result := InvokePublicApi("print.setSettings",[values |-> patch]);
+   elsif group = "layout" then
+-    if field \in {"rows","cols"} then call changeLayoutGridDimension(field,value);
++    if field \in {"rows","cols"} then call changeLayoutGridDimension(field,value,companions);
+     elsif field = "zoom" then result := InvokePublicApi("layout.setZoom",[value |-> value]);
+     else result := InvokePublicApi("layout.setStyle",[values |-> patch]); end if;
+   end if;
+@@ -541,12 +525,13 @@ OneInstancePerMountedField:
+   if control = NoValue then result := NoValue; return; end if;
+   command := ExistingUiCommandOfControlOrNone(control);
+   if command = NoValue then
+-    call UiCommand_create(BoundProcedure(NumericControlTarget,<<group,field,axis>>),
+-      BoundProcedure(NumericControlValue,<<group,field,axis>>),
++    call UiCommand_create(BoundProcedure(ReadNumericControl,<<group,field,axis>>),
+       BoundProcedure(PrepareControlNumeric,<<group,field>>),
+       BoundProcedure(InvokeNumericControl,<<group,field,axis>>),ExistingWidgetStep(control));
+     command := result; AttachUiCommandToControl(control,command);
+   end if;
++  command.readCurrent := BoundProcedure(ReadNumericControl,<<group,field,axis>>);
++  BindPurposeSnapshotHook(control,BoundProcedure(useControlSnapshot,<<command.readCurrent>>));
+   BindRawInputAndCompositionTo(control,command,UiCommand_input);
+   BindEnterAndBlurTo(control,command,UiCommand_commit);
+   BindEscapeTo(control,command,UiCommand_cancel);
+@@ -593,16 +578,17 @@ ComponentLocalBindings:
+   result := NoValue; return;
+ end procedure;
+ 
+-procedure UiCommand_bindAction(control,readTarget,invoke)
++procedure UiCommand_bindAction(control,readCurrent,invoke)
+ variables command = NoValue;
+ begin
+ ExistingActionCallbacks:
+   command := ExistingUiCommandOfControlOrNone(control);
+   if command = NoValue then
+-    call UiCommand_create(readTarget,NoValue,NoValue,invoke,NoValue);
++    call UiCommand_create(readCurrent,NoValue,invoke,NoValue);
+     command := result; AttachUiCommandToControl(control,command);
+   end if;
+-  command.readTarget := readTarget; command.invoke := invoke;
++  command.readCurrent := readCurrent; command.invoke := invoke;
++  BindPurposeSnapshotHook(control,BoundProcedure(useControlSnapshot,<<readCurrent>>));
+   \* Re-render updates callbacks while retaining the same local command instance.
+   BindActionEventToSend(control,command,UiCommand_send);
+   BindTargetChangeLifecycleNotReadyAndOverlayCloseTo(control,command,UiCommand_cancel);
+@@ -613,6 +599,13 @@ ExistingActionCallbacks:
+   result := command; return;
+ end procedure;
+ 
++procedure ReadVisibleCsvPreview(csvId,expanded)
++begin
++ExplicitVisiblePageOnly:
++  if ~expanded then result := NoValue; return; end if;
++  result := InvokePublicApi("assets.readPreview",[csvId |-> csvId,start |-> 0,count |-> 30]); return;
++end procedure;
++
+ procedure FastFigureApp()
+ variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
+           luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue,
+@@ -621,6 +614,10 @@ variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>
+ begin
+ CurrentReadNotDraftOrMirror:
+   palette := InvokePublicApi("appearance.readPalette",[]);
++  if SamePalettePrimitiveKeyAsThisComponentTheme(palette) then
++    theme := CurrentComponentThemeForPaletteKey(palette);
++    css := CurrentComponentCssForPaletteKey(palette); goto OneExistingRoot;
++  end if;
+   while i <= 10 do shades := Append(shades,palette.uiColor); i := i + 1; end while;
+ ContrastFromCurrentUiColor:
+   channels := HexChannelsDividedBy255(palette.uiColor); i := 1;
+@@ -663,6 +660,7 @@ ThemeAndCssProjection:
+     primaryLightHover |-> SrgbMix(palette.uiColor,0.24,"transparent"),primaryContrast |-> contrast];
+   AliasFfuiFilledFilledHoverLightLightHoverLightColorContrastToPrimaryVariables(css);
+   ReplaceOnlyBlackAlphaThemeShadowColorsWithSameAlphaUiShadowMix(theme,palette.uiShadowColor);
++  RetainCurrentComponentThemeAndCssUnderPaletteKey(palette,theme,css);
+   \* Preserve shadow geometry. Graph paperColor != UI surface/background.
+ OneExistingRoot:
+   BindNumericFieldCreationAndRenderHook(BindAllNumericFields);
+@@ -694,28 +692,37 @@ NoProjectStoreInShell:
+   BindWholeRenderButtonReadyDisabledRunningAndKeyboardStateThroughExistingUiCommand();
+   \* Same Button/theme/height/padding as neighbouring controls; no local style variant.
+   BindComponentPublicMethods("FastFigureDataActions",<<"assets.importFiles","slots.reset","assets.delete">>);
+-  BindComponentPublicMethods("FastFigureImageEditor",<<"images.readEditor","images.setSettings","images.insertEmpty">>);
++  BindComponentPublicMethods("FastFigureImageEditor",<<"images.readSettings","images.setSettings","images.insertEmpty">>);
++  BindVisibleComponentExplicitRead("FastFigureImagePreview","images.readEditor");
+   BindComponentPublicMethods("FastFigureProjectDataTree",<<"assets.selectCsv","assets.selectImage","assets.selectDirectory",
+     "assets.planMove","assets.move","assets.createDirectory","assets.delete","assets.emptyTrash",
+     "assets.download","assets.draggableAsset","assets.connectToSlot">>);
+   BindComponentPublicMethods("FastFigureProjectActions",<<"project.readName","project.setName","project.importFile","project.exportFile">>);
+-  BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.selectCsv","graphs.setHeaderLines",
++  BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.readControls","graphs.readColumns","graphs.selectCsv","graphs.setHeaderLines",
+     "graphs.selectObject","graphs.setObjectValues","graphs.moveObject","graphs.deleteObject","assets.createEmptyCsv">>);
++  BindComponentRenderReadFor("FastFigureGraphDataEditor","csvOptions",BoundPublicRead("assets.readList",[kind |-> "csv"]));
++  BindComponentRenderReadFor("FastFigureCsvPreview","page",ReadVisibleCsvPreview);
++  BindColumnSelectorReadToExplicitCsvAndChartIds("FastFigureGraphDataEditor","graphs.readColumns");
+   BindComponentPublicMethods("FastFigureGraphLayoutEditor",<<"graphs.readLayout">>);
+   BindComponentPublicMethods("FastFigureGraphPaletteActions",<<"graphs.readPalette","graphs.applyPalette">>);
+   BindComponentPublicMethods("FastFigureGraphFileActions",<<"graphs.exportFfsx","graphs.exportPlotlyJson">>);
+   BindComponentPublicMethods("FastFigurePaletteActions",<<"appearance.readPalette","appearance.setPalette","appearance.resetPalette">>);
+-  BindComponentPublicMethods("FastFigureLabelOverlay",<<"labels.readState","labels.setEnabled","labels.setSettings",
++  BindComponentPublicMethods("FastFigureLabelOverlay",<<"labels.readState","labels.readSettings","labels.setEnabled","labels.setSettings",
+     "labels.setPosition","labels.resetPosition","labels.finishPositionInteraction">>);
+-  BindComponentPublicMethods("FastFigureCaptionOverlay",<<"captions.readGlobal","captions.readSlot","captions.setGlobalText",
++  BindComponentPublicMethods("FastFigureCaptionOverlay",<<"captions.readGlobal","captions.readSettings","captions.readSlot","captions.setGlobalText",
+     "captions.setSlotText","captions.setName","captions.setNameBold","captions.setSettings","captions.setEnabled","captions.insertSlotCaptions">>);
+   BindComponentPublicMethods("FastFigurePrintOverlay",<<"print.readSettings","print.setSettings","print.save","print.capture">>);
+-  BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.setStyle","layout.setZoom",
++  BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.readControls","layout.setStyle","layout.setZoom",
+     "layout.resetZoom","layout.mergeSlots","layout.splitSlots">>);
+   \* Bind each declared command control through UiCommand after its existing
+   \* target/invoke callbacks above are supplied. Public reads remain direct;
+   \* folds, collision responses and Modal-local controls keep UI-only handlers.
+   BindDeclaredComponentActionControls(ComponentOwners,UiCommand_bindAction);
++  BindComponentLocalPurposeSnapshotHooks(useControlSnapshot);
++  \* Each existing component supplies its required current scalar/metadata fields.
++  \* Repeated reads produce the same primitive key until those fields change.
++  \* Actual column selectors/visible previews read their explicit payload only.
++  \* Theme reuse is component-local display construction; no Project read is retained.
+   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
+   return;
+ end procedure;
+@@ -836,14 +843,17 @@ procedure ProjectTreeAction(action,node,target)
+ begin
+ TrashTreeSelectionNotSlotConnection:
+   if action = "select" then
+-    result := InvokePublicApi("assets.select",[kind |-> node.kind,path |-> node.path]);
++    if node.kind = "csv" then result := InvokePublicApi("assets.selectCsv",[path |-> node.path]);
++    elsif node.kind = "image" then result := InvokePublicApi("assets.selectImage",[path |-> node.path]);
++    else result := InvokePublicApi("assets.selectDirectory",[path |-> node.path]); end if;
+   elsif action = "move" then
+-    Require(~node.fixed);
++    Require(InvokePublicApi("assets.movable",[path |-> node.path]));
+     \* Trash descendants are valid move SOURCES if current VFS preconditions pass.
+     result := InvokePublicApi("assets.planMove",[path |-> node.path,directory |-> target.path]);
+     result := InvokePublicApi("assets.move",[plan |-> result,useUniqueName |-> ExplicitUserMoveChoice()]);
+   elsif action = "connect-to-slot" then
+-    Require(node.kind \in {"csv","image"} /\ ~node.trashed);
++    Require(node.kind \in {"csv","image"});
++    Require(~InvokePublicApi("assets.isTrashed",[path |-> node.path]));
+     result := InvokePublicApi("assets.connectToSlot",[path |-> node.path,kind |-> node.kind,slotId |-> target.id]);
+   end if;
+   \* Selecting/starting drag is not implicit connection or original-location restore.
+diff --git a/agent_space/reviews/review-20261118-011-plan045-pseudocode.md b/agent_space/reviews/review-20261118-011-plan045-pseudocode.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..34ea22dd03b85aec8ab6e65a8379c46a8d281801
+--- /dev/null
++++ b/agent_space/reviews/review-20261118-011-plan045-pseudocode.md
+@@ -0,0 +1,36 @@
++# Plan045 Source Script 57 → pseudocode 검토
++
++## 범위와 판단
++
++Source Script 57의 API별 필요 필드 구성과 호출자 변경을 pseudocode 34에 번역했다. API 경계 안에서 먼저 대상과 필드를 정하며, 큰 결과를 만든 뒤 UI에서 잘라 쓰는 경로를 제거했다. 이 기록은 정적 대응 검토이며 실행 성능의 측정 결과는 아니다.
++
++| 작업 단위 | 실제 대응 |
++|---|---|
++| Backend 그래프 읽기 | `BuildGraphEditorRead`는 목록용 편집 필드와 단일 control을 분리한다. chart는 id/title/editable, CSV는 id/path/name/headerLines/전체 rowCount만 구성한다. figure·rows·bytes·열 정의는 포함하지 않는다. 명시적 chart 소유 슬롯의 visibility와 CSV id의 None/0 처리를 유지한다. |
++| 명시적 데이터 소비 | `ReadExplicitColumns`만 선택 CSV 또는 기존 raw conversionRows에서 열 정의를 계산한다. `ReadBoundedPreview`는 범위를 검증한 뒤 최대 30행만 복사한다. |
++| 자산 표시 | `AssetMetadata`/`BuildVfsRead`는 표시 필드와 참조 수만 구성한다. 휴지통은 범위를 먼저 고르고, 목록은 id/path/name만 반환한다. 삭제 확인은 대상 메타데이터와 필요한 참조 식별자만 반환한다. |
++| 나머지 목적 조회 | slots.readDisplay, images.readSettings, layout.readControls, captions.readSettings, labels.readSettings를 등록·구현·공개 바인딩에 연결했다. 이미지 bytes/label geometry/preview는 실제 표시 요청에만 남겼다. |
++| Application/성공 반환 | renderer 너비는 layout.readControls로 조회한다. 그래프·레이아웃 변경 후 성공 반환도 좁은 조회를 사용하며 헤더는 명시 csvId로 확인한다. 취소·미반영·원래 오류는 유지한다. |
++| 공통 UI 객체 | readCurrent가 target/value/companions/ready를 한 판정에 제공한다. commit/send/step은 그 판정의 값만 내부 sendCurrent에 전달한다. same-value 처리에 추가 조회·명령이 없으며 Enter 후 blur, IME, async 정리·원래 오류 우선순위를 유지한다. |
++| UI 소비자 | 54개 숫자 필드와 버튼, 트리·CSV 선택 목록·열 선택·열린 preview·이미지/label/caption/layout 설정을 목적 조회에 연결했다. metadata 노드에서 제거한 fixed/trashed 가정은 기존 boolean API로 확인한다. |
++| 구독과 테마 | 필요한 값의 primitive snapshot과 안정된 구독 함수를 사용한다. 구조 key에는 화면·선택 식별자·lifecycle만 넣고, theme/CSS의 재사용은 component-local 표시 구성에 한정한다. |
++
++## 확인한 파일
++
++- `sourcescript/backend/project_state.py`와 `pseudocode/backend/project_state.pcal`: query 등록과 operation별 반환·구성 순서.
++- `sourcescript/application/public_api/__init__.py`와 `pseudocode/application/public_api/contract.pcal`: 공개 바인딩과 현재 식별자 전달.
++- `sourcescript/application/adapter.py`와 `pseudocode/application/adapter.pcal`: 표시 너비의 좁은 읽기.
++- `sourcescript/application/public_api/graphs.py`, `sourcescript/application/public_api/layout_annotations.py`와 대응 pseudocode: 성공 반환·헤더 확인.
++- `sourcescript/frontend/mantine_ui.py`와 `pseudocode/frontend/mantine_ui.pcal`: 공통 객체·목적 구독·소비자 연결. 자산 wrapper는 좁아진 target 메타데이터를 그대로 반환하는 기존 pseudocode를 유지했다.
++
++## 논리·목적·중복 확인
++
++- 같은 현재 Backend 소유자에서 필요한 필드를 구성한 다음 반환을 분리한다. 반환에는 Project/asset/chart 본문이나 장기 공유 읽기 저장소를 추가하지 않는다.
++- CSV 표시 rowCount는 header를 제외한 데이터 행 수이며, 헤더 입력의 currentCsv.rowCount는 전체 행 수다. 기존 저장 형식과 정규화 경계는 유지한다.
++- 참조 수는 조회당 한 수집과 로컬 집계로 구성한다. 읽기 전용 반환의 identity 방문 집합은 해당 호출에서만 사용한다.
++- 기존 명령의 candidate·현재 원본 재검증·전체 검증·한 번 반영·참조 보정은 변경하지 않았다. 명령 내부 중복 복사/검증 최적화는 이번 번역에 섞지 않았다.
++- selected-slot 자동 표시, 명시적 전체 렌더링, CSS 크기/위치 변환, 내보내기와 자원 수명 경계는 유지했다.
++
++## 확인과 한계
++
++전체 실제 구현 diff와 후속 수정 차이를 읽었다. 15개 pseudocode 파일의 procedure 경계, API 등록/호출 대응, hash·메타데이터 변경 범위·보호 경로·native patch 역적용을 정적으로 확인했다. PlusCal 변환·TLC·테스트·앱·브라우저·빌드·checker main·commit/push는 실행하지 않았다. Source Script와 source code의 의미·실행 일치 및 속도 개선을 실행으로 입증한 기록은 아니다.
+diff --git a/agent_space/patches/20261118-008.md b/agent_space/patches/20261118-008.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3a7eeec3bbd846a39f627ae3905ff4fd513aed9b
+--- /dev/null
++++ b/agent_space/patches/20261118-008.md
+@@ -0,0 +1,11 @@
++# Plan045 목적별 API의 pseudocode 번역
++
++- Source Script 57의 필요 필드 우선 구성과 UI 소비자 변경을 pseudocode 34에 반영했다.
++- 기존 API 경계를 유지하고 목록·control·열 정의·최대 30행 preview·설정 조회를 분리했다. 큰 자산/편집 결과를 만든 뒤 잘라 쓰는 대안은 불필요한 계산·복사를 유지하므로 선택하지 않았다.
++- 공통 UI 객체는 같은 판정의 target/value/companions/ready를 내부 전송에 사용한다. 구독 key와 component-local theme 표시는 Project 권위·공유 읽기 저장소를 추가하지 않는다.
++- 기존 Backend 명령 검증·한 번 반영·참조 보정과 selected-slot/CSS/명시적 전체 렌더링은 유지했다.
++- native Git 기준은 Source 57 작업 직후 tracked snapshot `17256d879494c582cd3ae53cd8f78eaf5841e7c6`이다. 이번 patch에는 pseudocode 6개·메타데이터·새 검토 문서·이 설명만 포함한다. 기존 Source 57 변경/007 기록은 제외했다.
++- pseudocode 34: `sha256:a832497cc42a4047f273365ba9b82733cd163425079ef524dbe4938768d7a8ed`.
++- 검토: `../reviews/review-20261118-011-plan045-pseudocode.md`.
++- 실제 diff·후속 차이·호출/등록·hash·procedure 경계·보호 범위·native 역적용을 정적으로 확인했다. 실행 성능이나 런타임 정합성을 검증한 결과는 아니다.
++- PlusCal 변환·TLC·테스트·앱·브라우저·빌드·checker main·commit/push는 실행하지 않았다.

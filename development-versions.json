@@ -9,10 +9,10 @@
   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
   "layers": {
     "source-script": {
-      "revision": 56,
+      "revision": 57,
       "status": "stale",
       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
-      "fingerprint": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4",
+      "fingerprint": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7",
       "derived_from": null,
       "closure": "open",
       "closure_review": null
@@ -30,7 +30,7 @@
       "validation_review": null
     },
     "source-code": {
-      "revision": 162,
+      "revision": 163,
       "status": "stale",
       "paths": [
         "package-lock.json",
@@ -54,24 +54,24 @@
         "sourcecode/portable_build/portable_build.mjs",
         "sourcecode/system.js"
       ],
-      "fingerprint": "sha256:476accb6be4f04817e8b1ad50375f0fb8ae21966493449abf8e3e8e8d7895d00",
+      "fingerprint": "sha256:d6defd7741b6e4ea39489aa3d59a371ec4f83fe7468cdf0b7a104982ccdc6eda",
       "derived_from": {
-        "source-script": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4",
-        "pseudocode": "sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129",
+        "source-script": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7",
+        "pseudocode": "sha256:a832497cc42a4047f273365ba9b82733cd163425079ef524dbe4938768d7a8ed",
         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
       },
       "validation_review": null,
-      "translation_review": "agent_space/reviews/review-20261118-009-plan044-source-code.md"
+      "translation_review": "agent_space/reviews/review-20261118-012-plan045-source-code.md"
     },
     "pseudocode": {
-      "revision": 33,
+      "revision": 34,
       "status": "stale",
       "path_rule": "pseudocode/**/*.pcal",
-      "fingerprint": "sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129",
+      "fingerprint": "sha256:a832497cc42a4047f273365ba9b82733cd163425079ef524dbe4938768d7a8ed",
       "derived_from": {
-        "source-script": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4"
+        "source-script": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7"
       },
-      "translation_review": "agent_space/reviews/review-20261118-008-plan044-pseudocode.md"
+      "translation_review": "agent_space/reviews/review-20261118-011-plan045-pseudocode.md"
     }
   }
 }

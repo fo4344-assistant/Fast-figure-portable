@@ -10443,6 +10443,15 @@ var BACKEND_QUERY_KINDS = /* @__PURE__ */ new Set([
   "export"
 ]);
 var PUBLIC_BACKEND_READ_OPERATIONS = /* @__PURE__ */ new Set([
+  "slots.readDisplay",
+  "images.readSettings",
+  "graphs.readControls",
+  "graphs.readColumns",
+  "assets.readList",
+  "assets.readPreview",
+  "layout.readControls",
+  "captions.readSettings",
+  "labels.readSettings",
   "project.readName",
   "slots.readSelected",
   "images.readEditor",
@@ -10497,26 +10506,139 @@ function buildSlotAssetDisplay(slot, source) {
       if (display.assets.length) display.kind = "assets";
     }
   }
-  return immutableProjectCopy(display);
+  return display;
 }
-function buildBackendVfsTree(source) {
-  const nodes = new Map(source.fileSystem.directories.map((path) => [path, {
+var GRAPH_OBJECT_FIELDS = ["csvId", "x", "y", "xAxisSide", "yAxisSide", "type", "color", "legendName", "lineWidth", "lineDash", "markerSymbol", "markerSize", "barOpacity", "barLineWidth"];
+function csvMetadata(csv) {
+  return csv ? {
+    id: csv.id,
+    path: projectAssetPath(csv),
+    name: csv.name,
+    headerLines: csv.headerLines,
+    rowCount: csv.rows.length
+  } : null;
+}
+function graphEditorRead(source, request, controls = false) {
+  const state = request.frontendState || {}, slot = request.chartId != null ? resolveOwningSlot(request.chartId, source) : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden);
+  const chart = slot && !slot.hidden && slot.content.contentType === "graph" ? source.charts.find((item) => item.id === slot.content.chart) : null;
+  const objects = chart?.editor?.objects || [], index = state.graphObjectIndex;
+  const selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length ? index : null;
+  const node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null;
+  const csv = request.csvId != null ? source.assets.csvFiles.find((item) => item.id === request.csvId) : node?.kind === "csv" ? node.asset : null;
+  const compactObject = (object) => object ? Object.fromEntries(GRAPH_OBJECT_FIELDS.map((key) => [key, object[key]])) : null;
+  const compactChart = chart ? { id: chart.id, editor: { title: chart.editor.title, editable: chart.editor.editable } } : null;
+  return controls ? {
+    slotId: slot?.id ?? null,
+    chartId: chart?.id ?? null,
+    title: chart?.editor.title ?? "",
+    editable: chart ? chart.editor.editable !== false : false,
+    chart: compactChart,
+    selectedIndex,
+    object: selectedIndex === null ? null : compactObject(objects[selectedIndex]),
+    currentCsv: csvMetadata(csv)
+  } : { chart: compactChart, objects: objects.map(compactObject), selectedIndex, currentCsv: csvMetadata(csv) };
+}
+function assetMetadata(asset, kind, referenceCount = 0) {
+  return {
+    kind,
+    id: asset.id,
+    path: projectAssetPath(asset),
+    name: asset.name,
+    referenceCount,
+    ...kind === "csv" ? { rowCount: Math.max(0, asset.rows.length - asset.headerLines) } : {}
+  };
+}
+function buildBackendVfsTree(source, root = null) {
+  const directories = source.fileSystem.directories.filter((path) => root === null || projectPathInDirectory(path, root));
+  const nodes = new Map(directories.map((path) => [path, {
     kind: "directory",
     path,
     name: projectPathName(path),
     children: []
   }]));
-  for (const [kind, assets] of [["csv", source.assets.csvFiles], ["image", source.assets.images]]) {
-    for (const asset of assets) {
-      const path = projectAssetPath(asset);
-      nodes.set(path, { kind, path, id: asset.id, name: asset.name, asset: structuredClone(asset) });
-    }
+  const assets = [["csv", source.assets.csvFiles], ["image", source.assets.images]].map(([kind, values]) => [kind, values.filter((asset) => root === null || projectPathInDirectory(projectAssetPath(asset), root))]);
+  const references = collectAssetReferences(
+    new Set(assets[0][1].map((asset) => asset.id)),
+    new Set(assets[1][1].map((asset) => asset.id)),
+    source
+  ), counts = /* @__PURE__ */ new Map();
+  for (const ref of references) {
+    const key = `${ref.kind}:${ref.assetId}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const [kind, values] of assets) for (const asset of values) {
+    const node = assetMetadata(asset, kind, counts.get(`${kind}:${asset.id}`) || 0);
+    nodes.set(node.path, node);
   }
   for (const node of nodes.values()) {
     const parent = nodes.get(projectParentPath(node.path));
     if (parent && parent !== node) parent.children.push(node);
   }
   return nodes;
+}
+function readPurposeProjection(source, request) {
+  const operation = request.operation;
+  if (operation === "graphs.readControls") return graphEditorRead(source, request, true);
+  if (operation === "graphs.readColumns") {
+    if (request.csvId != null) {
+      const csv = source.assets.csvFiles.find((item) => item.id === request.csvId);
+      return csv ? columnDefinitions(csv.rows, csv.headerLines) : [];
+    }
+    const slot = request.chartId == null ? null : resolveOwningSlot(request.chartId, source);
+    const chart = slot && !slot.hidden ? source.charts.find((item) => item.id === request.chartId) : null;
+    return chart?.editor.editable === false && Array.isArray(chart.editor.conversionRows) ? columnDefinitions(chart.editor.conversionRows, 1) : [];
+  }
+  if (operation === "assets.readList") {
+    if (!["csv", "image"].includes(request.kind)) throw Error("지원하지 않는 자산 종류입니다.");
+    return (request.kind === "csv" ? source.assets.csvFiles : source.assets.images).map((asset) => ({ id: asset.id, path: projectAssetPath(asset), name: asset.name }));
+  }
+  if (operation === "assets.readPreview") {
+    const start = Object.hasOwn(request, "start") ? request.start : 0, count = Object.hasOwn(request, "count") ? request.count : 30;
+    if (!Number.isInteger(start) || start < 0 || !Number.isInteger(count) || count < 1 || count > 30)
+      throw Error("미리보기 범위가 올바르지 않습니다.");
+    const csv = source.assets.csvFiles.find((item) => item.id === request.csvId);
+    return csv ? {
+      csvId: csv.id,
+      headerLines: csv.headerLines,
+      rowCount: csv.rows.length,
+      start,
+      rows: csv.rows.slice(start, start + count)
+    } : null;
+  }
+  if (operation === "slots.readDisplay") return source.slots.filter((slot) => !slot.hidden).map((slot) => ({
+    id: slot.id,
+    row: slot.row,
+    col: slot.col,
+    rowSpan: slot.rowSpan,
+    colSpan: slot.colSpan,
+    assetDisplay: buildSlotAssetDisplay(slot, source)
+  }));
+  if (operation === "layout.readControls") return {
+    gridRows: source.layout.gridRows,
+    gridCols: source.layout.gridCols,
+    gridLimits: BackendSettings.defaults.limits.layout,
+    slotStyle: source.layout.slotStyle
+  };
+  if (operation === "captions.readSettings" || operation === "labels.readSettings") {
+    const value2 = operation === "captions.readSettings" ? source.annotations.captions : source.annotations.labels;
+    return {
+      enabled: value2.enabled,
+      settings: value2.settings,
+      ...operation === "labels.readSettings" ? { selectedSlotId: request.slotId ?? null } : {}
+    };
+  }
+  if (operation === "images.readSettings") {
+    const slot = source.slots.find((item) => item.id === request.slotId && !item.hidden && item.content.contentType === "image");
+    if (!slot) return null;
+    const image = source.assets.images.find((item) => item.id === slot.content.imageId);
+    return {
+      slotId: slot.id,
+      imageId: image?.id ?? null,
+      name: image?.name ?? "",
+      settings: slot.content.imageSettings
+    };
+  }
+  throw Error("알 수 없는 목적별 조회입니다.");
 }
 function readBackendProjection(kind, request = {}) {
   if (!BACKEND_QUERY_KINDS.has(kind) || kind === "project-api" && !PUBLIC_BACKEND_READ_OPERATIONS.has(request.operation))
@@ -10525,6 +10647,18 @@ function readBackendProjection(kind, request = {}) {
     return readBackendProjection("export", request);
   if (kind === "interface-reconciliation")
     return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
+  if (kind === "project-api" && [
+    "slots.readDisplay",
+    "images.readSettings",
+    "graphs.readControls",
+    "graphs.readColumns",
+    "assets.readList",
+    "assets.readPreview",
+    "layout.readControls",
+    "captions.readSettings",
+    "labels.readSettings"
+  ].includes(request.operation))
+    return immutableProjectCopy(readPurposeProjection(activeProject._state, request));
   if (kind === "project-api" && request.operation === "project.readName")
     return activeProject._state.meta.projectName;
   if (kind === "project-api" && request.operation === "appearance.readPalette" || kind === "renderer" && request.operation === "ui-palette")
@@ -10627,11 +10761,21 @@ function readBackendProjection(kind, request = {}) {
       source
     );
     return immutableProjectCopy({
-      target: node.asset,
+      target: {
+        kind: node.kind,
+        id: node.asset.id,
+        path: projectAssetPath(node.asset),
+        name: node.asset.name
+      },
       kind: node.kind,
       path: projectAssetPath(node.asset),
       referenceCount: references.length,
-      references
+      references: references.map((ref) => ({
+        kind: ref.kind,
+        slotId: ref.kind === "csv" ? resolveOwningSlot(ref.chartId, source)?.id ?? null : ref.slotId,
+        chartId: ref.chartId ?? null,
+        objectIndex: ref.originalObjectIndex ?? null
+      }))
     });
   }
   if (kind === "project-api" && request.operation === "slots.readSelected") {
@@ -10648,8 +10792,12 @@ function readBackendProjection(kind, request = {}) {
     }) : null;
   }
   if (kind === "project-api" && request.operation === "assets.readTrash") {
-    const source = activeProject._state, tree = buildBackendVfsTree(source);
-    return immutableProjectCopy(tree.get(BackendSettings.defaults.vfs.trash) ?? null);
+    const source = activeProject._state, root = BackendSettings.defaults.vfs.trash, tree = buildBackendVfsTree(source, root), node = tree.get(root);
+    return immutableProjectCopy(node ? {
+      ...node,
+      empty: node.children.length === 0,
+      referenceCount: [...tree.values()].reduce((sum, item) => sum + (item.referenceCount || 0), 0)
+    } : null);
   }
   if (kind === "project-api" && request.operation === "assets.readTree") {
     const source = activeProject._state;
@@ -10672,17 +10820,8 @@ function readBackendProjection(kind, request = {}) {
       settings: normalizeGraphLayoutSettings(chart.editor?.globalSettings)
     }) : null;
   }
-  if (kind === "project-api" && request.operation === "graphs.readData") {
-    const source = activeProject._state, state = request.frontendState || {}, slot2 = Object.hasOwn(request, "chartId") ? resolveOwningSlot(request.chartId, source) : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden), chartId = slot2?.content.chart, chart = slot2 && slot2.content.contentType === "graph" ? source.charts.find((item) => item.id === chartId) || null : null, objects = chart?.editor?.objects || [], index = state.graphObjectIndex, selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length ? index : null, node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null, csv = node?.kind === "csv" ? node.asset : null, objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
-    return immutableProjectCopy({
-      chart,
-      objects,
-      selectedIndex,
-      currentCsv: csv,
-      columns: csv ? columnDefinitions(csv.rows, csv.headerLines) : [],
-      objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : []
-    });
-  }
+  if (kind === "project-api" && request.operation === "graphs.readData")
+    return immutableProjectCopy(graphEditorRead(activeProject._state, request));
   if (kind === "project-api" && request.operation === "print.readSettings")
     return immutableProjectCopy(activeProject._state.export);
   if (kind === "project-api" && request.operation === "images.readEditor" || kind === "renderer" && request.operation === "slot-image") {
@@ -10908,8 +11047,10 @@ function buildFrontendReconciliationInput(event, result, references) {
   });
 }
 function immutableProjectCopy(value2) {
+  const visited = /* @__PURE__ */ new WeakSet();
   const freeze = (copy) => {
-    if (copy && typeof copy === "object") {
+    if (copy && typeof copy === "object" && !visited.has(copy)) {
+      visited.add(copy);
       Object.values(copy).forEach(freeze);
       Object.freeze(copy);
     }
@@ -16372,12 +16513,12 @@ function setSelectedSlot(slotId, direction = "ui-to-fsm", pendingContentType = n
 function mergeSlots(slotIds = []) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
   if (!result.committed) return false;
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 function splitSlots(slotIds = []) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
   if (!result.committed) return false;
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 function insertEmptyImageIntoSelectedSlot() {
   const slotId = interfaceFSM.readState().selectedSlotId, context = appFSM.query("slot-selection-context", { slotId });
@@ -16577,6 +16718,12 @@ function setAppearanceApiPalette(values) {
 function resetAppearanceApiPalette() {
   return applyUiPaletteValues({ ...DEFAULT_UI_PALETTE });
 }
+function readLayoutApiControls() {
+  return {
+    ...appFSM.query("project-api", { operation: "layout.readControls" }),
+    zoom: interfaceFSM.readState().dashboardZoomIntent
+  };
+}
 function readLayoutApiState(previewWidth = null) {
   const layout2 = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }), session = interfaceFSM.readState();
   return Object.freeze({ ...layout2, zoom: session.dashboardZoomIntent });
@@ -16585,29 +16732,29 @@ function setLayoutApiStyle(patch = {}) {
   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
   if (!result.committed) return false;
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 function setLayoutApiGrid(rows, cols) {
   const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
   if (!result.committed) return false;
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 function setLayoutApiZoom(value2) {
   const session = interfaceFSM.readState();
   const state = appFSM.send("SET_DASHBOARD_ZOOM", { value: value2 });
   if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 function commitLayoutApiZoom() {
   appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 function resetLayoutApiZoom() {
   const session = interfaceFSM.readState();
   const state = appFSM.send("RESET_DASHBOARD_ZOOM");
   if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiState();
+  return readLayoutApiControls();
 }
 
 // sourcecode/application/adapter.js
@@ -16736,7 +16883,7 @@ var PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
 function dispatchProjectQuery(query, payload = {}) {
   const request = { ...payload };
   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
-    const state = interfaceFSM.readState(), layout2 = readBackendProjection("project-api", { operation: "layout.readState" });
+    const state = interfaceFSM.readState(), layout2 = readBackendProjection("project-api", { operation: "layout.readControls" });
     request.operation ??= "selected-slot";
     if (request.operation === "selected-slot") request.slotId = state.selectedSlotId;
     request.frontendState = state;
@@ -16876,12 +17023,12 @@ function graphEditorObjectValues(chartId, index, values = {}) {
     values
   });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
   return chart;
 }
 function setGraphObjectValuesApi(index, values = {}) {
   const context = appFSM.query("project-api", {
-    operation: "graphs.readData",
+    operation: "graphs.readControls",
     frontendState: interfaceFSM.readState()
   });
   return graphEditorObjectValues(context.chart?.id ?? null, index, values);
@@ -16891,13 +17038,13 @@ function graphEditorAdd(slotId, csvId) {
   if (!slot) return null;
   const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED", [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: { selectedSlotId: slotId } }).chart;
   return chart;
 }
 function addGraphObjectApi(csvId) {
   const state = interfaceFSM.readState();
   if (csvId === void 0) csvId = appFSM.query("project-api", {
-    operation: "graphs.readData",
+    operation: "graphs.readControls",
     frontendState: state
   }).currentCsv?.id;
   return graphEditorAdd(state.selectedSlotId, csvId);
@@ -16912,7 +17059,7 @@ function graphEditorMove(chartId, from, to) {
     to
   });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
   return chart;
 }
 function graphEditorDelete(chartId, index) {
@@ -16922,37 +17069,36 @@ function graphEditorDelete(chartId, index) {
     index
   });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
   return chart;
 }
 function moveGraphObjectApi(from, to) {
   const context = appFSM.query("project-api", {
-    operation: "graphs.readData",
+    operation: "graphs.readControls",
     frontendState: interfaceFSM.readState()
   });
   return graphEditorMove(context.chart?.id ?? null, from, to);
 }
 function deleteGraphObjectApi(index) {
   const context = appFSM.query("project-api", {
-    operation: "graphs.readData",
+    operation: "graphs.readControls",
     frontendState: interfaceFSM.readState()
   });
   return graphEditorDelete(context.chart?.id ?? null, index);
 }
 function graphEditorHeaderLines(csvId, value2) {
-  const [result, state, projection] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value2 });
+  const [result] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value2 });
   if (!result.committed) return result;
-  const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"), read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
-  return read.target.headerLines;
+  return appFSM.query("project-api", { operation: "graphs.readControls", csvId }).currentCsv.headerLines;
 }
 function graphEditorSetEditable(slotId, chartId, editable) {
   const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
   return chart.editor.editable;
 }
 function setGraphEditableApi(editable = null) {
-  const state = interfaceFSM.readState(), context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: state });
+  const state = interfaceFSM.readState(), context = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: state });
   if (!context.chart) return null;
   const next = typeof editable === "boolean" ? editable : context.chart.editor.editable === false;
   return graphEditorSetEditable(state.selectedSlotId, context.chart.id, next);
@@ -16979,7 +17125,7 @@ async function importSelectedGraphFile(file, slotId) {
   const [copied] = await prepareCopiedImportFiles([file]), [result, state, projection] = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", {
-    operation: "graphs.readData",
+    operation: "graphs.readControls",
     frontendState: { selectedSlotId: slotId }
   }).chart;
   updateFileAvailability();
@@ -16999,11 +17145,11 @@ function updateGraphLayoutApi(values = {}) {
 function graphEditorApplyPalette(chartId, colors) {
   const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
   return chart;
 }
 function applyGraphPaletteApi(colors) {
-  const context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: interfaceFSM.readState() });
+  const context = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: interfaceFSM.readState() });
   return graphEditorApplyPalette(context.chart?.id ?? null, colors);
 }
 function downloadSlotFfsx(slotId) {
@@ -17257,6 +17403,7 @@ function createPublicApi() {
     }),
     slots: Object.freeze({
       readSelected: readSelectedSlotApi,
+      readDisplay: () => appFSM.query("project-api", { operation: "slots.readDisplay" }),
       select: (slotId, pendingContentType = null, direction = "ui-to-fsm") => setSelectedSlot(slotId, direction, pendingContentType),
       setContentType: setSlotContentType,
       reset: resetSlotApi,
@@ -17266,11 +17413,14 @@ function createPublicApi() {
     }),
     images: Object.freeze({
       readEditor: readImageEditorApi,
+      readSettings: () => appFSM.query("project-api", { operation: "images.readSettings", slotId: interfaceFSM.readState().selectedSlotId }),
       setSettings: applyImageSettingsFromValues,
       insertEmpty: insertEmptyImageIntoSelectedSlot
     }),
     assets: Object.freeze({
       readDeletionTarget: readAssetDeletionTarget,
+      readList: (kind) => appFSM.query("project-api", { operation: "assets.readList", kind }),
+      readPreview: (csvId, start = 0, count = 30) => appFSM.query("project-api", { operation: "assets.readPreview", csvId, start, count }),
       delete: deleteProjectAsset,
       readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
       isTrashed: (path) => appFSM.query("project-api", { operation: "assets.isTrashed", path }),
@@ -17297,6 +17447,8 @@ function createPublicApi() {
     }),
     graphs: Object.freeze({
       readData: readGraphDataApi,
+      readControls: (csvId = null) => appFSM.query("project-api", { operation: "graphs.readControls", csvId, frontendState: interfaceFSM.readState() }),
+      readColumns: (csvId, chartId = null) => appFSM.query("project-api", { operation: "graphs.readColumns", csvId, chartId }),
       readLayout: readGraphLayoutApi,
       readPalette: readGraphPaletteApi,
       selectCsv: graphEditorSelectCsv,
@@ -17326,6 +17478,7 @@ function createPublicApi() {
     }),
     captions: Object.freeze({
       readGlobal: readGlobalCaptionState,
+      readSettings: () => appFSM.query("project-api", { operation: "captions.readSettings" }),
       readSlot: readSlotCaptionState,
       setEnabled: setCaptionsApiEnabled,
       setGlobalText: setGlobalCaptionText,
@@ -17337,6 +17490,7 @@ function createPublicApi() {
     }),
     labels: Object.freeze({
       readState: readLabelsApiState,
+      readSettings: () => appFSM.query("project-api", { operation: "labels.readSettings", slotId: interfaceFSM.readState().selectedSlotId }),
       setEnabled: setLabelsApiEnabled,
       setSettings: setLabelsApiSettings,
       setPosition: setLabelsApiPosition,
@@ -17350,6 +17504,7 @@ function createPublicApi() {
     }),
     layout: Object.freeze({
       readState: readLayoutApiState,
+      readControls: readLayoutApiControls,
       setStyle: setLayoutApiStyle,
       setGrid: setLayoutApiGrid,
       setZoom: setLayoutApiZoom,
@@ -17392,10 +17547,9 @@ function prepareNumericInput(text, current, allowEmpty = false, emptyValue = nul
   return Number.isFinite(number) ? [true, number] : [false, current];
 }
 var UiCommand = class {
-  constructor(readTarget, readValue, prepare, invoke, stepSize = null) {
+  constructor(readCurrent, prepare, invoke, stepSize = null) {
     Object.assign(this, {
-      readTarget,
-      readValue,
+      readCurrent,
       prepare,
       invoke,
       stepSize,
@@ -17411,55 +17565,55 @@ var UiCommand = class {
   }
   input(text, composing = false) {
     if (!this.active || this.running) return this.text;
-    const target = this.readTarget();
-    if (target === null) {
+    const current = this.readCurrent();
+    if (current.target === null) {
       this.cancel();
       return this.text;
     }
-    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
-    if (!this.editing) {
-      this.editTarget = target;
+    if (!this.editing || !sameUiTarget(this.editTarget, current.target)) {
+      this.editTarget = current.target;
       this.editing = true;
     }
     this.text = text;
     this.composing = composing;
     this.changed();
-    return text;
-  }
-  refresh(target) {
-    if (!this.active || !this.readValue || !sameUiTarget(this.readTarget(), target)) return;
-    const value2 = this.readValue(target);
-    this.text = value2 == null ? "" : String(value2);
-    this.changed();
-    return value2;
+    return this.text;
   }
   cancel() {
     this.editing = false;
     this.composing = false;
     this.editTarget = null;
-    this.text = "";
-    const target = this.active ? this.readTarget() : null;
-    const value2 = target !== null && this.readValue ? this.readValue(target) : "";
-    this.text = value2 == null ? "" : String(value2);
+    const current = this.active ? this.readCurrent() : null;
+    this.text = current?.value == null ? "" : String(current.value);
     this.changed();
-    return value2;
+    return this.text;
   }
   send(value2, target = null) {
-    if (!this.active || this.running || appFSM.readState().lifecycle !== "ready") return null;
-    const current = this.readTarget();
-    if (current === null || target !== null && !sameUiTarget(current, target)) return null;
-    if (this.readValue && this.readValue(current) === value2) {
-      this.refresh(current);
+    if (!this.active || this.running) return null;
+    const current = this.readCurrent();
+    return this.sendCurrent(value2, target ?? current.target, current);
+  }
+  sendCurrent(value2, target, current) {
+    if (!this.active || this.running || !current.ready || current.target === null || !sameUiTarget(target, current.target)) return null;
+    if (this.prepare && current.value === value2) {
+      this.text = value2 == null ? "" : String(value2);
+      this.changed();
       return null;
     }
     this.running = true;
     this.changed();
     const settle = (failed, outcome2) => {
       this.running = false;
-      if (this.active) this.changed();
-      let refreshError, refreshFailed = false;
+      let refreshFailed = false, refreshError;
       try {
-        this.refresh(current);
+        if (this.active) {
+          const fresh = this.readCurrent();
+          if (!this.editing && sameUiTarget(fresh.target, target)) {
+            this.text = fresh.value == null ? "" : String(fresh.value);
+            if (this.prepare && fresh.value !== value2) status(`입력값 ${value2} → 적용값 ${fresh.value}`);
+          }
+          this.changed();
+        }
       } catch (error) {
         refreshFailed = true;
         refreshError = error;
@@ -17470,22 +17624,20 @@ var UiCommand = class {
     };
     let outcome;
     try {
-      outcome = this.invoke(current, value2);
+      outcome = this.invoke(target, value2, current.companions);
     } catch (error) {
       return settle(true, error);
     }
-    if (outcome && typeof outcome.then === "function")
-      return Promise.resolve(outcome).then((value3) => settle(false, value3), (error) => settle(true, error));
-    return settle(false, outcome);
+    return outcome && typeof outcome.then === "function" ? Promise.resolve(outcome).then((value3) => settle(false, value3), (error) => settle(true, error)) : settle(false, outcome);
   }
   commit() {
     if (!this.active || !this.editing || this.running || this.composing) return null;
-    const target = this.editTarget;
-    if (appFSM.readState().lifecycle !== "ready" || target === null || !sameUiTarget(this.readTarget(), target)) {
+    const current = this.readCurrent(), target = this.editTarget;
+    if (!current.ready || target === null || !sameUiTarget(current.target, target)) {
       this.cancel();
       return null;
     }
-    const [valid, value2] = this.prepare(this.text, this.readValue(target));
+    const [valid, value2] = this.prepare(this.text, current.value);
     if (!valid) {
       this.cancel();
       status("완성된 숫자를 입력하세요.");
@@ -17493,32 +17645,27 @@ var UiCommand = class {
     }
     this.editing = false;
     this.composing = false;
-    const report = (outcome2) => {
-      if (this.active && sameUiTarget(this.readTarget(), target)) {
-        const applied = this.readValue(target);
-        if (applied !== value2) status(`입력값 ${value2} → 적용값 ${applied}`);
-      }
-      return outcome2;
-    };
-    const outcome = this.send(value2, target);
-    return outcome && typeof outcome.then === "function" ? outcome.then(report) : report(outcome);
+    return this.sendCurrent(value2, target, current);
   }
   step(direction) {
     if (!this.active || this.running || this.composing || this.stepSize === null) return null;
-    const target = this.readTarget();
-    if (target === null) {
+    const current = this.readCurrent();
+    if (!current.ready || current.target === null) {
       this.cancel();
       return null;
     }
-    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
-    let value2 = this.readValue(target);
-    if (this.editing) {
+    let value2 = current.value;
+    if (this.editing && sameUiTarget(this.editTarget, current.target)) {
       const parsed = prepareNumericInput(this.text, value2);
       if (parsed[0]) value2 = parsed[1];
     }
     if (typeof value2 !== "number" || !Number.isFinite(value2)) value2 = 0;
-    this.input(String(value2 + (direction === "increase" ? this.stepSize : -this.stepSize)));
-    return this.commit();
+    value2 += direction === "increase" ? this.stepSize : -this.stepSize;
+    this.text = String(value2);
+    this.editTarget = current.target;
+    this.editing = false;
+    this.composing = false;
+    return this.sendCurrent(value2, current.target, current);
   }
   dispose() {
     this.changed = () => {
@@ -17630,26 +17777,26 @@ function mountMantineUi() {
   function numericBinding(group, field, axis = null) {
     const read = () => {
       const api = window.FastFigureApi, state = appFSM.readState();
-      if (state.lifecycle !== "ready") return null;
+      if (state.lifecycle !== "ready") return { target: null, value: null, companions: null, ready: false };
       let view, target, value2;
       if (group === "image") {
-        view = api.images.readEditor();
+        view = api.images.readSettings();
         target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
         value2 = view?.settings?.[field];
       } else if (group === "csv" || group === "object") {
-        view = api.graphs.readData();
+        view = api.graphs.readControls();
         target = group === "csv" ? view.currentCsv ? [group, view.currentCsv.id] : null : view.chart?.editor?.editable !== false && view.selectedIndex != null ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null;
-        value2 = group === "csv" ? view.currentCsv?.headerLines : view.objects?.[view.selectedIndex]?.[field];
+        value2 = group === "csv" ? view.currentCsv?.headerLines : view.object?.[field];
       } else if (group === "axis" || group === "global") {
         view = api.graphs.readLayout();
         target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
         value2 = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
       } else if (group === "label") {
-        view = api.labels.readState();
+        view = api.labels.readSettings();
         target = state.overlay === "label" ? [group] : null;
         value2 = view.settings[field];
       } else if (group === "caption") {
-        view = api.captions.readGlobal();
+        view = api.captions.readSettings();
         target = state.overlay === "caption" ? [group] : null;
         value2 = view.settings[field];
       } else if (group === "print") {
@@ -17657,36 +17804,39 @@ function mountMantineUi() {
         target = state.overlay === "print" ? [group] : null;
         value2 = field === "height" && view.heightMode !== "explicit" ? null : view[field];
       } else {
-        view = api.layout.readState();
+        view = api.layout.readControls();
         target = state.overlay === "layout" ? [group] : null;
         value2 = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"] : group === "zoom" ? view.zoom : view.slotStyle[field];
       }
       if (typeof value2 === "string" && value2.trim() && Number.isFinite(Number(value2))) value2 = Number(value2);
-      return { target: target === null ? null : [...target, field], value: value2, view };
+      return {
+        target: target === null ? null : [...target, field],
+        value: value2,
+        ready: true,
+        companions: group === "grid" ? { gridRows: view.gridRows, gridCols: view.gridCols, gridLimits: view.gridLimits } : group === "label" ? { x: view.settings.x, y: view.settings.y } : null
+      };
     };
     const allowEmpty = group === "axis" && ["min", "max", "tick"].includes(field) || group === "global" || group === "print" && field === "height";
     return {
-      readTarget: () => read()?.target ?? null,
-      readValue: () => read()?.value,
+      readCurrent: read,
       prepare: (text, current) => prepareNumericInput(
         text,
         current,
         allowEmpty,
         group === "print" && field === "height" ? null : ""
       ),
-      invoke: (target, value2) => {
-        const api = window.FastFigureApi, current = read();
-        if (!current || !sameUiTarget(current.target, target)) return null;
+      invoke: (target, value2, companions) => {
+        const api = window.FastFigureApi;
         if (group === "image") return api.images.setSettings(target[1], { [field]: value2 });
         if (group === "csv") return api.graphs.setHeaderLines(target[1], value2);
         if (group === "object") return api.graphs.setObjectValues(target[2], target[3], { [field]: value2 });
-        if (group === "axis") return updateSelectedGraphLayout({ axisKey: axis, axisValues: { [field]: String(value2) } });
-        if (group === "global") return updateSelectedGraphLayout({ globalSettings: { [field]: String(value2) } });
-        if (group === "label") return ["x", "y"].includes(field) ? api.labels.setPosition(field === "x" ? value2 : current.view.settings.x, field === "y" ? value2 : current.view.settings.y) : api.labels.setSettings({ [field]: value2 });
+        if (group === "axis") return api.graphs.updateLayout(target[1], target[2], { axisKey: axis, axisValues: { [field]: String(value2) } });
+        if (group === "global") return api.graphs.updateLayout(target[1], target[2], { globalSettings: { [field]: String(value2) } });
+        if (group === "label") return ["x", "y"].includes(field) ? api.labels.setPosition(field === "x" ? value2 : companions.x, field === "y" ? value2 : companions.y) : api.labels.setSettings({ [field]: value2 });
         if (group === "caption") return api.captions.setSettings({ [field]: value2 });
         if (group === "print") return api.print.setSettings(field === "height" ? { heightMode: value2 === null ? "auto" : "explicit", height: value2 } : { [field]: value2 });
         if (group === "grid") {
-          const layout2 = current.view, bounds = layout2.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
+          const layout2 = companions, bounds = layout2.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
           value2 = Math.max(bounds[0], Math.min(bounds[1], value2));
           return api.layout.setGrid(field === "rows" ? value2 : layout2.gridRows, field === "cols" ? value2 : layout2.gridCols);
         }
@@ -17695,34 +17845,35 @@ function mountMantineUi() {
       }
     };
   }
+  function useControlSnapshot(readCurrent) {
+    const ref = useRef(readCurrent);
+    ref.current = readCurrent;
+    const snapshot = React.useCallback(() => JSON.stringify(ref.current()), []);
+    return JSON.parse(useSyncExternalStore(subscribeAppState, snapshot, snapshot));
+  }
   function useUiCommand(binding, stepSize = null) {
     const [, render] = useState(0), ref = useRef(null);
-    if (!ref.current) ref.current = new UiCommand(binding.readTarget, binding.readValue, binding.prepare, binding.invoke, stepSize);
+    if (!ref.current) ref.current = new UiCommand(binding.readCurrent, binding.prepare, binding.invoke, stepSize);
     const command = ref.current;
     Object.assign(command, binding, { stepSize });
     command.changed = () => render((value2) => value2 + 1);
-    const state = useAppState(), target = JSON.stringify(command.readTarget());
+    const current = useControlSnapshot(binding.readCurrent), target = JSON.stringify(current.target);
     useEffect(() => {
       command.cancel();
-    }, [target, state.lifecycle]);
+    }, [target, current.ready]);
     useEffect(() => {
       command.active = true;
       command.changed = () => render((value2) => value2 + 1);
-      const unsubscribe = appFSM.subscribe(() => {
-        if (appFSM.readState().lifecycle !== "ready" || command.editing && !sameUiTarget(command.editTarget, command.readTarget())) command.cancel();
-      });
-      return () => {
-        unsubscribe();
-        command.dispose();
-      };
+      return () => command.dispose();
     }, []);
+    command.displayCurrent = current;
     return command;
   }
   function CommandNumberInput({ command: descriptor, onApplied, ...props }) {
     const [group, field, axis] = descriptor, binding = numericBinding(group, field, axis);
     const invoke = binding.invoke;
-    binding.invoke = (target, value3) => {
-      const outcome = invoke(target, value3);
+    binding.invoke = (target, value3, companions) => {
+      const outcome = invoke(target, value3, companions);
       const applied = (result) => {
         if (result !== false && result != null) onApplied?.(result);
         return result;
@@ -17739,12 +17890,12 @@ function mountMantineUi() {
         reportTaskError("UI_COMMAND", error);
       }
     };
-    const editing = command.editing && sameUiTarget(command.editTarget, command.readTarget());
+    const editing = command.editing && sameUiTarget(command.editTarget, command.displayCurrent.target);
     const control = React.createElement(TextInput, {
       ...inputProps,
       type: "text",
       inputMode: "decimal",
-      value: editing ? command.text : binding.readValue() ?? "",
+      value: editing ? command.text : command.displayCurrent.value ?? "",
       disabled: props.disabled || command.running,
       onChange: (event) => command.input(event.currentTarget.value, event.nativeEvent.isComposing),
       onCompositionStart: () => {
@@ -17783,7 +17934,12 @@ function mountMantineUi() {
       const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
       return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
     };
-    const command = useUiCommand({ readTarget, readValue: null, prepare: null, invoke: (_target, event) => onClick?.(event) });
+    const command = useUiCommand({ readCurrent: () => ({
+      target: readTarget(),
+      value: null,
+      companions: null,
+      ready: appFSM.readState().lifecycle === "ready"
+    }), prepare: null, invoke: (_target, event) => onClick?.(event) });
     return React.createElement(control, {
       ...props,
       ref: controlRef,
@@ -17883,7 +18039,16 @@ function mountMantineUi() {
     return appFSM.subscribe(onStoreChange);
   }
   function getAppStateSnapshot() {
-    return appFSM.readState().revision;
+    const state = appFSM.readState();
+    return JSON.stringify([
+      state.lifecycle,
+      state.workspace,
+      state.overlay,
+      state.selectedSlotId,
+      state.assetSelection,
+      state.assetPath,
+      state.graphObjectIndex
+    ]);
   }
   function useAppState() {
     useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
@@ -17892,21 +18057,21 @@ function mountMantineUi() {
   function addSelectedGraphObject() {
     const current = appFSM.readState();
     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
-    const context = window.FastFigureApi.graphs.readData();
+    const context = window.FastFigureApi.graphs.readControls();
     if (!context.currentCsv || context.chart?.editor.editable === false) return null;
     return window.FastFigureApi.graphs.addObject(current.selectedSlotId, context.currentCsv.id);
   }
   function setSelectedGraphEditable(editable) {
     const current = appFSM.readState();
     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
-    const context = window.FastFigureApi.graphs.readData();
+    const context = window.FastFigureApi.graphs.readControls();
     if (!context.chart) return null;
     return window.FastFigureApi.graphs.setEditable(current.selectedSlotId, context.chart.id, editable);
   }
   function updateSelectedGraphLayout(values) {
     const current = appFSM.readState();
     if (current.lifecycle !== "ready" || current.selectedSlotId == null) return null;
-    const context = window.FastFigureApi.graphs.readData();
+    const context = window.FastFigureApi.graphs.readControls();
     if (!context.chart || context.chart.editor.editable === false) return null;
     return window.FastFigureApi.graphs.updateLayout(current.selectedSlotId, context.chart.id, values);
   }
@@ -18010,6 +18175,7 @@ function mountMantineUi() {
   }
   function FastFigureToolbar() {
     const state = useAppState();
+    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
     const activeOverlay = state.overlay;
     const buttonProps = (overlay) => ({
       variant: activeOverlay === overlay ? "filled" : "light",
@@ -18037,6 +18203,7 @@ function mountMantineUi() {
   }
   function FastFigureDataActions() {
     const state = useAppState();
+    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
     const busy = state.lifecycle !== "ready";
     const slotApi = window.FastFigureApi.slots;
     const slot = state.workspace === "project" ? null : slotApi.readSelected();
@@ -18205,6 +18372,7 @@ function mountMantineUi() {
   }
   function FastFigureImageEditor() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.image" ? window.FastFigureApi.images.readEditor() : null);
     if (state.workspace !== "slot.image") return null;
     const busy = state.lifecycle !== "ready";
     const imageApi = window.FastFigureApi.images;
@@ -18295,11 +18463,12 @@ function mountMantineUi() {
   }
   function readProjectAssetDisplay() {
     const assetNodes = window.FastFigureApi.assets.readTree();
-    const slotRows = window.FastFigureApi.layout.readState().visibleSlots;
+    const slotRows = window.FastFigureApi.slots.readDisplay();
     return { assetNodes, slotRows };
   }
   function FastFigureProjectDataTree() {
     const state = useAppState();
+    useControlSnapshot(() => [window.FastFigureApi.assets.readTree(), window.FastFigureApi.slots.readDisplay()]);
     const assetApi = window.FastFigureApi.assets;
     const { assetNodes, slotRows } = readProjectAssetDisplay();
     const snapshot = {
@@ -18308,8 +18477,8 @@ function mountMantineUi() {
         id: node.id,
         name: node.name,
         path: node.path,
-        readable: Array.isArray(node.asset.rows),
-        rowCount: Math.max(0, node.asset.rows.length - (Number(node.asset.headerLines) || 0))
+        readable: true,
+        rowCount: node.rowCount
       })),
       images: assetNodes.filter((node) => node.kind === "image").map((node) => ({
         id: node.id,
@@ -18317,7 +18486,7 @@ function mountMantineUi() {
         path: node.path
       }))
     };
-    const selectedSlotId = window.FastFigureApi.slots.readSelected()?.id;
+    const selectedSlotId = state.selectedSlotId;
     const assetTreeController = useTree({
       initialExpandedState: { "/assets": true }
     });
@@ -18352,9 +18521,8 @@ function mountMantineUi() {
     };
     const trashSelected = state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
     const trash = assetApi.readTrash();
-    const trashHasContents = !!trash?.children.length;
-    const countTrashReferences = (node) => node.kind === "directory" ? node.children.reduce((count, child) => count + countTrashReferences(child), 0) : assetApi.readDeletionTarget(node.path)?.referenceCount ?? 0;
-    const trashReferenceCount = trash ? countTrashReferences(trash) : 0;
+    const trashHasContents = trash ? !trash.empty : false;
+    const trashReferenceCount = trash?.referenceCount ?? 0;
     const openTrashDialog = () => {
       if (!trashSelected || !trashHasContents) return;
       setTrashDialog({ referenceCount: trashReferenceCount });
@@ -18400,7 +18568,8 @@ function mountMantineUi() {
         status(`프로젝트 항목 이동 오류: ${error.message}`);
       }
     };
-    const assetReferenceCount = (path) => assetApi.readDeletionTarget(path)?.referenceCount ?? 0;
+    const referenceCounts = new Map(assetNodes.map((node) => [node.path, node.referenceCount ?? 0]));
+    const assetReferenceCount = (path) => referenceCounts.get(path) ?? 0;
     const dataByPath = new Map(
       snapshot.data.map((asset) => [asset.path, { kind: "csv", asset }])
     );
@@ -18913,6 +19082,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureProjectActions() {
     const state = useAppState();
+    useControlSnapshot(() => window.FastFigureApi.project.readName());
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     const projectApi = window.FastFigureApi.project;
@@ -18981,6 +19151,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureGraphDataEditor() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readData(), window.FastFigureApi.assets.readList("csv")] : null);
     const busy = state.lifecycle !== "ready";
     const dragRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
@@ -18988,14 +19159,14 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const assetApi = window.FastFigureApi.assets;
     const editor = graphApi.readData();
     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
-    const csvAssets = assetApi.readTree().filter((node) => node.kind === "csv").map((node) => node.asset);
+    const csvAssets = assetApi.readList("csv");
     const csvOptions = csvAssets.map((csv) => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
     const activeCsv = editor.currentCsv;
-    const columns = editor.columns;
-    const objectColumns = editor.objectColumns || [];
+    const columns = activeCsv ? graphApi.readColumns(activeCsv.id) : [];
+    const objectColumns = selected ? graphApi.readColumns(selected.csvId, chartId) : [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
@@ -19041,7 +19212,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         label: "헤더 행 수",
         value: activeCsv.headerLines,
         min: 0,
-        max: activeCsv.rows.length,
+        max: activeCsv.rowCount,
         allowDecimal: false,
         disabled: busy,
         command: ["csv", "headerLines"]
@@ -19066,7 +19237,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           React.createElement(
             TableTbody,
             null,
-            ...activeCsv.rows.slice(0, 30).map(
+            ...(assetApi.readPreview(activeCsv.id, 0, 30)?.rows ?? []).map(
               (row, rowIndex) => React.createElement(
                 TableTr,
                 { key: rowIndex },
@@ -19092,7 +19263,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           variant: editable ? "filled" : "light",
           disabled: busy || chartId === null,
           onClick: () => {
-            const context = graphApi.readData();
+            const context = graphApi.readControls();
             if (context.chart) return setSelectedGraphEditable(!context.chart.editor.editable);
           }
         }, editable ? "편집 가능" : "원본 JSON"),
@@ -19226,6 +19397,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureGraphLayoutEditor() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? window.FastFigureApi.graphs.readLayout() : null);
     const busy = state.lifecycle !== "ready";
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
@@ -19401,11 +19573,12 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureGraphPaletteActions() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readControls(), window.FastFigureApi.graphs.readPalette()] : null);
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readData(), colors = graphApi.readPalette();
+    const editor = graphApi.readControls(), colors = graphApi.readPalette();
     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
     const commitColors = (colors2) => graphApi.applyPalette(editor.chart?.id ?? null, colors2);
     const resetPalette = () => {
@@ -19879,6 +20052,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureLabelOverlay() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().overlay === "label" ? window.FastFigureApi.labels.readState() : null);
     const previewRef = useRef(null);
     const dragRef = useRef(null);
     const [, setPreviewRevision] = useState(0);
@@ -20079,6 +20253,13 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   function FastFigureCaptionOverlay() {
     const state = useAppState();
     const [targetMode, setTargetMode] = useState("global");
+    useControlSnapshot(() => {
+      const current = appFSM.readState();
+      return current.overlay === "caption" ? [
+        window.FastFigureApi.captions.readGlobal(),
+        targetMode === "slot" && current.selectedSlotId != null ? window.FastFigureApi.captions.readSlot(current.selectedSlotId) : null
+      ] : null;
+    });
     useEffect(() => {
       if (state.overlay !== "caption") setTargetMode("global");
     }, [state.overlay]);
@@ -20209,6 +20390,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigurePrintOverlay() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().overlay === "print" ? window.FastFigureApi.print.readSettings() : null);
     const printApi = window.FastFigureApi.print;
     const initial = printApi.readSettings();
     const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
@@ -20305,6 +20487,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureLayoutOverlay() {
     const state = useAppState();
+    useControlSnapshot(() => appFSM.readState().overlay === "layout" ? window.FastFigureApi.layout.readControls() : null);
     const [layoutSelection, setLayoutSelection] = useState(() => /* @__PURE__ */ new Set());
     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
     const previewFrameRef = useRef(null);
@@ -20693,63 +20876,65 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   });
   function FastFigureApp() {
     useAppState();
-    const palette = window.FastFigureApi.appearance.readPalette();
-    const theme = createTheme({
+    const palette = useControlSnapshot(() => window.FastFigureApi.appearance.readPalette());
+    const paletteKey = JSON.stringify(palette);
+    const theme = useMemo(() => createTheme({
       ...fastFigureTheme,
       colors: { ffui: Array(10).fill(palette.uiColor) },
       primaryColor: "ffui"
-    });
+    }), [paletteKey]);
     const channels = [1, 3, 5].map((index) => {
       const value2 = parseInt(palette.uiColor.slice(index, index + 2), 16) / 255;
       return value2 <= 0.04045 ? value2 / 12.92 : ((value2 + 0.055) / 1.055) ** 2.4;
     });
     const contrast = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2] > 0.179 ? "#000000" : "#FFFFFF";
+    const cssVariablesResolver = useMemo(() => (theme2) => ({
+      variables: {
+        "--ff-header-height": `${theme2.other.shell.headerHeight}px`,
+        "--ff-navbar-width": `${theme2.other.shell.navbarWidth}px`,
+        ...Object.fromEntries(
+          Object.entries(theme2.shadows).map(([size, shadow]) => [
+            `--mantine-shadow-${size}`,
+            shadow.replace(
+              /rgba\(0, 0, 0, (0?\.\d+)\)/g,
+              (_match, opacity) => `color-mix(in srgb, ${palette.uiShadowColor} ${Number(opacity) * 100}%, transparent)`
+            )
+          ])
+        )
+      },
+      light: {
+        "--mantine-color-body": palette.uiBackgroundColor,
+        "--mantine-color-text": palette.fontColor,
+        "--mantine-color-default": palette.uiSurfaceColor,
+        "--mantine-color-default-hover": `color-mix(in srgb, ${palette.uiColor} 12%, ${palette.uiSurfaceColor})`,
+        "--mantine-color-default-color": palette.fontColor,
+        "--mantine-color-default-border": palette.uiColor,
+        "--mantine-color-dimmed": palette.uiMutedColor,
+        "--mantine-color-placeholder": palette.uiSubtleColor,
+        "--mantine-color-disabled": palette.uiDisabledBgColor,
+        "--mantine-color-disabled-color": palette.uiDisabledTextColor,
+        "--mantine-color-disabled-border": palette.uiDisabledBgColor,
+        "--mantine-primary-color-filled": palette.uiColor,
+        "--mantine-primary-color-filled-hover": `color-mix(in srgb, ${palette.uiColor} 75%, #64748b)`,
+        "--mantine-primary-color-light": `color-mix(in srgb, ${palette.uiColor} 18%, transparent)`,
+        "--mantine-primary-color-light-hover": `color-mix(in srgb, ${palette.uiColor} 24%, transparent)`,
+        "--mantine-primary-color-light-color": palette.fontColor,
+        "--mantine-primary-color-contrast": contrast,
+        "--mantine-color-ffui-filled": "var(--mantine-primary-color-filled)",
+        "--mantine-color-ffui-filled-hover": "var(--mantine-primary-color-filled-hover)",
+        "--mantine-color-ffui-light": "var(--mantine-primary-color-light)",
+        "--mantine-color-ffui-light-hover": "var(--mantine-primary-color-light-hover)",
+        "--mantine-color-ffui-light-color": "var(--mantine-primary-color-light-color)",
+        "--mantine-color-ffui-contrast": "var(--mantine-primary-color-contrast)"
+      },
+      dark: {}
+    }), [paletteKey]);
     return React.createElement(
       MantineProvider,
       {
         defaultColorScheme: "light",
         theme,
-        cssVariablesResolver: (theme2) => ({
-          variables: {
-            "--ff-header-height": `${theme2.other.shell.headerHeight}px`,
-            "--ff-navbar-width": `${theme2.other.shell.navbarWidth}px`,
-            ...Object.fromEntries(
-              Object.entries(theme2.shadows).map(([size, shadow]) => [
-                `--mantine-shadow-${size}`,
-                shadow.replace(
-                  /rgba\(0, 0, 0, (0?\.\d+)\)/g,
-                  (_match, opacity) => `color-mix(in srgb, ${palette.uiShadowColor} ${Number(opacity) * 100}%, transparent)`
-                )
-              ])
-            )
-          },
-          light: {
-            "--mantine-color-body": palette.uiBackgroundColor,
-            "--mantine-color-text": palette.fontColor,
-            "--mantine-color-default": palette.uiSurfaceColor,
-            "--mantine-color-default-hover": `color-mix(in srgb, ${palette.uiColor} 12%, ${palette.uiSurfaceColor})`,
-            "--mantine-color-default-color": palette.fontColor,
-            "--mantine-color-default-border": palette.uiColor,
-            "--mantine-color-dimmed": palette.uiMutedColor,
-            "--mantine-color-placeholder": palette.uiSubtleColor,
-            "--mantine-color-disabled": palette.uiDisabledBgColor,
-            "--mantine-color-disabled-color": palette.uiDisabledTextColor,
-            "--mantine-color-disabled-border": palette.uiDisabledBgColor,
-            "--mantine-primary-color-filled": palette.uiColor,
-            "--mantine-primary-color-filled-hover": `color-mix(in srgb, ${palette.uiColor} 75%, #64748b)`,
-            "--mantine-primary-color-light": `color-mix(in srgb, ${palette.uiColor} 18%, transparent)`,
-            "--mantine-primary-color-light-hover": `color-mix(in srgb, ${palette.uiColor} 24%, transparent)`,
-            "--mantine-primary-color-light-color": palette.fontColor,
-            "--mantine-primary-color-contrast": contrast,
-            "--mantine-color-ffui-filled": "var(--mantine-primary-color-filled)",
-            "--mantine-color-ffui-filled-hover": "var(--mantine-primary-color-filled-hover)",
-            "--mantine-color-ffui-light": "var(--mantine-primary-color-light)",
-            "--mantine-color-ffui-light-hover": "var(--mantine-primary-color-light-hover)",
-            "--mantine-color-ffui-light-color": "var(--mantine-primary-color-light-color)",
-            "--mantine-color-ffui-contrast": "var(--mantine-primary-color-contrast)"
-          },
-          dark: {}
-        })
+        cssVariablesResolver
       },
       React.createElement(FastFigureShell)
     );

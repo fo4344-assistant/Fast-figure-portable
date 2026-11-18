@@ -27,14 +27,14 @@ export function graphEditorObjectValues(chartId, index, values = {}) {
     chartId, operation: "graphs.setObjectValues", index, values,
   });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
 
   return chart;
 }
 
 export function setGraphObjectValuesApi(index, values = {}) {
   const context = appFSM.query("project-api", {
-    operation: "graphs.readData", frontendState: interfaceFSM.readState(),
+    operation: "graphs.readControls", frontendState: interfaceFSM.readState(),
   });
   return graphEditorObjectValues(context.chart?.id ?? null, index, values);
 }
@@ -45,7 +45,7 @@ export function graphEditorAdd(slotId, csvId) {
   const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED",
     [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: { selectedSlotId: slotId } }).chart;
 
   return chart;
 }
@@ -53,7 +53,7 @@ export function graphEditorAdd(slotId, csvId) {
 export function addGraphObjectApi(csvId) {
   const state = interfaceFSM.readState();
   if (csvId === undefined) csvId = appFSM.query("project-api", {
-    operation: "graphs.readData", frontendState: state,
+    operation: "graphs.readControls", frontendState: state,
   }).currentCsv?.id;
   return graphEditorAdd(state.selectedSlotId, csvId);
 }
@@ -66,7 +66,7 @@ export function graphEditorMove(chartId, from, to) {
     chartId, operation: "graphs.moveObject", from, to,
   });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
 
   return chart;
 }
@@ -76,45 +76,42 @@ export function graphEditorDelete(chartId, index) {
     chartId, operation: "graphs.deleteObject", index,
   });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
 
   return chart;
 }
 
 export function moveGraphObjectApi(from, to) {
   const context = appFSM.query("project-api", {
-    operation: "graphs.readData", frontendState: interfaceFSM.readState(),
+    operation: "graphs.readControls", frontendState: interfaceFSM.readState(),
   });
   return graphEditorMove(context.chart?.id ?? null, from, to);
 }
 
 export function deleteGraphObjectApi(index) {
   const context = appFSM.query("project-api", {
-    operation: "graphs.readData", frontendState: interfaceFSM.readState(),
+    operation: "graphs.readControls", frontendState: interfaceFSM.readState(),
   });
   return graphEditorDelete(context.chart?.id ?? null, index);
 }
 
 export function graphEditorHeaderLines(csvId, value) {
-  const [result, state, projection] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
+  const [result] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value });
   if (!result.committed) return result;
-  const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
-    read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
-
-  return read.target.headerLines;
+  return appFSM.query("project-api", { operation: "graphs.readControls", csvId }).currentCsv.headerLines;
 }
 
 export function graphEditorSetEditable(slotId, chartId, editable) {
   const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
 
   return chart.editor.editable;
 }
 
 export function setGraphEditableApi(editable = null) {
   const state = interfaceFSM.readState(),
-    context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: state });
+    context = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: state });
   if (!context.chart) return null;
   const next = typeof editable === "boolean" ? editable : context.chart.editor.editable === false;
   return graphEditorSetEditable(state.selectedSlotId, context.chart.id, next);
@@ -143,7 +140,7 @@ export async function importSelectedGraphFile(file, slotId) {
     [result, state, projection] = dispatchProjectCommand("SLOT_CHART_IMPORTED", { slotId, file: copied });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", {
-    operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
+    operation: "graphs.readControls", frontendState: { selectedSlotId: slotId },
   }).chart;
   updateFileAvailability();
   status(`${file.name}을 슬롯에 불러왔습니다.`);
@@ -167,13 +164,13 @@ export function updateGraphLayoutApi(values = {}) {
 export function graphEditorApplyPalette(chartId, colors) {
   const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
   if (!result.committed) return result;
-  const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+  const chart = appFSM.query("project-api", { operation: "graphs.readControls", chartId }).chart;
 
   return chart;
 }
 
 export function applyGraphPaletteApi(colors) {
-  const context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: interfaceFSM.readState() });
+  const context = appFSM.query("project-api", { operation: "graphs.readControls", frontendState: interfaceFSM.readState() });
   return graphEditorApplyPalette(context.chart?.id ?? null, colors);
 }
 

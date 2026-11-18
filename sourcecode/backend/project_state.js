@@ -278,6 +278,8 @@ export class ProjectObjectRegistry {
 const BACKEND_QUERY_KINDS = new Set(["project-api", "slot-selection-context",
   "interface-reconciliation", "renderer", "export"]);
 const PUBLIC_BACKEND_READ_OPERATIONS = new Set([
+  "slots.readDisplay", "images.readSettings", "graphs.readControls", "graphs.readColumns",
+  "assets.readList", "assets.readPreview", "layout.readControls", "captions.readSettings", "labels.readSettings",
   "project.readName", "slots.readSelected", "images.readEditor", "print.readSettings", "appearance.readPalette",
   "graphs.readData", "graphs.readLayout", "graphs.readPalette", "graphs.hasSelectedSlot", "graphs.defaultColors",
   "captions.readGlobal", "captions.readSlot", "labels.readState", "layout.readState", "assets.readTree",
@@ -309,24 +311,105 @@ function buildSlotAssetDisplay(slot, source) {
       if (display.assets.length) display.kind = "assets";
     }
   }
-  return immutableProjectCopy(display);
+  return display;
 }
 
-function buildBackendVfsTree(source) {
-  const nodes = new Map(source.fileSystem.directories.map(path => [path, {
-    kind: "directory", path, name: projectPathName(path), children: [],
-  }]));
-  for (const [kind, assets] of [["csv", source.assets.csvFiles], ["image", source.assets.images]]) {
-    for (const asset of assets) {
-      const path = projectAssetPath(asset);
-      nodes.set(path, { kind, path, id: asset.id, name: asset.name, asset: structuredClone(asset) });
-    }
+const GRAPH_OBJECT_FIELDS = ['csvId','x','y','xAxisSide','yAxisSide','type','color','legendName','lineWidth','lineDash','markerSymbol','markerSize','barOpacity','barLineWidth'];
+function csvMetadata(csv) {
+  return csv ? { id: csv.id, path: projectAssetPath(csv), name: csv.name,
+    headerLines: csv.headerLines, rowCount: csv.rows.length } : null;
+}
+function graphEditorRead(source, request, controls = false) {
+  const state = request.frontendState || {}, slot = request.chartId != null
+    ? resolveOwningSlot(request.chartId, source)
+    : source.slots.find(item => item.id === state.selectedSlotId && !item.hidden);
+  const chart = slot && !slot.hidden && slot.content.contentType === 'graph'
+    ? source.charts.find(item => item.id === slot.content.chart) : null;
+  const objects = chart?.editor?.objects || [], index = state.graphObjectIndex;
+  const selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index)
+    && index >= 0 && index < objects.length ? index : null;
+  const node = state.assetSelection === 'csv' && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null;
+  const csv = request.csvId != null ? source.assets.csvFiles.find(item => item.id === request.csvId)
+    : node?.kind === 'csv' ? node.asset : null;
+  const compactObject = object => object ? Object.fromEntries(GRAPH_OBJECT_FIELDS.map(key => [key, object[key]])) : null;
+  const compactChart = chart ? { id: chart.id, editor: { title: chart.editor.title, editable: chart.editor.editable } } : null;
+  return controls ? { slotId: slot?.id ?? null, chartId: chart?.id ?? null, title: chart?.editor.title ?? '',
+    editable: chart ? chart.editor.editable !== false : false, chart: compactChart, selectedIndex,
+    object: selectedIndex === null ? null : compactObject(objects[selectedIndex]), currentCsv: csvMetadata(csv) }
+    : { chart: compactChart, objects: objects.map(compactObject), selectedIndex, currentCsv: csvMetadata(csv) };
+}
+function assetMetadata(asset, kind, referenceCount = 0) {
+  return { kind, id: asset.id, path: projectAssetPath(asset), name: asset.name, referenceCount,
+    ...(kind === 'csv' ? { rowCount: Math.max(0, asset.rows.length - asset.headerLines) } : {}) };
+}
+function buildBackendVfsTree(source, root = null) {
+  const directories = source.fileSystem.directories.filter(path => root === null || projectPathInDirectory(path, root));
+  const nodes = new Map(directories.map(path => [path, { kind: 'directory', path,
+    name: projectPathName(path), children: [] }]));
+  const assets = [['csv', source.assets.csvFiles], ['image', source.assets.images]].map(([kind, values]) =>
+    [kind, values.filter(asset => root === null || projectPathInDirectory(projectAssetPath(asset), root))]);
+  const references = collectAssetReferences(new Set(assets[0][1].map(asset => asset.id)),
+    new Set(assets[1][1].map(asset => asset.id)), source), counts = new Map();
+  for (const ref of references) {
+    const key = `${ref.kind}:${ref.assetId}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const [kind, values] of assets) for (const asset of values) {
+    const node = assetMetadata(asset, kind, counts.get(`${kind}:${asset.id}`) || 0);
+    nodes.set(node.path, node);
   }
   for (const node of nodes.values()) {
     const parent = nodes.get(projectParentPath(node.path));
     if (parent && parent !== node) parent.children.push(node);
   }
   return nodes;
+}
+function readPurposeProjection(source, request) {
+  const operation = request.operation;
+  if (operation === 'graphs.readControls') return graphEditorRead(source, request, true);
+  if (operation === 'graphs.readColumns') {
+    if (request.csvId != null) {
+      const csv = source.assets.csvFiles.find(item => item.id === request.csvId);
+      return csv ? columnDefinitions(csv.rows, csv.headerLines) : [];
+    }
+    const slot = request.chartId == null ? null : resolveOwningSlot(request.chartId, source);
+    const chart = slot && !slot.hidden ? source.charts.find(item => item.id === request.chartId) : null;
+    return chart?.editor.editable === false && Array.isArray(chart.editor.conversionRows)
+      ? columnDefinitions(chart.editor.conversionRows, 1) : [];
+  }
+  if (operation === 'assets.readList') {
+    if (!['csv', 'image'].includes(request.kind)) throw Error('지원하지 않는 자산 종류입니다.');
+    return (request.kind === 'csv' ? source.assets.csvFiles : source.assets.images)
+      .map(asset => ({ id: asset.id, path: projectAssetPath(asset), name: asset.name }));
+  }
+  if (operation === 'assets.readPreview') {
+    const start = Object.hasOwn(request, 'start') ? request.start : 0,
+      count = Object.hasOwn(request, 'count') ? request.count : 30;
+    if (!Number.isInteger(start) || start < 0 || !Number.isInteger(count) || count < 1 || count > 30)
+      throw Error('미리보기 범위가 올바르지 않습니다.');
+    const csv = source.assets.csvFiles.find(item => item.id === request.csvId);
+    return csv ? { csvId: csv.id, headerLines: csv.headerLines, rowCount: csv.rows.length, start,
+      rows: csv.rows.slice(start, start + count) } : null;
+  }
+  if (operation === 'slots.readDisplay') return source.slots.filter(slot => !slot.hidden).map(slot => ({
+    id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
+    assetDisplay: buildSlotAssetDisplay(slot, source) }));
+  if (operation === 'layout.readControls') return { gridRows: source.layout.gridRows,
+    gridCols: source.layout.gridCols, gridLimits: BackendSettings.defaults.limits.layout,
+    slotStyle: source.layout.slotStyle };
+  if (operation === 'captions.readSettings' || operation === 'labels.readSettings') {
+    const value = operation === 'captions.readSettings' ? source.annotations.captions : source.annotations.labels;
+    return { enabled: value.enabled, settings: value.settings,
+      ...(operation === 'labels.readSettings' ? { selectedSlotId: request.slotId ?? null } : {}) };
+  }
+  if (operation === 'images.readSettings') {
+    const slot = source.slots.find(item => item.id === request.slotId && !item.hidden && item.content.contentType === 'image');
+    if (!slot) return null;
+    const image = source.assets.images.find(item => item.id === slot.content.imageId);
+    return { slotId: slot.id, imageId: image?.id ?? null, name: image?.name ?? '',
+      settings: slot.content.imageSettings };
+  }
+  throw Error('알 수 없는 목적별 조회입니다.');
 }
 
 export function readBackendProjection(kind, request = {}) {
@@ -337,6 +420,10 @@ export function readBackendProjection(kind, request = {}) {
     return readBackendProjection("export", request);
   if (kind === "interface-reconciliation")
     return buildFrontendReconciliationInput(request.event, request.mutationResult, request.frontendReferences);
+  if (kind === "project-api" && ["slots.readDisplay", "images.readSettings", "graphs.readControls",
+      "graphs.readColumns", "assets.readList", "assets.readPreview", "layout.readControls",
+      "captions.readSettings", "labels.readSettings"].includes(request.operation))
+    return immutableProjectCopy(readPurposeProjection(activeProject._state, request));
   if (kind === "project-api" && request.operation === "project.readName")
     return activeProject._state.meta.projectName;
   if ((kind === "project-api" && request.operation === "appearance.readPalette") ||
@@ -415,8 +502,12 @@ export function readBackendProjection(kind, request = {}) {
     const references = collectAssetReferences(
       new Set(node.kind === "csv" ? [node.asset.id] : []),
       new Set(node.kind === "image" ? [node.asset.id] : []), source);
-    return immutableProjectCopy({ target: node.asset, kind: node.kind,
-      path: projectAssetPath(node.asset), referenceCount: references.length, references });
+    return immutableProjectCopy({ target: { kind: node.kind, id: node.asset.id,
+      path: projectAssetPath(node.asset), name: node.asset.name }, kind: node.kind,
+      path: projectAssetPath(node.asset), referenceCount: references.length,
+      references: references.map(ref => ({ kind: ref.kind,
+        slotId: ref.kind === "csv" ? resolveOwningSlot(ref.chartId, source)?.id ?? null : ref.slotId,
+        chartId: ref.chartId ?? null, objectIndex: ref.originalObjectIndex ?? null })) });
   }
   if (kind === "project-api" && request.operation === "slots.readSelected") {
     const source = activeProject._state,
@@ -426,8 +517,10 @@ export function readBackendProjection(kind, request = {}) {
       content: slot.content, caption: slot.caption }) : null;
   }
   if (kind === "project-api" && request.operation === "assets.readTrash") {
-    const source = activeProject._state, tree = buildBackendVfsTree(source);
-    return immutableProjectCopy(tree.get(BackendSettings.defaults.vfs.trash) ?? null);
+    const source = activeProject._state, root = BackendSettings.defaults.vfs.trash,
+      tree = buildBackendVfsTree(source, root), node = tree.get(root);
+    return immutableProjectCopy(node ? { ...node, empty: node.children.length === 0,
+      referenceCount: [...tree.values()].reduce((sum, item) => sum + (item.referenceCount || 0), 0) } : null);
   }
   if (kind === "project-api" && request.operation === "assets.readTree") {
     const source = activeProject._state;
@@ -450,23 +543,8 @@ export function readBackendProjection(kind, request = {}) {
     return chart ? immutableProjectCopy({ chartId: chart.id, editable: chart.editor?.editable !== false,
       title: chart.editor?.title ?? "", settings: normalizeGraphLayoutSettings(chart.editor?.globalSettings) }) : null;
   }
-  if (kind === "project-api" && request.operation === "graphs.readData") {
-    const source = activeProject._state, state = request.frontendState || {},
-      slot = Object.hasOwn(request, "chartId") ? resolveOwningSlot(request.chartId, source)
-        : source.slots.find((item) => item.id === state.selectedSlotId && !item.hidden),
-      chartId = slot?.content.chart,
-      chart = slot && slot.content.contentType === "graph"
-        ? source.charts.find((item) => item.id === chartId) || null : null,
-      objects = chart?.editor?.objects || [], index = state.graphObjectIndex,
-      selectedIndex = chart && chart.editor.editable !== false && Number.isInteger(index) && index >= 0 && index < objects.length
-        ? index : null,
-      node = state.assetSelection === "csv" && state.assetPath ? projectVfs.resolve(state.assetPath, source) : null,
-      csv = node?.kind === "csv" ? node.asset : null,
-      objectCsv = selectedIndex === null ? null : source.assets.csvFiles.find((item) => item.id === objects[selectedIndex].csvId);
-    return immutableProjectCopy({ chart, objects, selectedIndex, currentCsv: csv,
-      columns: csv ? columnDefinitions(csv.rows, csv.headerLines) : [],
-      objectColumns: objectCsv ? columnDefinitions(objectCsv.rows, objectCsv.headerLines) : [] });
-  }
+  if (kind === "project-api" && request.operation === "graphs.readData")
+    return immutableProjectCopy(graphEditorRead(activeProject._state, request));
   if (kind === "project-api" && request.operation === "print.readSettings")
     return immutableProjectCopy(activeProject._state.export);
   if ((kind === "project-api" && request.operation === "images.readEditor") ||
@@ -695,8 +773,10 @@ export function buildFrontendReconciliationInput(event, result, references) {
 }
 
 export function immutableProjectCopy(value) {
+  const visited = new WeakSet();
   const freeze = (copy) => {
-    if (copy && typeof copy === "object") {
+    if (copy && typeof copy === "object" && !visited.has(copy)) {
+      visited.add(copy);
       Object.values(copy).forEach(freeze);
       Object.freeze(copy);
     }

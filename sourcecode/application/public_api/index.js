@@ -3,7 +3,7 @@
 import { appFSM, dispatchProjectCommand, renderProjectObject, renderWholeWorkspace } from '../adapter.js';
 import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
 import { createEmptyProjectCsvAndSelect, downloadPlotlyJson, downloadSlotFfsx, graphEditorAdd, graphEditorApplyPalette, graphEditorDelete, graphEditorHeaderLines, graphEditorMove, graphEditorObjectValues, graphEditorSelectCsv, graphEditorSelectObject, graphEditorSetEditable, graphEditorUpdateLayout, importSelectedGraphFile, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi } from './graphs.js';
-import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiControls, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
 import { downloadExportPayload, status } from '../../frontend/renderer.js';
 
@@ -50,6 +50,7 @@ return Object.freeze({
   }),
   slots: Object.freeze({
     readSelected: readSelectedSlotApi,
+    readDisplay: () => appFSM.query("project-api", { operation: "slots.readDisplay" }),
     select: (slotId, pendingContentType = null, direction = "ui-to-fsm") =>
       setSelectedSlot(slotId, direction, pendingContentType),
     setContentType: setSlotContentType,
@@ -60,11 +61,14 @@ return Object.freeze({
   }),
   images: Object.freeze({
     readEditor: readImageEditorApi,
+    readSettings: () => appFSM.query("project-api", { operation: "images.readSettings", slotId: interfaceFSM.readState().selectedSlotId }),
     setSettings: applyImageSettingsFromValues,
     insertEmpty: insertEmptyImageIntoSelectedSlot,
   }),
   assets: Object.freeze({
     readDeletionTarget: readAssetDeletionTarget,
+    readList: kind => appFSM.query("project-api", { operation: "assets.readList", kind }),
+    readPreview: (csvId, start = 0, count = 30) => appFSM.query("project-api", { operation: "assets.readPreview", csvId, start, count }),
     delete: deleteProjectAsset,
     readTree: () => appFSM.query("project-api", { operation: "assets.readTree" }),
     isTrashed: (path) => appFSM.query("project-api", { operation: "assets.isTrashed", path }),
@@ -93,6 +97,8 @@ return Object.freeze({
   }),
   graphs: Object.freeze({
     readData: readGraphDataApi,
+    readControls: (csvId = null) => appFSM.query("project-api", { operation: "graphs.readControls", csvId, frontendState: interfaceFSM.readState() }),
+    readColumns: (csvId, chartId = null) => appFSM.query("project-api", { operation: "graphs.readColumns", csvId, chartId }),
     readLayout: readGraphLayoutApi,
     readPalette: readGraphPaletteApi,
     selectCsv: graphEditorSelectCsv,
@@ -122,6 +128,7 @@ return Object.freeze({
   }),
   captions: Object.freeze({
     readGlobal: readGlobalCaptionState,
+    readSettings: () => appFSM.query("project-api", { operation: "captions.readSettings" }),
     readSlot: readSlotCaptionState,
     setEnabled: setCaptionsApiEnabled,
     setGlobalText: setGlobalCaptionText,
@@ -133,6 +140,7 @@ return Object.freeze({
   }),
   labels: Object.freeze({
     readState: readLabelsApiState,
+    readSettings: () => appFSM.query("project-api", { operation: "labels.readSettings", slotId: interfaceFSM.readState().selectedSlotId }),
     setEnabled: setLabelsApiEnabled,
     setSettings: setLabelsApiSettings,
     setPosition: setLabelsApiPosition,
@@ -146,6 +154,7 @@ return Object.freeze({
   }),
   layout: Object.freeze({
     readState: readLayoutApiState,
+    readControls: readLayoutApiControls,
     setStyle: setLayoutApiStyle,
     setGrid: setLayoutApiGrid,
     setZoom: setLayoutApiZoom,

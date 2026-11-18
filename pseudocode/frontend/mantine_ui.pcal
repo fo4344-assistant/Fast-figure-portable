@@ -44,57 +44,46 @@ variables result = NoValue,
   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
 
 procedure readProjectAssetDisplay()
-variables nodes = NoValue, layout = NoValue;
+variables nodes = NoValue, slots = NoValue;
 begin
-OfficialReadsInOneSynchronousDisplay:
+OneMetadataReadPerPurpose:
   nodes := InvokePublicApi("assets.readTree",[]);
-  layout := InvokePublicApi("layout.readState",[]);
-  result := [nodes |-> nodes,slotRows |-> layout.visibleSlots];
-  \* No await/callback/command between reads, retained mirror or flat public tree contract.
-  \* Canonical node kind/asset supplies directory and CSV/image UI candidates.
-  \* Slot rows consume Backend assetDisplay, including empty and embedded rows.
-  return;
+  slots := InvokePublicApi("slots.readDisplay",[]);
+  result := [nodes |-> nodes,slotRows |-> slots]; return;
 end procedure;
 
 procedure readAssetRowDisplay(node)
-variables target = NoValue, rows = NoValue, header = NoValue;
 begin
-OfficialReferenceCountNotSlotDisplayDeduplication:
-  target := InvokePublicApi("assets.readDeletionTarget",[path |-> node.path]);
-  if node.kind = "csv" then
-    header := TryScalarNumber(FieldOrNoValue(node.asset,"headerLines"));
-    rows := Maximum(0,Len(node.asset.rows) - (IF header.valid THEN header.value ELSE 0));
-  end if;
-  result := [referenceCount |-> IF target = NoValue THEN 0 ELSE target.referenceCount,rowCount |-> rows];
-  \* Display arithmetic only. No new parser, collection ownership or mutation.
+AlreadySuppliedMetadata:
+  result := [referenceCount |-> node.referenceCount,rowCount |-> IF node.kind = "csv" THEN node.rowCount ELSE NoValue];
   return;
 end procedure;
 
 \* UiCommand instances are component-owned references. Callback invocation/await
 \* captures {threw,failure,value}; it calls once synchronously before awaiting.
 \* BoundProcedure captures only declared arguments; it is function binding.
-procedure UiCommand_create(readTarget,readValue,prepare,invoke,stepSize)
+procedure UiCommand_create(readCurrent,prepare,invoke,stepSize)
 variables command = NoValue;
 begin
 CreateOwnedControl:
-  command := NewUiCommandInstance();
-  command.readTarget := readTarget; command.readValue := readValue;
+  command := NewUiCommandInstance(); command.readCurrent := readCurrent;
   command.prepare := prepare; command.invoke := invoke; command.stepSize := stepSize;
   command.text := ""; command.editTarget := NoValue;
-  command.editing := FALSE; command.composing := FALSE;
-  command.running := FALSE; command.active := TRUE;
+  command.editing := FALSE; command.composing := FALSE; command.running := FALSE; command.active := TRUE;
   result := command; return;
 end procedure;
 
 procedure UiCommand_input(command,text,composing)
-variables target = NoValue;
+variables current = NoValue;
 begin
 RetainLexicalInput:
   if ~command.active \/ command.running then result := command.text; return; end if;
-  target := InvokeCallback(command.readTarget,<<>>);
-  if target = NoValue then call UiCommand_cancel(command); result := command.text; return; end if;
-  if command.editing /\ command.editTarget # target then call UiCommand_cancel(command); end if;
-  if ~command.editing then command.editTarget := target; command.editing := TRUE; end if;
+  current := InvokeCallback(command.readCurrent,<<>>);
+  if current.target = NoValue then call UiCommand_cancel(command); result := command.text; return; end if;
+  if command.editing /\ command.editTarget # current.target then
+    command.editing := FALSE; command.composing := FALSE; command.editTarget := NoValue;
+  end if;
+  command.editTarget := current.target; command.editing := TRUE;
   command.text := text; command.composing := composing;
   PreserveWidgetCursorSelectionAndRawText(command,text);
   result := command.text; return;
@@ -103,119 +92,104 @@ end procedure;
 procedure UiCommand_refresh(command,target)
 variables current = NoValue;
 begin
-RefreshOnlySameLiveTarget:
-  if command.active /\ command.readValue # NoValue
-     /\ InvokeCallback(command.readTarget,<<>>) = target then
-    current := InvokeCallback(command.readValue,<<target>>);
-    command.text := DisplayTextForOfficialValue(current);
-    DisplayOfficialControlValue(command,current);
+RefreshSameActiveTarget:
+  if command.active /\ ~command.editing then
+    current := InvokeCallback(command.readCurrent,<<>>);
+    if current.target = target /\ command.prepare # NoValue then
+      command.text := DisplayTextForOfficialValue(current.value);
+      DisplayOfficialControlValue(command,current.value);
+    end if;
   end if;
   result := current; return;
 end procedure;
 
 procedure UiCommand_cancel(command)
-variables target = NoValue, current = "";
+variables current = NoValue;
 begin
 CancelPendingEdit:
-  command.editing := FALSE; command.composing := FALSE;
-  command.editTarget := NoValue; command.text := "";
+  command.editing := FALSE; command.composing := FALSE; command.editTarget := NoValue; command.text := "";
   if command.active then
-    target := InvokeCallback(command.readTarget,<<>>);
-    if target # NoValue /\ command.readValue # NoValue then
-      current := InvokeCallback(command.readValue,<<target>>);
-    end if;
-    command.text := DisplayTextForOfficialValue(current);
-    if command.readValue # NoValue then DisplayOfficialControlValue(command,current); end if;
+    current := InvokeCallback(command.readCurrent,<<>>);
+    command.text := DisplayTextForOfficialValue(current.value);
+    if command.prepare # NoValue then DisplayOfficialControlValue(command,current.value); end if;
   end if;
-  \* In-flight invocation and its running flag are settled by that invocation.
-  result := current; return;
+  result := command.text; return;
 end procedure;
 
-procedure UiCommand_send(command,value,target)
-variables state = NoValue, currentTarget = NoValue, completion = NoValue, refresh = NoValue;
+procedure UiCommand_sendCurrent(command,value,target,current)
+variables completion = NoValue, refresh = NoValue;
 begin
-CurrentReadyTarget:
-  if ~command.active \/ command.running then result := NoValue; return; end if;
-  call ApplicationInterface_readState(); state := result;
-  if state.lifecycle # "ready" then result := NoValue; return; end if;
-  currentTarget := InvokeCallback(command.readTarget,<<>>);
-  if currentTarget = NoValue \/ (target # NoValue /\ currentTarget # target) then
+OneJudgmentCurrent:
+  if ~command.active \/ command.running \/ ~current.ready \/ current.target = NoValue \/ current.target # target then
     result := NoValue; return;
   end if;
-  if command.readValue # NoValue then
-    if InvokeCallback(command.readValue,<<currentTarget>>) = value then
-      call UiCommand_refresh(command,currentTarget); result := NoValue; return;
-    end if;
+  if command.prepare # NoValue /\ current.value = value then
+    command.text := DisplayTextForOfficialValue(current.value);
+    DisplayOfficialControlValue(command,current.value); result := NoValue; return;
   end if;
 OneInvocationAndEveryExitCleanup:
   command.running := TRUE;
-  completion := InvokeAndAwaitCallbackOnceCaptured(command.invoke,<<currentTarget,value>>);
+  completion := InvokeAndAwaitCallbackOnceCaptured(command.invoke,<<value,target,current.companions>>);
   command.running := FALSE;
-  \* Invocation enters the existing API synchronously; its lifecycle remains API-owned.
-  refresh := CaptureOriginalFailureOfProcedure(UiCommand_refresh,<<command,currentTarget>>);
+  refresh := CaptureOriginalFailureOfProcedure(UiCommand_refresh,<<command,target>>);
   if completion.threw then PropagateOriginalFailure(completion.failure); end if;
   if refresh.threw then PropagateOriginalFailure(refresh.failure); end if;
   result := completion.value; return;
 end procedure;
 
+procedure UiCommand_send(command,value,target)
+variables current = NoValue;
+begin
+OneCurrentRead:
+  if ~command.active \/ command.running then result := NoValue; return; end if;
+  current := InvokeCallback(command.readCurrent,<<>>);
+  if target = NoValue then target := current.target; end if;
+  call UiCommand_sendCurrent(command,value,target,current); return;
+end procedure;
+
 procedure UiCommand_commit(command)
-variables state = NoValue, target = NoValue, current = NoValue, prepared = NoValue;
+variables current = NoValue, prepared = NoValue;
 begin
 OneCompletedEdit:
-  if ~command.active \/ ~command.editing \/ command.running \/ command.composing then
-    result := NoValue; return;
-  end if;
-  call ApplicationInterface_readState(); state := result;
-  target := command.editTarget;
-  if state.lifecycle # "ready" \/ target = NoValue
-     \/ InvokeCallback(command.readTarget,<<>>) # target then
+  if ~command.active \/ ~command.editing \/ command.running \/ command.composing then result := NoValue; return; end if;
+  current := InvokeCallback(command.readCurrent,<<>>);
+  if current.target = NoValue \/ current.target # command.editTarget then
     call UiCommand_cancel(command); result := NoValue; return;
   end if;
-  current := InvokeCallback(command.readValue,<<target>>);
-  prepared := InvokeCallback(command.prepare,<<command.text,current>>);
-  if ~prepared[1] then
-    call UiCommand_cancel(command); ShowInvalidNumericInputNotice(command);
-    result := NoValue; return;
-  end if;
+  prepared := InvokeCallback(command.prepare,<<command.text,current.value>>);
+  if ~prepared[1] then call UiCommand_cancel(command); result := NoValue; return; end if;
   command.editing := FALSE; command.composing := FALSE;
-  \* Enter clears editing before send; subsequent blur cannot send this edit again.
-  call UiCommand_send(command,prepared[2],target);
-  \* Same-target official refresh is performed by send; retain the API result/failure.
-  ReportRequestedAndAppliedValueWhenCorrected(command,target,prepared[2]);
+  call UiCommand_sendCurrent(command,prepared[2],command.editTarget,current);
   return;
 end procedure;
 
 procedure UiCommand_step(command,direction)
-variables target = NoValue, current = NoValue, parsed = NoValue, value = NoValue;
+variables current = NoValue, parsed = NoValue, value = NoValue;
 begin
-OneWidgetIncrement:
-  if ~command.active \/ command.running \/ command.composing \/ command.stepSize = NoValue then
-    result := NoValue; return;
-  end if;
-  target := InvokeCallback(command.readTarget,<<>>);
-  if target = NoValue then call UiCommand_cancel(command); result := NoValue; return; end if;
-  if command.editing /\ command.editTarget # target then call UiCommand_cancel(command); end if;
-  current := InvokeCallback(command.readValue,<<target>>);
+OneStepCurrent:
+  if ~command.active \/ command.running \/ command.composing \/ command.stepSize = NoValue then result := NoValue; return; end if;
+  current := InvokeCallback(command.readCurrent,<<>>);
+  if current.target = NoValue then call UiCommand_cancel(command); result := NoValue; return; end if;
+  if command.editing /\ command.editTarget # current.target then command.editing := FALSE; command.composing := FALSE; end if;
+  value := current.value;
   if command.editing then
-    call prepareNumericInput(command.text,current,FALSE,NoValue); parsed := result;
-    if parsed[1] then current := parsed[2]; end if;
+    call prepareNumericInput(command.text,current.value,FALSE,NoValue); parsed := result;
+    if parsed[1] then value := parsed[2]; end if;
   end if;
-  if ~IsFiniteNumber(current) then current := 0; end if;
-  value := IF direction = "increase" THEN current + command.stepSize ELSE current - command.stepSize;
-  call UiCommand_input(command,CompleteDecimalText(value),FALSE);
-  call UiCommand_commit(command);
-  \* Widget onChange is suppressed for this same step; each real repeat is a new step.
-  return;
+  if ~IsFiniteNumber(value) then value := 0; end if;
+  value := IF direction = "increase" THEN value+command.stepSize ELSE value-command.stepSize;
+  command.text := CompleteDecimalText(value); command.editTarget := current.target;
+  command.editing := FALSE; command.composing := FALSE;
+  call UiCommand_sendCurrent(command,value,current.target,current); return;
 end procedure;
 
 procedure UiCommand_dispose(command)
 begin
-EndThisControlLifetime:
-  call UiCommand_cancel(command);
-  command.active := FALSE;
-  RemoveOnlyThisControlEventsAndSubscriptions(command);
-  result := NoValue; return;
+EndControlLifetime:
+  call UiCommand_cancel(command); command.active := FALSE;
+  RemoveOnlyThisControlEventsAndSubscriptions(command); result := NoValue; return;
 end procedure;
+
 
 procedure prepareNumericInput(text,current,allowEmpty,emptyValue)
 variables trimmed = TrimWhitespace(text), value = NoValue;
@@ -235,12 +209,12 @@ EmptyAndCompleteDecimal:
   return;
 end procedure;
 
-procedure changeLayoutGridDimension(dimension,value)
-variables current = NoValue, rows = NoValue, cols = NoValue, range = NoValue;
+procedure changeLayoutGridDimension(dimension,value,companion)
+variables current = companion, rows = NoValue, cols = NoValue, range = NoValue;
 begin
 ConfirmedFiniteValueAndCurrentCompanion:
   Require(dimension \in {"rows","cols"} /\ IsFiniteNumber(value));
-  current := InvokePublicApi("layout.readState",[]);
+  if current = NoValue then current := InvokePublicApi("layout.readControls",[]); end if;
   rows := current.gridRows; cols := current.gridCols;
   range := IF dimension = "rows" THEN current.gridLimits.gridRows ELSE current.gridLimits.gridCols;
   value := Maximum(range[1],Minimum(range[2],value));
@@ -280,13 +254,35 @@ CurrentRevisionNumber:
   return;
 end procedure;
 
+procedure ReadControlKey(readCurrent)
+variables current = NoValue;
+begin
+PurposePrimitiveSnapshot:
+  current := InvokeCallback(readCurrent,<<>>);
+  result := StablePrimitiveKey(current.target,current.value,current.companions,current.ready); return;
+end procedure;
+
+procedure useControlSnapshot(readCurrent)
+begin
+SpecificValueSubscription:
+  ReactUseSyncExternalStore(subscribeAppState,BoundProcedure(ReadControlKey,<<readCurrent>>));
+  result := InvokeCallback(readCurrent,<<>>); return;
+end procedure;
+
+procedure FrontendStructureKey()
+variables state = NoValue;
+begin
+StructureFieldsOnly:
+  call ApplicationInterface_readState(); state := result;
+  result := StablePrimitiveKey(state.lifecycle,state.workspace,state.overlay,state.selectedSlotId,
+    state.assetSelection,state.assetPath,state.graphObjectIndex); return;
+end procedure;
+
 procedure useAppState()
 begin
-RevisionSubscriptionAndFreshRenderRead:
-  \* React hook plumbing receives these defined procedure references.
-  ReactUseSyncExternalStore(subscribeAppState,getAppStateSnapshot);
-  call ApplicationInterface_readState();
-  return;
+StructureSubscription:
+  ReactUseSyncExternalStore(subscribeAppState,FrontendStructureKey);
+  call ApplicationInterface_readState(); return;
 end procedure;
 
 procedure addSelectedGraphObject()
@@ -296,7 +292,7 @@ CurrentReadySlotAndCsv:
   call ApplicationInterface_readState(); state := result;
   slotId := state.selectedSlotId;
   if state.lifecycle # "ready" \/ slotId = NoValue then result := NoValue; return; end if;
-  context := InvokePublicApi("graphs.readData",[]);
+  context := InvokePublicApi("graphs.readControls",[]);
   if context.currentCsv = NoValue then result := NoValue; return; end if;
   if context.chart # NoValue then
     if context.chart.editor.editable = FALSE then result := NoValue; return; end if;
@@ -325,7 +321,7 @@ CurrentSlotAndOwningChart:
   call ApplicationInterface_readState(); state := result;
   slotId := state.selectedSlotId;
   if slotId = NoValue then result := NoValue; return; end if;
-  context := InvokePublicApi("graphs.readData",[]);
+  context := InvokePublicApi("graphs.readControls",[]);
   if context.chart = NoValue then result := NoValue; return; end if;
   result := InvokePublicApi("graphs.setEditable",[slotId |-> slotId,chartId |-> context.chart.id,editable |-> editable]);
   return;
@@ -338,7 +334,7 @@ CurrentReadySlotAndLayoutInput:
   call ApplicationInterface_readState(); state := result;
   slotId := state.selectedSlotId;
   if state.lifecycle # "ready" \/ slotId = NoValue then result := NoValue; return; end if;
-  context := InvokePublicApi("graphs.readData",[]);
+  context := InvokePublicApi("graphs.readControls",[]);
   if context.chart = NoValue then result := NoValue; return; end if;
   result := InvokePublicApi("graphs.updateLayout",[slotId |-> slotId,chartId |-> context.chart.id,values |-> values]);
   return;
@@ -426,23 +422,23 @@ end procedure;
 
 \* Component-local expansions of Source FastFigureApp 14-16.
 procedure ReadNumericControl(group,field,axis)
-variables state = NoValue, view = NoValue, target = NoValue, value = NoValue;
+variables state = NoValue, view = NoValue, target = NoValue, value = NoValue, companions = [];
 begin
 ReadOfficialCurrentField:
   call ApplicationInterface_readState(); state := result;
   if group = "image" then
-    view := InvokePublicApi("images.readEditor",[]);
+    view := InvokePublicApi("images.readSettings",[]);
     if state.selectedSlotId # NoValue /\ view # NoValue then
       target := <<group,state.selectedSlotId,view.imageId,field>>; value := view.settings[field];
     end if;
   elsif group \in {"csv","object"} then
-    view := InvokePublicApi("graphs.readData",[]);
+    view := InvokePublicApi("graphs.readControls",[]);
     if group = "csv" /\ view.currentCsv # NoValue then
       target := <<group,view.currentCsv.id,field>>; value := view.currentCsv.headerLines;
     elsif group = "object" /\ view.chart # NoValue /\ view.selectedIndex # NoValue then
       if view.chart.editor.editable then
         target := <<group,state.selectedSlotId,view.chart.id,view.selectedIndex,field>>;
-        value := view.objects[view.selectedIndex+1][field];
+        value := view.object[field];
       end if;
     end if;
   elsif group \in {"axis","global"} then
@@ -452,36 +448,24 @@ ReadOfficialCurrentField:
       value := IF group = "axis" THEN view.axes[axis][field] ELSE view.globalSettings[field];
     end if;
   elsif group = "labels" then
-    view := InvokePublicApi("labels.readState",[]);
+    view := InvokePublicApi("labels.readSettings",[]);
     target := <<group,field>>; value := view.settings[field];
+    companions := [x |-> view.settings.x,y |-> view.settings.y];
   elsif group = "captions" then
-    view := InvokePublicApi("captions.readGlobal",[]);
+    view := InvokePublicApi("captions.readSettings",[]);
     target := <<group,"global",field>>; value := view.settings[field];
   elsif group = "print" then
     view := InvokePublicApi("print.readSettings",[]);
     target := <<group,field>>; value := view[field];
   elsif group = "layout" then
-    view := InvokePublicApi("layout.readState",[]); target := <<group,field>>;
+    view := InvokePublicApi("layout.readControls",[]); target := <<group,field>>;
+    companions := [gridRows |-> view.gridRows,gridCols |-> view.gridCols,gridLimits |-> view.gridLimits];
     if field = "rows" then value := view.gridRows;
     elsif field = "cols" then value := view.gridCols;
     elsif field = "zoom" then value := view.zoom;
     else value := view.slotStyle[field]; end if;
   end if;
-  result := [target |-> target,value |-> value]; return;
-end procedure;
-
-procedure NumericControlTarget(group,field,axis)
-begin
-CurrentIdentityTuple:
-  call ReadNumericControl(group,field,axis); result := result.target; return;
-end procedure;
-
-procedure NumericControlValue(group,field,axis,target)
-variables current = NoValue;
-begin
-SameFieldCurrentValue:
-  call ReadNumericControl(group,field,axis); current := result;
-  result := IF current.target = target THEN current.value ELSE NoValue; return;
+  result := [target |-> target,value |-> value,companions |-> companions,ready |-> state.lifecycle = "ready"]; return;
 end procedure;
 
 procedure PrepareControlNumeric(group,field,text,current)
@@ -495,7 +479,7 @@ ExistingEmptyMeaning:
   call prepareNumericInput(text,current,allowEmpty,emptyValue); return;
 end procedure;
 
-procedure InvokeNumericControl(group,field,axis,target,value)
+procedure InvokeNumericControl(group,field,axis,value,target,companions)
 variables patch = [], current = NoValue, axes = [];
 begin
 OnlyNewFieldAndExplicitIdentity:
@@ -512,9 +496,9 @@ OnlyNewFieldAndExplicitIdentity:
   elsif group = "labels" then
     if field = "fontSize" then result := InvokePublicApi("labels.setSettings",[values |-> patch]);
     else
-      current := InvokePublicApi("labels.readState",[]);
-      result := InvokePublicApi("labels.setPosition",[x |-> IF field = "x" THEN value ELSE current.settings.x,
-        y |-> IF field = "y" THEN value ELSE current.settings.y]);
+      current := companions;
+      result := InvokePublicApi("labels.setPosition",[x |-> IF field = "x" THEN value ELSE current.x,
+        y |-> IF field = "y" THEN value ELSE current.y]);
     end if;
   elsif group = "captions" then result := InvokePublicApi("captions.setSettings",[values |-> patch]);
   elsif group = "print" then
@@ -523,7 +507,7 @@ OnlyNewFieldAndExplicitIdentity:
     end if;
     result := InvokePublicApi("print.setSettings",[values |-> patch]);
   elsif group = "layout" then
-    if field \in {"rows","cols"} then call changeLayoutGridDimension(field,value);
+    if field \in {"rows","cols"} then call changeLayoutGridDimension(field,value,companions);
     elsif field = "zoom" then result := InvokePublicApi("layout.setZoom",[value |-> value]);
     else result := InvokePublicApi("layout.setStyle",[values |-> patch]); end if;
   end if;
@@ -541,12 +525,13 @@ OneInstancePerMountedField:
   if control = NoValue then result := NoValue; return; end if;
   command := ExistingUiCommandOfControlOrNone(control);
   if command = NoValue then
-    call UiCommand_create(BoundProcedure(NumericControlTarget,<<group,field,axis>>),
-      BoundProcedure(NumericControlValue,<<group,field,axis>>),
+    call UiCommand_create(BoundProcedure(ReadNumericControl,<<group,field,axis>>),
       BoundProcedure(PrepareControlNumeric,<<group,field>>),
       BoundProcedure(InvokeNumericControl,<<group,field,axis>>),ExistingWidgetStep(control));
     command := result; AttachUiCommandToControl(control,command);
   end if;
+  command.readCurrent := BoundProcedure(ReadNumericControl,<<group,field,axis>>);
+  BindPurposeSnapshotHook(control,BoundProcedure(useControlSnapshot,<<command.readCurrent>>));
   BindRawInputAndCompositionTo(control,command,UiCommand_input);
   BindEnterAndBlurTo(control,command,UiCommand_commit);
   BindEscapeTo(control,command,UiCommand_cancel);
@@ -593,16 +578,17 @@ ComponentLocalBindings:
   result := NoValue; return;
 end procedure;
 
-procedure UiCommand_bindAction(control,readTarget,invoke)
+procedure UiCommand_bindAction(control,readCurrent,invoke)
 variables command = NoValue;
 begin
 ExistingActionCallbacks:
   command := ExistingUiCommandOfControlOrNone(control);
   if command = NoValue then
-    call UiCommand_create(readTarget,NoValue,NoValue,invoke,NoValue);
+    call UiCommand_create(readCurrent,NoValue,invoke,NoValue);
     command := result; AttachUiCommandToControl(control,command);
   end if;
-  command.readTarget := readTarget; command.invoke := invoke;
+  command.readCurrent := readCurrent; command.invoke := invoke;
+  BindPurposeSnapshotHook(control,BoundProcedure(useControlSnapshot,<<readCurrent>>));
   \* Re-render updates callbacks while retaining the same local command instance.
   BindActionEventToSend(control,command,UiCommand_send);
   BindTargetChangeLifecycleNotReadyAndOverlayCloseTo(control,command,UiCommand_cancel);
@@ -613,6 +599,13 @@ ExistingActionCallbacks:
   result := command; return;
 end procedure;
 
+procedure ReadVisibleCsvPreview(csvId,expanded)
+begin
+ExplicitVisiblePageOnly:
+  if ~expanded then result := NoValue; return; end if;
+  result := InvokePublicApi("assets.readPreview",[csvId |-> csvId,start |-> 0,count |-> 30]); return;
+end procedure;
+
 procedure FastFigureApp()
 variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
           luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue,
@@ -621,6 +614,10 @@ variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>
 begin
 CurrentReadNotDraftOrMirror:
   palette := InvokePublicApi("appearance.readPalette",[]);
+  if SamePalettePrimitiveKeyAsThisComponentTheme(palette) then
+    theme := CurrentComponentThemeForPaletteKey(palette);
+    css := CurrentComponentCssForPaletteKey(palette); goto OneExistingRoot;
+  end if;
   while i <= 10 do shades := Append(shades,palette.uiColor); i := i + 1; end while;
 ContrastFromCurrentUiColor:
   channels := HexChannelsDividedBy255(palette.uiColor); i := 1;
@@ -663,6 +660,7 @@ ThemeAndCssProjection:
     primaryLightHover |-> SrgbMix(palette.uiColor,0.24,"transparent"),primaryContrast |-> contrast];
   AliasFfuiFilledFilledHoverLightLightHoverLightColorContrastToPrimaryVariables(css);
   ReplaceOnlyBlackAlphaThemeShadowColorsWithSameAlphaUiShadowMix(theme,palette.uiShadowColor);
+  RetainCurrentComponentThemeAndCssUnderPaletteKey(palette,theme,css);
   \* Preserve shadow geometry. Graph paperColor != UI surface/background.
 OneExistingRoot:
   BindNumericFieldCreationAndRenderHook(BindAllNumericFields);
@@ -694,28 +692,37 @@ NoProjectStoreInShell:
   BindWholeRenderButtonReadyDisabledRunningAndKeyboardStateThroughExistingUiCommand();
   \* Same Button/theme/height/padding as neighbouring controls; no local style variant.
   BindComponentPublicMethods("FastFigureDataActions",<<"assets.importFiles","slots.reset","assets.delete">>);
-  BindComponentPublicMethods("FastFigureImageEditor",<<"images.readEditor","images.setSettings","images.insertEmpty">>);
+  BindComponentPublicMethods("FastFigureImageEditor",<<"images.readSettings","images.setSettings","images.insertEmpty">>);
+  BindVisibleComponentExplicitRead("FastFigureImagePreview","images.readEditor");
   BindComponentPublicMethods("FastFigureProjectDataTree",<<"assets.selectCsv","assets.selectImage","assets.selectDirectory",
     "assets.planMove","assets.move","assets.createDirectory","assets.delete","assets.emptyTrash",
     "assets.download","assets.draggableAsset","assets.connectToSlot">>);
   BindComponentPublicMethods("FastFigureProjectActions",<<"project.readName","project.setName","project.importFile","project.exportFile">>);
-  BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.selectCsv","graphs.setHeaderLines",
+  BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.readControls","graphs.readColumns","graphs.selectCsv","graphs.setHeaderLines",
     "graphs.selectObject","graphs.setObjectValues","graphs.moveObject","graphs.deleteObject","assets.createEmptyCsv">>);
+  BindComponentRenderReadFor("FastFigureGraphDataEditor","csvOptions",BoundPublicRead("assets.readList",[kind |-> "csv"]));
+  BindComponentRenderReadFor("FastFigureCsvPreview","page",ReadVisibleCsvPreview);
+  BindColumnSelectorReadToExplicitCsvAndChartIds("FastFigureGraphDataEditor","graphs.readColumns");
   BindComponentPublicMethods("FastFigureGraphLayoutEditor",<<"graphs.readLayout">>);
   BindComponentPublicMethods("FastFigureGraphPaletteActions",<<"graphs.readPalette","graphs.applyPalette">>);
   BindComponentPublicMethods("FastFigureGraphFileActions",<<"graphs.exportFfsx","graphs.exportPlotlyJson">>);
   BindComponentPublicMethods("FastFigurePaletteActions",<<"appearance.readPalette","appearance.setPalette","appearance.resetPalette">>);
-  BindComponentPublicMethods("FastFigureLabelOverlay",<<"labels.readState","labels.setEnabled","labels.setSettings",
+  BindComponentPublicMethods("FastFigureLabelOverlay",<<"labels.readState","labels.readSettings","labels.setEnabled","labels.setSettings",
     "labels.setPosition","labels.resetPosition","labels.finishPositionInteraction">>);
-  BindComponentPublicMethods("FastFigureCaptionOverlay",<<"captions.readGlobal","captions.readSlot","captions.setGlobalText",
+  BindComponentPublicMethods("FastFigureCaptionOverlay",<<"captions.readGlobal","captions.readSettings","captions.readSlot","captions.setGlobalText",
     "captions.setSlotText","captions.setName","captions.setNameBold","captions.setSettings","captions.setEnabled","captions.insertSlotCaptions">>);
   BindComponentPublicMethods("FastFigurePrintOverlay",<<"print.readSettings","print.setSettings","print.save","print.capture">>);
-  BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.setStyle","layout.setZoom",
+  BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.readControls","layout.setStyle","layout.setZoom",
     "layout.resetZoom","layout.mergeSlots","layout.splitSlots">>);
   \* Bind each declared command control through UiCommand after its existing
   \* target/invoke callbacks above are supplied. Public reads remain direct;
   \* folds, collision responses and Modal-local controls keep UI-only handlers.
   BindDeclaredComponentActionControls(ComponentOwners,UiCommand_bindAction);
+  BindComponentLocalPurposeSnapshotHooks(useControlSnapshot);
+  \* Each existing component supplies its required current scalar/metadata fields.
+  \* Repeated reads produce the same primitive key until those fields change.
+  \* Actual column selectors/visible previews read their explicit payload only.
+  \* Theme reuse is component-local display construction; no Project read is retained.
   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
   return;
 end procedure;
@@ -836,14 +843,17 @@ procedure ProjectTreeAction(action,node,target)
 begin
 TrashTreeSelectionNotSlotConnection:
   if action = "select" then
-    result := InvokePublicApi("assets.select",[kind |-> node.kind,path |-> node.path]);
+    if node.kind = "csv" then result := InvokePublicApi("assets.selectCsv",[path |-> node.path]);
+    elsif node.kind = "image" then result := InvokePublicApi("assets.selectImage",[path |-> node.path]);
+    else result := InvokePublicApi("assets.selectDirectory",[path |-> node.path]); end if;
   elsif action = "move" then
-    Require(~node.fixed);
+    Require(InvokePublicApi("assets.movable",[path |-> node.path]));
     \* Trash descendants are valid move SOURCES if current VFS preconditions pass.
     result := InvokePublicApi("assets.planMove",[path |-> node.path,directory |-> target.path]);
     result := InvokePublicApi("assets.move",[plan |-> result,useUniqueName |-> ExplicitUserMoveChoice()]);
   elsif action = "connect-to-slot" then
-    Require(node.kind \in {"csv","image"} /\ ~node.trashed);
+    Require(node.kind \in {"csv","image"});
+    Require(~InvokePublicApi("assets.isTrashed",[path |-> node.path]));
     result := InvokePublicApi("assets.connectToSlot",[path |-> node.path,kind |-> node.kind,slotId |-> target.id]);
   end if;
   \* Selecting/starting drag is not implicit connection or original-location restore.

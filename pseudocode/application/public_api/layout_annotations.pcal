@@ -80,6 +80,16 @@ OnlyCurrentDragBookkeeping:
   return;
 end procedure;
 
+procedure readLayoutApiControls()
+variables controls = NoValue, session = NoValue;
+begin
+ScalarControlsOnly:
+  call dispatchProjectQuery("project-api",[operation |-> "layout.readControls"]); controls := result;
+  call InterfaceStateMachine_readState(); session := result;
+  result := ImmutableRecordWith(controls,[zoom |-> session.dashboardZoomIntent]);
+  return;
+end procedure;
+
 procedure readLayoutApiState(previewWidth)
 variables layout = NoValue, session = NoValue;
 begin
@@ -97,7 +107,7 @@ begin
 SessionOnly:
   call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM",[value |-> value]);
   call transformWorkspace();
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 
@@ -105,7 +115,7 @@ procedure commitLayoutApiZoom()
 begin
 CompletionNotSecondCommit:
   call InterfaceStateMachine_notify("layout","DASHBOARD_ZOOM_CHANGED",[]);
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 
@@ -114,7 +124,7 @@ begin
 OneResetTransition:
   call dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM",[]);
   call transformWorkspace();
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 
@@ -124,7 +134,7 @@ begin
 CurrentStyleCandidateOwnedByCommand:
   call dispatchProjectCommand("LAYOUT_STYLE_CHANGED",values); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 
@@ -134,7 +144,7 @@ begin
 ResizeCandidateRejectsNonDefaultLoss:
   call dispatchProjectCommand("GRID_LAYOUT_CHANGED",[rows |-> rows,cols |-> cols]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 
@@ -144,7 +154,7 @@ begin
 BackendRectangleAndSingleNonDefaultPayloadValidation:
   call dispatchProjectCommand("SLOTS_MERGED",[slotIds |-> slotIds]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 
@@ -154,7 +164,7 @@ begin
 PreserveAnchorPayloadRestoreCoveredDefaults:
   call dispatchProjectCommand("SLOTS_SPLIT",[slotIds |-> slotIds]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
-  call readLayoutApiState(NoValue);
+  call readLayoutApiControls();
   return;
 end procedure;
 

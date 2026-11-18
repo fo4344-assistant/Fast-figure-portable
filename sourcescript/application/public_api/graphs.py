@@ -10,7 +10,7 @@ from sourcescript.application.adapter import dispatchProjectCommand, dispatchPro
 from sourcescript.frontend.renderer import downloadExportPayload
 
 def graphEditorAdd(slotId, csvId):
-    outcome = "chartModel 딕셔너리, 미반영 ProjectMutationResult 또는 None."
+    outcome = "chart 식별·제목·편집 가능 여부 딕셔너리, 미반영 ProjectMutationResult 또는 None."
     slot = "Slot 인스턴스 또는 None."
     event = "Project EFSM 명령 이름 문자열."
     """
@@ -23,7 +23,7 @@ def graphEditorAdd(slotId, csvId):
 
     Return:
     - outcome:
-      chartModel 딕셔너리, 미반영 ProjectMutationResult 또는 None.
+      chart 식별·제목·편집 가능 여부 딕셔너리, 미반영 ProjectMutationResult 또는 None.
 
     변경:
     - 대상 Slot의 chart 참조와 chart의 editor["objects"] 및 graph.
@@ -37,7 +37,7 @@ def graphEditorAdd(slotId, csvId):
            Backend는 현재 Slot과 CSV를 조회하고 editable chart의 object 추가 또는 새 chart 생성을
            계산하여 전체 프로젝트 검증 후 한 번 반영한다.
         4. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
-           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readControls'],
            "selectedSlotId": slotId})를 조회하고 결과의 chart를 outcome에 둔다.
            실패는 호출자에게 전파한다.
     """
@@ -45,7 +45,7 @@ def graphEditorAdd(slotId, csvId):
 
 
 def graphEditorObjectValues(chartId, index, values):
-    outcome = "chartModel 또는 미반영 ProjectMutationResult."
+    outcome = "chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult."
     """
     Args:
     - chartId:
@@ -59,7 +59,7 @@ def graphEditorObjectValues(chartId, index, values):
 
     Return:
     - outcome:
-      chartModel 또는 미반영 ProjectMutationResult.
+      chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult.
 
     변경:
     - 대상 object와 같은 chart의 graph.
@@ -70,7 +70,7 @@ def graphEditorObjectValues(chartId, index, values):
            graphs.graphEditorCommit으로 지정 object의 필드를 정규화한다.
            다른 object와 확장 필드를 보존하고 전체 검증 뒤 반영한다.
         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
-           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readControls'],
            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
            실패는 호출자에게 전파한다.
     """
@@ -78,7 +78,7 @@ def graphEditorObjectValues(chartId, index, values):
 
 
 def graphEditorMove(chartId, fromIndex, toIndex):
-    outcome = "chartModel 또는 미반영 ProjectMutationResult."
+    outcome = "chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult."
     """
     Args:
     - chartId:
@@ -92,7 +92,7 @@ def graphEditorMove(chartId, fromIndex, toIndex):
 
     Return:
     - outcome:
-      chartModel 또는 미반영 ProjectMutationResult.
+      chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult.
 
     변경:
     - chart["editor"]["objects"]의 순서와 graph 및 선택 index.
@@ -105,7 +105,7 @@ def graphEditorMove(chartId, fromIndex, toIndex):
            from=fromIndex, to=toIndex를 전달한다. Backend가 현재 index들을 검증하고 이동과
            object index mapping을 같은 candidate에 계산한다.
         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
-           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readControls'],
            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
            실패는 호출자에게 전파한다.
     """
@@ -113,7 +113,7 @@ def graphEditorMove(chartId, fromIndex, toIndex):
 
 
 def graphEditorDelete(chartId, index):
-    outcome = "chartModel 또는 미반영 ProjectMutationResult."
+    outcome = "chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult."
     """
     Args:
     - chartId:
@@ -124,7 +124,7 @@ def graphEditorDelete(chartId, index):
 
     Return:
     - outcome:
-      chartModel 또는 미반영 ProjectMutationResult.
+      chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult.
 
     변경:
     - chart["editor"]["objects"]와 graph 및 선택 index.
@@ -134,7 +134,7 @@ def graphEditorDelete(chartId, index):
         2. Backend가 현재 index를 확인하여 해당 object를 제거하고 선택 해제 hint를 만든다.
            마지막 object 삭제는 빈 editable chart로 반영한다.
         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
-           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readControls'],
            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
            실패는 호출자에게 전파한다.
     """
@@ -166,7 +166,7 @@ def graphEditorSetEditable(slotId, chartId, editable):
         2. Backend가 현재 Slot의 소유 관계를 확인한다. conversion object와 rows가 있는 imported
            chart를 editable로 전환할 때 실제 CSV를 생성하여 object의 csvId를 연결하고
            next-id 변경을 같은 candidate에 포함한다. object가 없으면 빈 editable chart로 전환한다.
-        3. 미반영이면 명령 결과를 outcome에 둔다. 반영되면 chartId의 graphs.readData를 조회하여
+        3. 미반영이면 명령 결과를 outcome에 둔다. 반영되면 chartId의 graphs.readControls를 조회하여
            chart["editor"]["editable"]을 outcome에 둔다. 오류는 호출자에게 전파한다.
     """
     return outcome
@@ -193,7 +193,7 @@ def graphEditorSetHeaderLines(csvId, headerLines):
         1. DATA_OBJECT_REPLACED에 csvId와 headerLines를 전달한다. Backend가 현재 CSV의
            id·path·bytes·rows를 보존하면서 새 headerLines를 정규화하고 참조 graph를 계산한다.
         2. 미반영이면 명령 결과를 반환한다. 반영되면 result["changed"]에서 실제 변경 CSV path를
-           얻어 assets.readDeletionTarget을 조회하고 target["headerLines"]를 outcome에 둔다.
+           확인한 뒤 graphs.readControls에 explicit csvId를 전달하고 currentCsv["headerLines"]를 outcome에 둔다.
            조회와 명령 오류는 호출자에게 전파한다.
     """
     return outcome
@@ -232,7 +232,7 @@ def graphEditorUpdateLayout(slotId, chartId, values):
 
 
 def graphEditorApplyPalette(chartId, colors):
-    outcome = "chartModel 또는 미반영 ProjectMutationResult."
+    outcome = "chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult."
     """
     Args:
     - chartId:
@@ -243,7 +243,7 @@ def graphEditorApplyPalette(chartId, colors):
 
     Return:
     - outcome:
-      chartModel 또는 미반영 ProjectMutationResult.
+      chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult.
 
     변경:
     - chart["editor"]["objects"]의 색상과 graph.
@@ -253,7 +253,7 @@ def graphEditorApplyPalette(chartId, colors):
         2. Backend는 현재 object 순서에서 index를 colors 길이로 나눈 나머지의 색상을 적용한다.
            색상 외 object 필드는 유지하고 graph와 전체 candidate를 검증하여 반영한다.
         3. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
-           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readControls'],
            "chartId": chartId})를 조회하고 결과의 chart를 outcome에 둔다.
            실패는 호출자에게 전파한다.
     """
@@ -261,7 +261,7 @@ def graphEditorApplyPalette(chartId, colors):
 
 
 def importSelectedGraphFile(slotId, file):
-    outcome = "chartModel 또는 미반영 ProjectMutationResult."
+    outcome = "chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult."
     """
     Args:
     - slotId:
@@ -272,7 +272,7 @@ def importSelectedGraphFile(slotId, file):
 
     Return:
     - outcome:
-      chartModel 또는 미반영 ProjectMutationResult.
+      chart 식별·제목·편집 가능 여부 딕셔너리 또는 미반영 ProjectMutationResult.
 
     변경:
     - 대상 Slot의 chart와 FFSX가 사용하는 CSV asset.
@@ -283,7 +283,7 @@ def importSelectedGraphFile(slotId, file):
            Plotly JSON은 parsePlotlyToEditor로 원본과 conversion view를 가진 chart를 구성한다.
         3. Backend는 대상 Slot의 단일 chart 소유 관계를 포함한 전체 candidate를 검증하고 반영한다.
         4. 명령 결과의 committed가 False이면 그 결과를 outcome에 두고 반환한다.
-           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readData'],
+           True이면 dispatchProjectQuery("project-api", {"operation": BACKEND_QUERY_KINDS['project-api']['graphs.readControls'],
            "selectedSlotId": slotId})를 조회하고 결과의 chart를 outcome에 둔다.
            실패는 호출자에게 전파한다.
     """

@@ -95,7 +95,7 @@ def dispatchProjectQuery(query, payload=None):
     projection = "이번 공식 조회의 읽기 전용 결과."
     request = "이번 호출용 요청 딕셔너리."
     frontendState = "현재 Frontend 상태 읽기."
-    layout = "현재 layout.readState 결과."
+    layout = "현재 layout.readControls의 입력 설정 결과."
     width = "대시보드 표시 너비. 단위: px."
     """
     Args:
@@ -116,7 +116,7 @@ def dispatchProjectQuery(query, payload=None):
         2. renderer의 workspace-structure·selected-slot·whole-workspace 요청과 operation 생략이면
            interfaceFSM.readState()를 frontendState에 둔다. 생략 operation은 selected-slot으로 정한다.
            selected-slot이면 현재 frontendState["selectedSlotId"]를 request["slotId"]에 넣는다.
-           layout.readState의 공식 Backend 조회로 현재 referenceWidth를 읽는다.
+           layout.readControls의 공식 Backend 조회로 현재 referenceWidth만 포함한 입력 설정을 읽는다. previewGeometry·visibleSlots·assetDisplay를 구성하지 않는다.
            width=referenceWidth*frontendState["dashboardZoomIntent"]/100을 계산한다.
            request에 width와 frontendState를 넣는다. 두 읽기 사이에 비동기 대기·callback·명령을 넣지 않는다.
         3. 같은 request로 readBackendProjection(query, request)를 호출하여 projection에 둔다.

@@ -147,7 +147,7 @@ export function dispatchProjectQuery(query, payload = {}) {
   const request = { ...payload };
   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
     const state = interfaceFSM.readState(),
-      layout = readBackendProjection("project-api", { operation: "layout.readState" });
+      layout = readBackendProjection("project-api", { operation: "layout.readControls" });
     request.operation ??= "selected-slot";
     if (request.operation === "selected-slot") request.slotId = state.selectedSlotId;
     request.frontendState = state;

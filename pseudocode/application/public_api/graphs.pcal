@@ -16,7 +16,7 @@ ReadForRoutingNotCandidate:
   event := IF HasOwningChart(slot) THEN "GRAPH_OBJECTS_REPLACED" ELSE "SLOT_DATA_CONNECTED";
   call dispatchProjectCommand(event,[slotId |-> slotId,csvId |-> csvId,operation |-> "graphs.addObject"]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",frontendState |-> [selectedSlotId |-> slotId]]);
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",frontendState |-> [selectedSlotId |-> slotId]]);
   result := result.chart;
   return;
 end procedure;
@@ -27,7 +27,7 @@ begin
 NewValuesNotObjectsProjection:
   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.setObjectValues",index |-> index,values |-> values]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
   return;
 end procedure;
 
@@ -41,7 +41,7 @@ OnlyValidEqualIndexIsNoOp:
   end if;
   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.moveObject",from |-> fromIndex,to |-> toIndex]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
   return;
 end procedure;
 
@@ -51,7 +51,7 @@ begin
 BackendCalculatesRemovalAndExplicitNoneHint:
   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.deleteObject",index |-> index]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
   \* Last deletion returns empty chart, not a fabricated default object.
   return;
 end procedure;
@@ -62,7 +62,7 @@ begin
 CsvAndChartShareOneCommand:
   call dispatchProjectCommand("CHART_MODEL_REPLACED",[slotId |-> slotId,chartId |-> chartId,editable |-> editable]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart.editor.editable;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart.editor.editable;
   return;
 end procedure;
 
@@ -72,8 +72,8 @@ begin
 ScalarEditPreservesCsvIdentityBytesAndRows:
   call dispatchProjectCommand("DATA_OBJECT_REPLACED",[csvId |-> csvId,headerLines |-> headerLines]); tuple := result; mutation := tuple[1];
   if ~mutation.committed then result := mutation; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualUpdatedCsvPath(mutation.changed)]);
-  result := result.target.headerLines;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",csvId |-> csvId]);
+  result := result.currentCsv.headerLines;
   return;
 end procedure;
 
@@ -93,7 +93,7 @@ begin
 ColorOnlyCandidateInBackend:
   call dispatchProjectCommand("GRAPH_OBJECTS_REPLACED",[chartId |-> chartId,operation |-> "graphs.applyPalette",colors |-> colors]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",chartId |-> chartId]); result := result.chart;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",chartId |-> chartId]); result := result.chart;
   return;
 end procedure;
 
@@ -103,7 +103,7 @@ begin
 NoApplicationParseOrCandidate:
   call dispatchProjectCommand("SLOT_CHART_IMPORTED",[slotId |-> slotId,file |-> file]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",frontendState |-> [selectedSlotId |-> slotId]]); result := result.chart;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",frontendState |-> [selectedSlotId |-> slotId]]); result := result.chart;
   return;
 end procedure;
 
