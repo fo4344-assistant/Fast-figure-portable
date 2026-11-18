@@ -10005,16 +10005,7 @@ function gridSlotGeometry(layout2, geometry, slot = null) {
   };
 }
 function newGridSlot(id, row, col) {
-  return normalizeSlotContent({
-    id,
-    row,
-    col,
-    rowSpan: 1,
-    colSpan: 1,
-    hidden: false,
-    content: { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null },
-    caption: null
-  });
+  return new Slot(id, row, col);
 }
 function buildGridResizeCandidate(rows, cols) {
   return buildGridResizeInProject(activeProject._state, rows, cols);
@@ -10042,12 +10033,12 @@ function buildGridResizeInProject(source, rows, cols) {
   return candidate;
 }
 function slotImage(slot, collection = activeProject.images) {
-  return getProjectImage(slot?.imageId, collection);
+  return getProjectImage(slot?.content.imageId, collection);
 }
 function normalizeImageSettings(slot) {
   if (!slot) return null;
   const content = slot.content && typeof slot.content === "object" && !Array.isArray(slot.content) ? slot.content : {};
-  const settings = content.imageSettings && typeof content.imageSettings === "object" ? content.imageSettings : slot.imageSettings && typeof slot.imageSettings === "object" ? slot.imageSettings : DEFAULT_IMAGE_SETTINGS;
+  const settings = content.imageSettings && typeof content.imageSettings === "object" ? content.imageSettings : DEFAULT_IMAGE_SETTINGS;
   return readImageSettings(settings);
 }
 function readImageSettings(settings) {
@@ -10177,6 +10168,20 @@ function activeCaptionView(caption = projectObjects.read("captions")) {
 }
 
 // sourcecode/backend/project_state.js
+var Slot = class {
+  constructor(id, row, col) {
+    this.id = id;
+    this.row = row;
+    this.col = col;
+    this.rowSpan = 1;
+    this.colSpan = 1;
+    this.hidden = false;
+    this.content = structuredClone(BackendSettings.defaults.slotSettings.content);
+    this.content.chart = null;
+    this.content.imageId = null;
+    this.caption = null;
+  }
+};
 function createProjectState() {
   let state = {
     kind: "fast-figure-project-object",
@@ -10228,7 +10233,7 @@ var ProjectObject = class _ProjectObject {
     return buildProjectObject(payload, fileName);
   }
   read(path) {
-    let value2 = projectObjectPath(this._state, path);
+    let value2 = projectObjectPath(this._state, Object.hasOwn(PROJECT_OBJECT_PATHS, path) ? PROJECT_OBJECT_PATHS[path] : path);
     if (value2 === void 0) throw Error(`프로젝트 오브젝트 경로 ${path}가 없습니다.`);
     return value2;
   }
@@ -10554,7 +10559,7 @@ function readBackendProjection(kind, request = {}) {
     return immutableProjectCopy({
       enabled: labels.enabled,
       settings: Object.freeze({ ...labels.settings }),
-      reference: Object.freeze(reference),
+      reference: Object.freeze({ width: reference.width, height: reference.height }),
       sampleText: labels.settings.parentheses ? `(${identifier})` : identifier
     });
   }
@@ -10685,6 +10690,11 @@ function readBackendProjection(kind, request = {}) {
   }
   if (kind === "renderer" || kind === "export" && ["print.save", "print.capture"].includes(request.operation)) {
     const source = activeProject._state, output = buildBackendSurfaceRead(source);
+    if (kind === "renderer") {
+      if (!Number.isFinite(request.width) || request.width <= 0)
+        throw Error("renderer 너비는 유한한 양수여야 합니다.");
+      output.geometry = dashboardGeometryInProject(source, request.width);
+    }
     if (kind === "export") {
       output.export = structuredClone(source.export);
       output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
@@ -10755,6 +10765,8 @@ function buildBackendImageRead(source, slotId) {
   const slot = normalizeSlotContent(structuredClone(original));
   return {
     slotId: slot.id,
+    imageId: image.id,
+    mime: image.mime,
     name: image.name,
     bytes: Array.from(ffpxBase64ToBytes(image.bytesBase64 || "")),
     src: projectImageDataUrl(image),
@@ -10967,62 +10979,19 @@ function normalizeSlotContent(slot) {
         content.imageSettings[key] = structuredClone(DEFAULT_IMAGE_SETTINGS[key]);
   }
   delete content.caption;
+  if (!(slot instanceof Slot)) {
+    if (!Number.isInteger(slot.id) || ![slot.row, slot.col, slot.rowSpan, slot.colSpan].every((value2) => Number.isInteger(value2) && value2 > 0) || typeof slot.hidden !== "boolean")
+      throw Error("저장된 슬롯 배치가 올바르지 않습니다.");
+    slot = Object.assign(new Slot(slot.id, slot.row, slot.col), structuredClone(slot));
+  }
+  for (const key of ["chart", "imageId", "contentType", "imageSettings"]) delete slot[key];
   slot.content = content;
   slot.caption = caption;
-  Object.defineProperties(slot, {
-    chart: {
-      configurable: true,
-      enumerable: false,
-      get() {
-        return this.content.chart;
-      },
-      set(value2) {
-        this.content.chart = value2;
-      }
-    },
-    imageId: {
-      configurable: true,
-      enumerable: false,
-      get() {
-        return this.content.imageId;
-      },
-      set(value2) {
-        this.content.imageId = value2;
-      }
-    },
-    contentType: {
-      configurable: true,
-      enumerable: false,
-      get() {
-        return this.content.contentType;
-      },
-      set(value2) {
-        this.content.contentType = value2;
-      }
-    },
-    imageSettings: {
-      configurable: true,
-      enumerable: false,
-      get() {
-        return this.content.imageSettings;
-      },
-      set(value2) {
-        this.content.imageSettings = value2;
-      }
-    },
-    toJSON: {
-      configurable: true,
-      enumerable: false,
-      value() {
-        return slotLegacyState(this);
-      }
-    }
-  });
   return slot;
 }
 function normalizeSlotContents(slots) {
   if (!Array.isArray(slots)) return slots;
-  slots.forEach(normalizeSlotContent);
+  for (let index = 0; index < slots.length; index++) slots[index] = normalizeSlotContent(slots[index]);
   return slots;
 }
 function projectColor(value2, fallback) {
@@ -11095,7 +11064,7 @@ function validateProjectObjectState(state, { requireSlots = false } = {}) {
   });
   let slotIds = /* @__PURE__ */ new Set(), owners = new Map([...chartIds].map((id) => [id, 0]));
   state.slots.forEach((slot) => {
-    if (!record(slot) || !Number.isInteger(slot.id) || slotIds.has(slot.id) || !Number.isInteger(slot.row) || !Number.isInteger(slot.col) || !Number.isInteger(slot.rowSpan) || !Number.isInteger(slot.colSpan) || slot.row < 1 || slot.col < 1 || slot.rowSpan < 1 || slot.colSpan < 1 || slot.row + slot.rowSpan - 1 > state.layout.gridRows || slot.col + slot.colSpan - 1 > state.layout.gridCols || !record(slot.content) || !["graph", "image"].includes(slot.content.contentType) || slot.content.chart !== null && slot.content.imageId !== null || slot.content.chart !== null && !chartIds.has(slot.content.chart) || slot.content.imageId !== null && !imageIds.has(slot.content.imageId) || !(slot.caption === null || typeof slot.caption === "string"))
+    if (!(slot instanceof Slot) || typeof slot.hidden !== "boolean" || !Number.isInteger(slot.id) || slotIds.has(slot.id) || !Number.isInteger(slot.row) || !Number.isInteger(slot.col) || !Number.isInteger(slot.rowSpan) || !Number.isInteger(slot.colSpan) || slot.row < 1 || slot.col < 1 || slot.rowSpan < 1 || slot.colSpan < 1 || slot.row + slot.rowSpan - 1 > state.layout.gridRows || slot.col + slot.colSpan - 1 > state.layout.gridCols || !record(slot.content) || !["graph", "image"].includes(slot.content.contentType) || slot.content.chart !== null && slot.content.imageId !== null || slot.content.chart !== null && !chartIds.has(slot.content.chart) || slot.content.imageId !== null && !imageIds.has(slot.content.imageId) || !(slot.caption === null || typeof slot.caption === "string"))
       throw Error("프로젝트 슬롯 오브젝트가 올바르지 않습니다.");
     const settings = slot.content.imageSettings;
     if (!record(settings) || !["contain", "cover", "manual"].includes(settings.fit) || !Number.isFinite(settings.scale) || settings.scale < limits.imageSettings.scale[0] || settings.scale > limits.imageSettings.scale[1] || !Number.isFinite(settings.x) || settings.x < limits.imageSettings.x[0] || settings.x > limits.imageSettings.x[1] || !Number.isFinite(settings.y) || settings.y < limits.imageSettings.y[0] || settings.y > limits.imageSettings.y[1])
@@ -11278,7 +11247,7 @@ function chartCsvIds(chart) {
   ];
 }
 function headerLineCount(value2, table = []) {
-  const number = Number(value2);
+  const number = graphScalarNumber(value2);
   return Number.isFinite(number) ? Math.min(Math.max(0, Math.trunc(number)), Array.isArray(table) ? table.length : 0) : 0;
 }
 function columnIndex(column) {
@@ -11291,7 +11260,7 @@ function columnDefinitions(table = [], headerLines = 1) {
     0
   ), count = headerLineCount(headerLines, table), header = count > 0 && Array.isArray(table[count - 1]) ? table[count - 1] : [];
   return Array.from({ length: width }, (_, index) => {
-    let id = `C${index + 1}`, name = header[index], text = String(name ?? "").trim();
+    let id = `C${index + 1}`, name = header[index] ?? "", text = String(name).trim();
     return { id, index, name, label: text ? `${id} — ${text}` : id };
   });
 }
@@ -11407,10 +11376,9 @@ function tracesSingle(c) {
   return [trace];
 }
 function traces(c, project = activeProject._state) {
-  const owners = project.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === c.id), current = project.charts.find((chart) => chart.id === c.id);
-  if (owners.length !== 1 || !current || chartUsesConversionView(current))
+  const owners = project.slots.filter((slot) => slot.content.chart === c.id), current = project.charts.find((chart) => chart.id === c.id);
+  if (owners.length !== 1 || !current || chartUsesConversionView(c))
     throw Error("그래프 투영에 같은 프로젝트의 유일한 owning chart가 필요합니다.");
-  c = current;
   let settings = normalizeGraphLayoutSettings(c.editor.globalSettings), editor = c.editor, axes = settings.axes, objectList = Array.isArray(editor.objects) ? editor.objects : [], result = [];
   objectList.forEach((object, index) => {
     let csv = requireProjectCsv({ editor: { objects: [object] } }, `그래프 객체 ${index + 1}`, project.assets.csvFiles), xSide = object.xAxisSide || editor.xAxisSide || "bottom", ySide = object.yAxisSide || editor.yAxisSide || "left", xAxis = axes[axisKey("x", xSide)], yAxis = axes[axisKey("y", ySide)], axisRefs = {
@@ -11792,7 +11760,7 @@ function collectAssetReferences(csvIds, imageIds, state) {
     });
   });
   state.slots.forEach((slot) => {
-    const imageId = slot.content?.imageId ?? slot.imageId;
+    const imageId = slot.content.imageId;
     if (imageIds.has(imageId)) refs.push({ kind: "image", assetId: imageId, slotId: slot.id, slot });
   });
   return refs;
@@ -11855,8 +11823,8 @@ function buildProjectAssetImportCandidate(source, payload) {
         target.content.contentType = "image";
         target.content.imageId = staged.id;
       } else {
-        if (target.contentType !== "graph") return null;
-        let chart = candidate.charts.find((item) => item.id === target.chart);
+        if (target.content.contentType !== "graph") return null;
+        let chart = candidate.charts.find((item) => item.id === target.content.chart);
         if (chart?.editor?.editable === false) return null;
         const csv = candidate.assets.csvFiles.find((item) => item.id === staged.id);
         if (!chart) {
@@ -11867,7 +11835,7 @@ function buildProjectAssetImportCandidate(source, payload) {
             objects: []
           } });
           candidate.charts.push(chart);
-          target.chart = chart.id;
+          target.content.chart = chart.id;
         }
         chart.editor.objects.push(createCandidateBaseGraphObject(csv));
       }
@@ -11966,6 +11934,11 @@ function projectCsvName(value2, fallback = "data.csv") {
   let name = String(value2 || "").split(/[\\/]/).pop().trim().replace(/[\x00-\x1F:*?"<>|]/g, "-").replace(/\.{2,}/g, "-").replace(/[. ]+$/, "").slice(0, 180);
   return name || fallback;
 }
+function normalizeCsvHeaderLines(value2, rowCount, present = true) {
+  const parsed = !present || value2 !== null && typeof value2 === "object" ? NaN : Number(value2);
+  const count = present ? Number.isFinite(parsed) ? parsed : 0 : 1;
+  return Math.max(0, Math.min(rowCount, Math.trunc(count)));
+}
 function buildProjectCsvModel(data, name, id, bytesBase64 = "", mime = "text/csv", headerLines = 1, state = activeProject._state) {
   let model = {
     id,
@@ -11976,7 +11949,7 @@ function buildProjectCsvModel(data, name, id, bytesBase64 = "", mime = "text/csv
       serializeNewDataTable(dataTable(data), projectCsvName(name))
     ),
     mime: typeof mime === "string" && mime ? mime : "text/csv",
-    headerLines: headerLineCount(headerLines, data)
+    headerLines: normalizeCsvHeaderLines(headerLines, dataTable(data).length)
   };
   projectVfs.assignUniqueLocation(model, PROJECT_ASSET_DIRECTORIES.csv, state);
   return model;
@@ -12175,7 +12148,7 @@ function stageProjectAssetImport(candidate, item) {
   if (kind === "csv") {
     model.rows = parseProjectCsvAsset(item.file.name, bytes);
     if (item.replaceId !== null && index < 0) throw Error("교체할 자산이 없습니다.");
-    model.headerLines = headerLineCount(item.replaceId === null ? 1 : collection[index].headerLines, model.rows);
+    model.headerLines = normalizeCsvHeaderLines(item.replaceId === null ? 1 : collection[index].headerLines, model.rows.length);
   }
   if (item.replaceId !== null) {
     if (index < 0) throw Error("교체할 자산이 없습니다.");
@@ -12212,9 +12185,9 @@ function projectDataTreeSnapshot(objects = {}) {
       row: slot.row,
       col: slot.col,
       hidden: slot.hidden === true,
-      contentType: slot.contentType,
-      chart: slot.chart,
-      imageId: slot.imageId
+      contentType: slot.content.contentType,
+      chart: slot.content.chart,
+      imageId: slot.content.imageId
     }))
   };
 }
@@ -12235,7 +12208,7 @@ function importedProjectCsvState(payload) {
         serializeNewDataTable(source.rows, projectCsvName(source.name, `data-${index + 1}.csv`))
       ),
       mime: typeof source.mime === "string" ? source.mime : "text/csv",
-      headerLines: headerLineCount(Object.hasOwn(source, "headerLines") ? source.headerLines : 1, source.rows)
+      headerLines: normalizeCsvHeaderLines(source.headerLines, source.rows.length, Object.hasOwn(source, "headerLines"))
     };
   });
   return {
@@ -12308,7 +12281,7 @@ function buildProjectObject(payload, fileName) {
       };
       if (kind === "csv") {
         asset.rows = dataTable(raw.rows);
-        asset.headerLines = headerLineCount(own(raw, "headerLines", 1), asset.rows);
+        asset.headerLines = normalizeCsvHeaderLines(raw.headerLines, asset.rows.length, Object.hasOwn(raw, "headerLines"));
       }
       candidate.assets[kind === "csv" ? "csvFiles" : "images"].push(asset);
     }
@@ -12675,7 +12648,7 @@ function ffpxBuildProject(source = activeProject._state) {
     manifest.charts.push(chartExportCopy(chart));
   }
   for (let slot of slotObjects) {
-    let copy = projectClone(slot);
+    let copy = slotLegacyState(slot);
     if (copy.imageId != null) {
       let image = imageObjects.find((item) => item.id === copy.imageId);
       if (!image)
@@ -12912,7 +12885,7 @@ function ffpxReadProjectBytes(bytes) {
     if (!csv || !Number.isInteger(csv.id) || typeof csv.name !== "string" || typeof dataRef !== "string" || !dataRef.startsWith("assets/data/") || !assets.has(dataRef))
       throw Error("FFPX CSV 자산이 없습니다.");
     csv.rows = parseProjectCsvAsset(csv.name, assets.get(dataRef));
-    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
+    csv.headerLines = normalizeCsvHeaderLines(csv.headerLines, csv.rows.length, Object.hasOwn(csv, "headerLines"));
     csv.bytesBase64 = ffpxBytesToBase64(assets.get(dataRef));
     delete csv.dataRef;
   }
@@ -13143,7 +13116,7 @@ function ffsxReadSlotBytes(bytes) {
       throw Error("FFSX 슬롯 내부 CSV ID가 올바르지 않습니다.");
     slotCsvIds.add(csv.id);
     csv.rows = parseProjectCsvAsset(csv.name, data);
-    csv.headerLines = headerLineCount(Object.hasOwn(csv, "headerLines") ? csv.headerLines : 1, csv.rows);
+    csv.headerLines = normalizeCsvHeaderLines(csv.headerLines, csv.rows.length, Object.hasOwn(csv, "headerLines"));
     csv.bytesBase64 = ffpxBytesToBase64(data);
     delete csv.dataRef;
   }
@@ -13266,6 +13239,11 @@ function removedReferenceCounts(pre, post) {
   }
   return result;
 }
+function normalizeAndValidateCandidate(candidate) {
+  normalizeSlotContents(candidate.slots);
+  normalizeProjectSettings(candidate);
+  return validateProjectObjectState(candidate, { requireSlots: true });
+}
 var ProjectStateMachine = class {
   constructor(objects, actions) {
     this.objects = objects;
@@ -13291,12 +13269,20 @@ var ProjectStateMachine = class {
       "resetImageSlotCount"
     ]) delete input[key];
     const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts, changed = committed ? actualChanged(input) : {}, counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post) : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
+    const selectionHints = committed ? { ...input.selectionHints } : {};
+    if (committed && input.operation === "graphs.moveObject") {
+      const { pre, post } = input.commitFacts, before = pre.charts.find((chart) => chart.id === input.chartId), after = post.charts.find((chart) => chart.id === input.chartId), from = input.from, to = input.to;
+      if (!before || !after || before.editor.objects.length !== after.editor.objects.length)
+        throw Error("이동 결과의 반영 전후 차트가 일치하지 않습니다.");
+      const indices = before.editor.objects.map((_, index) => index === from ? to : from < to && index > from && index <= to ? index - 1 : to < from && index >= to && index < from ? index + 1 : index);
+      selectionHints.graphObjectIndexMaps = [{ chartId: after.id, indices }];
+    }
     return immutableProjectCopy({
       event,
       committed,
       changed,
       ...counts,
-      selectionHints: committed ? input.selectionHints || {} : {},
+      selectionHints,
       projectionEffect: committed ? input.projectionEffect : null
     });
   }
@@ -13309,7 +13295,7 @@ function applySlotTypeAction({ machine, event, payload }) {
     const candidate = projectClone(source);
     normalizeSlotContents(candidate.slots);
     candidate.slots.find((slot) => slot.id === current.id).content.contentType = payload.contentType === "image" ? "image" : "graph";
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const after = activeProject._state.slots.find((slot) => slot.id === current.id);
@@ -13339,7 +13325,7 @@ function applyCaptionTextAction({ machine, event, payload }) {
     }
     if (slot) candidate.slots.find((item) => item.id === slot.id).caption = text || null;
     else candidate.annotations.captions.text = text;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.changed = {
@@ -13364,44 +13350,47 @@ function applySlotCaptionsInsertedAction({ machine, event, payload }) {
     const text = insertSlotCaptions(candidate, payload.slotIds ?? null);
     if (text === candidate.annotations.captions.text) return false;
     candidate.annotations.captions.text = text;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [] };
     return;
   }
 }
+function copiedAssetBytes(payload) {
+  if (Object.hasOwn(payload, "bytes"))
+    return typeof payload.bytes === "string" ? ffpxBase64ToBytes(payload.bytes) : new Uint8Array(payload.bytes);
+  if (payload.bytesBase64 != null && payload.bytesBase64 !== "")
+    return ffpxBase64ToBytes(payload.bytesBase64);
+  return null;
+}
 function applyDataObjectCreatedAction({ machine, event, payload }) {
-  machine.assertWritable("data", "DATA_OBJECT_CREATED");
-  machine.assertWritable("files", "DATA_OBJECT_CREATED");
+  machine.assertWritable("data", event);
+  machine.assertWritable("files", event);
+  machine.assertWritable("charts", event);
   while (true) {
-    const source = activeProject._state, candidate = projectClone(source), rows = projectClone(dataTable(payload.data)), requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.csv}/${projectCsvName(payload.name)}`, normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
+    const source = activeProject._state, candidate = projectClone(source), bytes = copiedAssetBytes(payload), rows = Object.hasOwn(payload, "data") ? projectClone(dataTable(payload.data)) : Object.hasOwn(payload, "rows") ? projectClone(payload.rows) : parseProjectCsvAsset(payload.name, bytes), requested = payload.path || `${PROJECT_ASSET_DIRECTORIES.csv}/${projectCsvName(payload.name)}`, normalized = normalizeProjectPath(requested), directory = projectParentPath(normalized);
     if (!source.fileSystem.directories.includes(directory)) throw Error("CSV 상위 directory가 없습니다.");
     const path = projectVfs.uniquePath(directory, projectPathName(normalized), source), id = payload.id == null ? source.nextId.csv : payload.id;
     if (!Number.isInteger(id) || id <= 0 || source.assets.csvFiles.some((csv2) => csv2.id === id))
       throw Error(`CSV ID ${id}가 올바르지 않거나 중복되었습니다.`);
-    const original = payload.bytesBase64, bytesBase64 = original != null && original !== "" ? (ffpxBase64ToBytes(original), original) : ffpxBytesToBase64(serializeNewDataTable(rows, path)), csv = {
+    const csv = {
       id,
       rows,
-      bytesBase64,
+      bytesBase64: ffpxBytesToBase64(bytes ?? serializeNewDataTable(rows, path)),
       mime: payload.mime || "text/csv",
-      headerLines: headerLineCount(payload.headerLines, rows),
-      directory: projectParentPath(path),
+      headerLines: normalizeCsvHeaderLines(payload.headerLines, rows.length, Object.hasOwn(payload, "headerLines")),
+      directory,
       name: projectPathName(path)
     };
     candidate.assets.csvFiles.push(csv);
     candidate.nextId.csv = Math.max(candidate.nextId.csv, id + 1);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    for (const chart of candidate.charts)
+      if (chart.editor.editable !== false && chartCsvIds(chart).includes(id)) rebuildEditableGraph(chart, candidate);
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
-    const committed = activeProject._state.assets.csvFiles.find((item) => item.id === id);
-    payload.changed = {
-      slotIds: [],
-      chartIds: [],
-      csvIds: [id],
-      imageIds: [],
-      assets: [{ role: "created", kind: "csv", id, path: projectAssetPath(committed), owners: [] }]
-    };
+    payload.changed = { assets: [{ role: "created", kind: "csv", id, path }] };
     return;
   }
 }
@@ -13411,23 +13400,26 @@ function applyAssetObjectReplacedAction({ machine, event, payload }, kind) {
   machine.assertWritable("files", event);
   if (!image) machine.assertWritable("charts", event);
   while (true) {
-    const source = activeProject._state, previous = source.assets[collection].find((item) => item.id === payload.id);
+    const source = activeProject._state, id = image ? payload.id : payload.id ?? payload.csvId, previous = source.assets[collection].find((item) => item.id === id);
     if (!previous || Object.hasOwn(payload, "path") && projectAssetPath(previous) !== payload.path)
       throw Error("교체할 asset의 현재 id/path가 요청과 다릅니다.");
-    const candidate = projectClone(source), next = candidate.assets[collection].find((item) => item.id === previous.id);
-    if (image) {
-      const bytes = typeof payload.bytes === "string" ? ffpxBase64ToBytes(payload.bytes) : new Uint8Array(payload.bytes || []);
-      if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
+    const candidate = projectClone(source), next = candidate.assets[collection].find((item) => item.id === previous.id), bytes = copiedAssetBytes(payload);
+    if (bytes !== null) {
+      if (image && !bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
       next.bytesBase64 = ffpxBytesToBase64(bytes);
-    } else {
-      next.rows = projectClone(dataTable(payload.data));
-      next.headerLines = headerLineCount(Object.hasOwn(payload, "headerLines") ? payload.headerLines : previous.headerLines, next.rows);
-      next.bytesBase64 = payload.bytesBase64 != null && payload.bytesBase64 !== "" ? (ffpxBase64ToBytes(payload.bytesBase64), payload.bytesBase64) : ffpxBytesToBase64(serializeNewDataTable(next.rows, projectAssetPath(previous)));
+    }
+    if (!image) {
+      if (Object.hasOwn(payload, "data")) next.rows = projectClone(dataTable(payload.data));
+      else if (Object.hasOwn(payload, "rows")) next.rows = projectClone(payload.rows);
+      else if (bytes !== null) next.rows = parseProjectCsvAsset(previous.name, bytes);
+      if (bytes === null && (Object.hasOwn(payload, "data") || Object.hasOwn(payload, "rows")))
+        next.bytesBase64 = ffpxBytesToBase64(serializeNewDataTable(next.rows, projectAssetPath(previous)));
+      next.headerLines = normalizeCsvHeaderLines(Object.hasOwn(payload, "headerLines") ? payload.headerLines : previous.headerLines, next.rows.length);
       for (const chart of candidate.charts)
-        if (chart.editor.editable && chartCsvIds(chart).includes(next.id)) rebuildEditableGraph(chart, candidate);
+        if (chart.editor.editable !== false && chartCsvIds(chart).includes(next.id)) rebuildEditableGraph(chart, candidate);
     }
     if (Object.hasOwn(payload, "mime")) next.mime = payload.mime;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.changed = { assets: [{ role: "updated", kind, id: next.id, path: projectAssetPath(next) }] };
@@ -13435,39 +13427,7 @@ function applyAssetObjectReplacedAction({ machine, event, payload }, kind) {
   }
 }
 function applyDataObjectReplacedAction(context) {
-  const { machine, event, payload } = context;
-  if (!Object.hasOwn(payload, "headerLines")) {
-    applyAssetObjectReplacedAction(context, "csv");
-    return;
-  }
-  machine.assertWritable("data", "DATA_OBJECT_REPLACED");
-  machine.assertWritable("files", "DATA_OBJECT_REPLACED");
-  machine.assertWritable("charts", "DATA_OBJECT_REPLACED");
-  while (true) {
-    const source = activeProject._state, current = source.assets.csvFiles.find((csv2) => csv2.id === payload.csvId);
-    if (!current) throw Error("헤더를 변경할 프로젝트 CSV가 없습니다.");
-    const candidate = projectClone(source), csv = candidate.assets.csvFiles.find((item) => item.id === current.id);
-    csv.headerLines = headerLineCount(payload.headerLines, csv.rows);
-    candidate.charts.forEach((chart) => {
-      if (chart.editor?.editable !== false && chartCsvIds(chart).includes(csv.id))
-        rebuildEditableGraph(chart, candidate);
-    });
-    validateProjectObjectState(candidate, { requireSlots: true });
-    if (activeProject._state !== source) continue;
-    commitProjectCandidate(candidate, event, payload);
-    const post = activeProject._state, committed = post.assets.csvFiles.find((item) => item.id === current.id), changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id), owners = post.charts.filter((chart) => chartCsvIds(chart).includes(committed.id)).map((chart) => ({
-      chartId: chart.id,
-      slotId: post.slots.find((slot) => (slot.content?.chart ?? slot.chart) === chart.id).id
-    }));
-    payload.changed = {
-      slotIds: changedIds(source.slots, post.slots),
-      chartIds: changedIds(source.charts, post.charts),
-      csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
-      imageIds: changedIds(source.assets.images, post.assets.images),
-      assets: [{ role: "updated", kind: "csv", id: committed.id, path: projectAssetPath(committed), owners }]
-    };
-    return;
-  }
+  return applyAssetObjectReplacedAction(context, "csv");
 }
 function applyDataObjectDeletedAction(context) {
   return applyAssetObjectDeletedAction(context, "csv");
@@ -13494,7 +13454,7 @@ function applyAssetObjectDeletedAction({ machine, payload }, kind) {
     }
     const removedReferences = removeProjectAssetReferences(csvIds, imageIds, candidate), collection = kind === "csv" ? "csvFiles" : "images";
     candidate.assets[collection] = candidate.assets[collection].filter((item) => item.id !== target.id);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => [...new Set([...before, ...after].map((item) => item.id))].filter((id) => JSON.stringify(before.find((item) => item.id === id)) !== JSON.stringify(after.find((item) => item.id === id)));
@@ -13519,8 +13479,8 @@ function applyImageObjectCreatedAction({ machine, event, payload }) {
     const path = projectVfs.uniquePath(directory, projectPathName(normalized), source), id = payload.id == null ? source.nextId.image : payload.id;
     if (!Number.isInteger(id) || id <= 0 || source.assets.images.some((image2) => image2.id === id))
       throw Error(`이미지 ID ${id}가 올바르지 않거나 중복되었습니다.`);
-    const input = payload.bytes, bytes = typeof input === "string" ? ffpxBase64ToBytes(input) : new Uint8Array(input || []);
-    if (!bytes.length) throw Error("이미지 데이터가 비어 있습니다.");
+    const bytes = copiedAssetBytes(payload);
+    if (!bytes?.length) throw Error("이미지 데이터가 비어 있습니다.");
     candidate.assets.images.push({
       id,
       name: projectPathName(path),
@@ -13529,7 +13489,7 @@ function applyImageObjectCreatedAction({ machine, event, payload }) {
       bytesBase64: ffpxBytesToBase64(bytes)
     });
     candidate.nextId.image = Math.max(candidate.nextId.image, id + 1);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const image = activeProject._state.assets.images.find((item) => item.id === id);
@@ -13565,12 +13525,12 @@ function applySlotsResetAction({ machine, event, payload }) {
     const chartIds = /* @__PURE__ */ new Set();
     for (const id of ids) {
       const slot = candidate.slots.find((slot2) => slot2.id === id);
-      if (Number.isInteger(slot.chart)) chartIds.add(slot.chart);
+      if (Number.isInteger(slot.content.chart)) chartIds.add(slot.content.chart);
       slot.content = { ...projectClone(BackendSettings.defaults.slotSettings.content), chart: null, imageId: null };
       slot.caption = null;
     }
     candidate.charts = candidate.charts.filter((chart) => !chartIds.has(chart.id));
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const after = activeProject._state;
@@ -13602,7 +13562,7 @@ function applySlotsSwappedAction({ machine, event, payload }) {
     a.caption = b.caption;
     b.content = content;
     b.caption = caption;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const after = activeProject._state;
@@ -13621,7 +13581,7 @@ function applyProjectAssetConnectedAction({ machine, payload }, kind) {
   if (kind === "csv") machine.assertWritable("charts", event);
   while (true) {
     const source = activeProject._state, slot = source.slots.find((item) => item.id === payload.slotId && !item.hidden), node = typeof payload.path === "string" ? projectVfs.resolve(payload.path, source) : null;
-    if (payload.kind !== kind || node?.kind !== kind || projectVfs.isTrashed(payload.path) || !slot || slot.contentType !== (kind === "csv" ? "graph" : "image"))
+    if (payload.kind !== kind || node?.kind !== kind || projectVfs.isTrashed(payload.path) || !slot || slot.content.contentType !== (kind === "csv" ? "graph" : "image"))
       throw Error("연결할 현재 non-trash asset kind/path 또는 visible slot type이 올바르지 않습니다.");
     const candidate = projectClone(source);
     candidate.slots.forEach((item, index) => {
@@ -13630,9 +13590,9 @@ function applyProjectAssetConnectedAction({ machine, payload }, kind) {
     normalizeSlotContents(candidate.slots);
     const target = candidate.slots.find((item) => item.id === slot.id);
     let chart = null;
-    if (kind === "image") target.imageId = node.asset.id;
+    if (kind === "image") target.content.imageId = node.asset.id;
     else {
-      chart = candidate.charts.find((item) => item.id === target.chart);
+      chart = candidate.charts.find((item) => item.id === target.content.chart);
       if (chart?.editor?.editable === false) throw Error("편집 가능한 graph slot이 필요합니다.");
       if (!chart) {
         chart = createChartModel({ id: candidate.nextId.chart++, editor: {
@@ -13642,16 +13602,16 @@ function applyProjectAssetConnectedAction({ machine, payload }, kind) {
           objects: []
         } });
         candidate.charts.push(chart);
-        target.chart = chart.id;
+        target.content.chart = chart.id;
       }
       chart.editor.objects.push(createCandidateBaseGraphObject(candidate.assets.csvFiles.find((item) => item.id === node.asset.id)));
       rebuildEditableGraph(chart, candidate);
     }
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.changed = {
-      slotIds: slot.chart !== target.chart || slot.imageId !== target.imageId ? [slot.id] : [],
+      slotIds: slot.content.chart !== target.content.chart || slot.content.imageId !== target.content.imageId ? [slot.id] : [],
       chartIds: chart ? [chart.id] : [],
       csvIds: [],
       imageIds: [],
@@ -13666,7 +13626,7 @@ function applyGraphFirstObjectAction({ machine, event, payload }) {
   machine.assertWritable("editor", "SLOT_DATA_CONNECTED");
   while (true) {
     const source = activeProject._state, slot = source.slots.find((item) => item.id === payload.slotId && !item.hidden), csv = source.assets.csvFiles.find((item) => item.id === payload.csvId);
-    if (!slot || slot.contentType !== "graph" || !csv || (slot.content?.chart ?? slot.chart) != null)
+    if (!slot || slot.content.contentType !== "graph" || !csv || slot.content.chart != null)
       throw Error("첫 오브젝트의 현재 빈 graph 슬롯 또는 CSV가 없습니다.");
     const candidate = projectClone(source);
     normalizeSlotContents(candidate.slots);
@@ -13677,9 +13637,9 @@ function applyGraphFirstObjectAction({ machine, event, payload }) {
       objects: [createCandidateBaseGraphObject(candidateCsv)]
     } });
     candidate.charts.push(chart);
-    target.chart = chart.id;
+    target.content.chart = chart.id;
     rebuildEditableGraph(chart, candidate);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.changed = { slotIds: [slot.id], chartIds: [chart.id], csvIds: [], imageIds: [], assets: [] };
@@ -13703,8 +13663,8 @@ function applyGraphObjectEditAction({ machine, event, payload }) {
   if (!["graphs.setObjectValues", "graphs.moveObject", "graphs.deleteObject", "graphs.applyPalette", "graphs.addObject"].includes(payload.operation))
     throw Error("등록된 graph object operation이 아닙니다.");
   while (true) {
-    const source = activeProject._state, operation = payload.operation, target = operation === "graphs.addObject" ? source.slots.find((slot) => slot.id === payload.slotId && !slot.hidden) : null, chartId = operation === "graphs.addObject" ? target?.content?.chart ?? target?.chart : payload.chartId, current = source.charts.find((chart2) => chart2.id === chartId), owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === chartId), index = payload.index, values = payload.values || {};
-    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" || current.editor?.editable === false)
+    const source = activeProject._state, operation = payload.operation, target = operation === "graphs.addObject" ? source.slots.find((slot) => slot.id === payload.slotId && !slot.hidden) : null, chartId = operation === "graphs.addObject" ? target?.content.chart : payload.chartId, current = source.charts.find((chart2) => chart2.id === chartId), owners = source.slots.filter((slot) => slot.content.chart === chartId), index = payload.index, values = payload.values || {};
+    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].content.contentType === "image" || current.editor?.editable === false)
       throw Error("변경할 현재 편집 가능 차트 또는 유일한 visible graph owner가 없습니다.");
     const validIndex = (value2) => Number.isInteger(value2) && value2 >= 0 && value2 < current.editor.objects.length;
     if (operation === "graphs.moveObject") {
@@ -13721,7 +13681,6 @@ function applyGraphObjectEditAction({ machine, event, payload }) {
     } else if (operation === "graphs.moveObject") {
       const moved = chart.editor.objects.splice(payload.from, 1)[0];
       chart.editor.objects.splice(payload.to, 0, moved);
-      selectedIndexHint = payload.to;
     } else if (operation === "graphs.deleteObject") {
       chart.editor.objects.splice(index, 1);
       selectedIndexHint = null;
@@ -13778,7 +13737,7 @@ function applyGraphObjectEditAction({ machine, event, payload }) {
     }
     validateChartModel(chart, "변경할 차트", candidate.assets.csvFiles);
     rebuildEditableGraph(chart, candidate);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
@@ -13789,7 +13748,7 @@ function applyGraphObjectEditAction({ machine, event, payload }) {
       imageIds: changedIds(source.assets.images, post.assets.images),
       assets: []
     };
-    payload.selectionHints = Object.freeze(operation === "graphs.applyPalette" ? { chartId: current.id } : { chartId: current.id, selectedIndexHint });
+    payload.selectionHints = Object.freeze(["graphs.applyPalette", "graphs.moveObject"].includes(operation) ? { chartId: current.id } : { chartId: current.id, selectedIndexHint });
     return;
   }
 }
@@ -13800,8 +13759,8 @@ function applyChartLayoutChangedAction({ machine, event, payload }) {
   machine.assertWritable("charts", "CHART_LAYOUT_CHANGED");
   machine.assertWritable("editor", "CHART_LAYOUT_CHANGED");
   while (true) {
-    const source = activeProject._state, slot = source.slots.find((item) => item.id === payload.slotId && !item.hidden), chartId = slot?.content?.chart ?? slot?.chart, current = source.charts.find((item) => item.id === chartId), owners = source.slots.filter((item) => (item.content?.chart ?? item.chart) === chartId), values = payload.settings;
-    if (!slot || slot.contentType === "image" || !current || current.id !== payload.chartId || owners.length !== 1)
+    const source = activeProject._state, slot = source.slots.find((item) => item.id === payload.slotId && !item.hidden), chartId = slot?.content.chart, current = source.charts.find((item) => item.id === chartId), owners = source.slots.filter((item) => item.content.chart === chartId), values = payload.settings;
+    if (!slot || slot.content.contentType === "image" || !current || current.id !== payload.chartId || owners.length !== 1)
       throw Error("전역 설정을 변경할 현재 owning chart가 없습니다.");
     if (!values || typeof values !== "object" || Array.isArray(values)) throw Error("적용할 그래프 설정이 없습니다.");
     const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === chartId), settings = projectClone(chart.editor.globalSettings || {}), edits = values.globalSettings;
@@ -13824,7 +13783,7 @@ function applyChartLayoutChangedAction({ machine, event, payload }) {
     if (["xBottom", "xTop", "yLeft", "yRight"].includes(values.axisKey)) applyAxis(values.axisKey, values.axisValues);
     chart.editor.globalSettings = normalizeGraphLayoutSettings(settings);
     if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const after = activeProject._state;
@@ -13842,8 +13801,8 @@ function applyChartModelReplacedAction({ machine, event, payload }) {
   for (const target of ["charts", "editor", "data", "files"])
     machine.assertWritable(target, "CHART_MODEL_REPLACED");
   while (true) {
-    const source = activeProject._state, owners = source.slots.filter((slot) => (slot.content?.chart ?? slot.chart) === payload.chartId), current = source.charts.find((chart2) => chart2.id === payload.chartId);
-    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].contentType === "image" || owners[0].id !== payload.slotId || typeof payload.editable !== "boolean")
+    const source = activeProject._state, owners = source.slots.filter((slot) => slot.content.chart === payload.chartId), current = source.charts.find((chart2) => chart2.id === payload.chartId);
+    if (!current || owners.length !== 1 || owners[0].hidden || owners[0].content.contentType === "image" || owners[0].id !== payload.slotId || typeof payload.editable !== "boolean")
       throw Error("편집 상태를 변경할 현재 차트 또는 유일한 graph owner가 없습니다.");
     const candidate = projectClone(source), chart = candidate.charts.find((item) => item.id === current.id);
     let created = null;
@@ -13870,7 +13829,7 @@ function applyChartModelReplacedAction({ machine, event, payload }) {
     chart.editor.editable = payload.editable;
     validateChartModel(chart, "편집 상태 변경 차트", candidate.assets.csvFiles);
     if (chart.editor.editable) rebuildEditableGraph(chart, candidate);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
@@ -13897,7 +13856,7 @@ function applyEmptyImageInsertedAction({ machine, event, payload }) {
   machine.assertWritable("charts", "SLOT_IMAGE_IMPORTED");
   while (true) {
     const source = activeProject._state, current = source.slots.find((slot) => slot.id === payload.slotId && !slot.hidden);
-    if (!current || (current.content?.contentType ?? current.contentType) !== "image")
+    if (!current || current.content.contentType !== "image")
       throw Error("빈 이미지를 삽입할 현재 visible image 슬롯이 없습니다.");
     const input = payload.operation === "images.insertEmpty" ? payload.imageInput : payload, bytes = typeof input?.bytes === "string" ? ffpxBase64ToBytes(input.bytes) : new Uint8Array(input?.bytes || []), directory = PROJECT_ASSET_DIRECTORIES.image;
     if (!bytes.length || !source.fileSystem.directories.includes(directory)) throw Error("이미지 데이터 또는 directory가 없습니다.");
@@ -13922,7 +13881,7 @@ function applyEmptyImageInsertedAction({ machine, event, payload }) {
     candidate.charts = candidate.charts.filter((chart) => chart.id !== removedChartId);
     target.content.chart = null;
     target.content.imageId = id;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const image = activeProject._state.assets.images.find((item) => item.id === id);
@@ -13995,7 +13954,7 @@ function applySlotChartImportedAction({ machine, event, payload }) {
     target.content.imageId = null;
     target.content.contentType = "graph";
     if (packaged) target.caption = input.slot.caption;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.changed = {
@@ -14031,7 +13990,7 @@ function applyProjectDirectoryCreatedAction({ machine, event, payload }) {
     const candidate = projectClone(source);
     candidate.fileSystem.directories.push(path);
     candidate.fileSystem.directories.sort();
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const actual = projectVfs.resolve(path, activeProject._state);
@@ -14066,7 +14025,7 @@ function applyProjectTrashEmptiedAction({ machine, event, payload }) {
     candidate.assets.csvFiles = candidate.assets.csvFiles.filter((csv) => !csvIds.has(csv.id));
     candidate.assets.images = candidate.assets.images.filter((image) => !imageIds.has(image.id));
     candidate.fileSystem.directories = candidate.fileSystem.directories.filter((path) => !directories.includes(path));
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => [...new Set([...before, ...after].map((item) => item.id))].filter((id) => JSON.stringify(before.find((item) => item.id === id)) !== JSON.stringify(after.find((item) => item.id === id)));
@@ -14125,7 +14084,7 @@ function applyProjectNodeMovedAction({ machine, event, payload }) {
       match.asset.directory = projectParentPath(destination);
       match.asset.name = projectPathName(destination);
     }
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => [...new Set([...before, ...after].map((item) => item.id))].filter((id) => JSON.stringify(before.find((item) => item.id === id)) !== JSON.stringify(after.find((item) => item.id === id)));
@@ -14155,7 +14114,7 @@ function applyProjectNameChangedAction({ machine, event, payload }) {
     if (payload.trim === true) name = name.trim();
     const candidate = projectClone(source);
     candidate.meta.projectName = name.slice(0, BackendSettings.defaults.naming.projectNameMaxLength);
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => [...new Set([...before, ...after].map((item) => item.id))].filter((id) => JSON.stringify(before.find((item) => item.id === id)) !== JSON.stringify(after.find((item) => item.id === id)));
@@ -14195,7 +14154,7 @@ function applyLabelSettingsChangedAction({ machine, event, payload }) {
         settings[key] = edits[key];
       }
     }
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     return;
@@ -14209,7 +14168,7 @@ function applyLabelPositionChangedAction({ machine, event, payload }) {
       throw Error("레이블 위치는 유한한 수여야 합니다.");
     settings.x = x;
     settings.y = y;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     return;
@@ -14225,7 +14184,7 @@ function applyAppearanceChangedAction({ machine, event, payload }) {
         return [key, typeof value2 === "string" && /^#[0-9a-f]{6}$/i.test(value2) ? value2 : fallback];
       })
     );
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     return;
@@ -14256,7 +14215,7 @@ function applyExportSettingsChangedAction({ machine, event, payload }) {
     }
     next.height = next.heightMode === "auto" ? null : next.height ?? current.height ?? limits.logicalHeight[0];
     candidate.export = next;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
@@ -14295,7 +14254,7 @@ function applySlotImageSettingsChangedAction({ machine, event, payload }) {
       }
     }
     target.content.imageSettings = next;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
@@ -14334,7 +14293,7 @@ function applyCaptionSettingsChangedAction({ machine, event, payload }) {
         captions.settings[key] = Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : defaults[key];
       }
     }
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     const post = activeProject._state, changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
@@ -14359,7 +14318,7 @@ function applyLayoutStyleChangedAction({ machine, event, payload }) {
     }
     if (Object.prototype.hasOwnProperty.call(payload, "showBorders"))
       style.showBorders = payload.showBorders === true;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     return;
@@ -14394,7 +14353,7 @@ function applySlotsMergedAction({ machine, event, payload }) {
     anchor.rowSpan = bottom - top + 1;
     anchor.colSpan = right - left + 1;
     anchor.hidden = false;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== current) continue;
     commitProjectCandidate(candidate, event, payload);
     payload.selectionHints = {
@@ -14424,7 +14383,7 @@ function applySlotsSplitAction({ machine, event, payload }) {
         }
       });
     }
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== current) continue;
     commitProjectCandidate(candidate, event, payload);
     return;
@@ -14437,7 +14396,7 @@ function applyAssetsImportedAction({ machine, event, payload }) {
     const source = activeProject._state, calculation = buildProjectAssetImportCandidate(source, payload);
     if (!calculation) return false;
     const { candidate, imported } = calculation;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     const changedIds = (before, after) => after.filter((item) => JSON.stringify(before.find((old) => old.id === item.id)) !== JSON.stringify(item)).map((item) => item.id);
     const changed = {
@@ -14498,7 +14457,7 @@ function applyProjectLoadedAction({ machine, event, payload }) {
     const source = activeProject._state, file = payload.file;
     if (!file || !(file.bytes instanceof Uint8Array)) throw Error("불러올 copied FFPX bytes가 없습니다.");
     const candidate = buildProjectObject(ffpxReadProjectBytes(new Uint8Array(file.bytes)), file.name)._state;
-    validateProjectObjectState(candidate, { requireSlots: true });
+    normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
     projectRuntime.projectObjectGeneration += 1;
@@ -14596,14 +14555,8 @@ function readmeContentHtml() {
   let template = $("readmeContent");
   return template ? template.innerHTML.replaceAll("{{APP_BUILD}}", APP_BUILD) : "";
 }
-function applyReferenceGeometryProjection(element, style, width) {
+function applyReferenceGeometryProjection(element, geometry) {
   if (!element) return;
-  const scale = width / style.referenceWidth, geometry = {
-    outerMargin: Math.min(style.outerMargin * scale, Math.min(width, width / style.aspect) * 0.49),
-    gap: style.gap * scale,
-    radius: style.radius * scale,
-    scale
-  };
   element.style.setProperty("--dashboard-outer-margin", `${geometry.outerMargin}px`);
   element.style.setProperty("--slot-gap", `${geometry.gap}px`);
   element.style.setProperty("--slot-radius", `${geometry.radius}px`);
@@ -14617,19 +14570,78 @@ function syncDashboardCaptionWidth() {
   caption.style.width = `${width}px`;
   caption.style.minWidth = `${width}px`;
 }
-function applySlotStyleProjection(style, interfaceState) {
-  const dashboard = $("dashboard"), border = style.showBorders ? "var(--ui-color)" : "transparent", width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth : style.referenceWidth * interfaceState.dashboardZoomIntent / 100;
-  for (const id of ["dashboard", "dashboardCaption"]) {
-    const host = $(id);
-    host?.style.setProperty("--slot-border-color", border);
-    host?.style.setProperty("--layout-slot-border-style", style.showBorders ? "solid" : "dashed");
+function renderDashboardFrame(host, layout2, visibleSlots, geometry) {
+  host.classList.add("dashboard", "fixed-aspect");
+  Object.assign(host.style, {
+    display: "grid",
+    boxSizing: "border-box",
+    width: `${geometry.width}px`,
+    minWidth: `${geometry.width}px`,
+    height: `${geometry.height}px`,
+    minHeight: "0",
+    gridTemplateColumns: `repeat(${layout2.gridCols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${layout2.gridRows}, minmax(0, 1fr))`,
+    gap: `${geometry.gap}px`,
+    padding: `${geometry.outerMargin}px`,
+    borderRadius: "0"
+  });
+  host.style.setProperty("--grid-cols", layout2.gridCols);
+  host.style.setProperty("--grid-rows", layout2.gridRows);
+  host.style.setProperty("--dashboard-aspect", `${geometry.aspect} / 1`);
+  host.style.setProperty("--slot-border-color", layout2.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+  applyReferenceGeometryProjection(host, geometry);
+  const slots = /* @__PURE__ */ new Map(), existing = new Map([...host.children].filter((element) => element.classList.contains("slot")).map((element) => [Number(element.dataset.slot), element]));
+  for (const slot of visibleSlots) {
+    let frame = existing.get(slot.id);
+    if (!frame) {
+      frame = document.createElement("section");
+      frame.className = "slot";
+      frame.dataset.slot = slot.id;
+    }
+    let content = frame.querySelector(":scope > .slot-content"), decoration = frame.querySelector(":scope > .slot-decoration");
+    if (!content) {
+      content = document.createElement("div");
+      content.className = "slot-content";
+      frame.append(content);
+    }
+    if (!decoration) {
+      decoration = document.createElement("div");
+      decoration.className = "slot-decoration";
+      frame.append(decoration);
+    }
+    Object.assign(frame.style, {
+      gridArea: `${slot.row} / ${slot.col} / span ${slot.rowSpan} / span ${slot.colSpan}`,
+      minWidth: "0",
+      minHeight: "0",
+      boxSizing: "border-box",
+      borderRadius: `${geometry.radius}px`,
+      border: "1px solid var(--slot-border-color)",
+      background: "var(--graph-bg, #fff)"
+    });
+    Object.assign(content.style, {
+      width: "100%",
+      height: "100%",
+      minWidth: "0",
+      minHeight: "0",
+      overflow: "hidden",
+      borderRadius: "inherit"
+    });
+    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit" });
+    host.append(frame);
+    slots.set(slot.id, { frame, content, decoration });
+    existing.delete(slot.id);
   }
-  const hasAspect = Number.isFinite(style.aspect) && style.aspect > 0;
-  dashboard.classList.toggle("fixed-aspect", hasAspect);
-  if (hasAspect) dashboard.style.setProperty("--dashboard-aspect", `${style.aspect} / 1`);
-  else dashboard.style.removeProperty("--dashboard-aspect");
-  applyReferenceGeometryProjection(dashboard, style, width);
+  for (const frame of existing.values()) frame.remove();
+  return { grid: host, slots };
+}
+function applySlotStyleProjection(projection) {
+  const view = renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  $("dashboardCaption")?.style.setProperty(
+    "--slot-border-color",
+    projection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent"
+  );
   syncDashboardCaptionWidth();
+  return view;
 }
 var projectImageDisplayUrls = /* @__PURE__ */ new Map();
 function projectImageDisplayUrl(image) {
@@ -14752,7 +14764,7 @@ function scheduleSlotDragClickSuppressionRelease() {
 }
 function installSlotClickControllerProjection(frontendActions) {
   const dashboard = $("dashboard");
-  if (dashboard.dataset.clickController) return;
+  if (dashboard.dataset.clickController) return dashboard;
   dashboard.dataset.clickController = "true";
   const hostFor = (event) => {
     const host = event.target.closest?.(".slot");
@@ -14813,6 +14825,31 @@ function installSlotClickControllerProjection(frontendActions) {
     clearSlotDragState();
     scheduleSlotDragClickSuppressionRelease();
   });
+  return dashboard;
+}
+var dashboardFileDropController;
+function installDashboardFileDropControllerProjection() {
+  if (dashboardFileDropController) return dashboardFileDropController;
+  const host = $("dashboard");
+  let receive = null;
+  const handle = {
+    host,
+    connect(handler) {
+      receive = handler;
+      return () => {
+        if (receive === handler) receive = null;
+      };
+    }
+  };
+  host.addEventListener("drop", (event) => {
+    if (dataTransferHasFiles(event.dataTransfer)) receive?.(event);
+  }, true);
+  dashboardFileDropController = handle;
+  return handle;
+}
+function bindDashboardFileDropReceiver(handler) {
+  if (!dashboardFileDropController) throw Error("대시보드 파일 drop controller가 준비되지 않았습니다.");
+  return dashboardFileDropController.connect(handler);
 }
 function syncDashboardCaptionProjection(view, scale = 1) {
   let box = $("dashboardCaption"), input = $("captionText"), prefix = $("captionPrefix");
@@ -14924,7 +14961,7 @@ function applyDashboardProjectionInvalidation(event, mutationResult, interfaceSt
   const slots = projectProjection.visibleSlots, dashboard = $("dashboard"), hosts = [...dashboard.querySelectorAll(":scope > .slot")], sameHosts = hosts.length === slots.length && slots.every((slot) => {
     const host = hosts.find((host2) => host2.dataset.slot === String(slot.id));
     if (!host) return false;
-    if (slot.contentType !== "image" && slot.figure) {
+    if (slot.content.contentType !== "image" && slot.figure) {
       const record = rendererRuntime.graphInstances.get(slot.id);
       return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
     }
@@ -14946,7 +14983,7 @@ function applyDashboardProjectionInvalidation(event, mutationResult, interfaceSt
     renderDashboardProjection(projectProjection, interfaceState, frontendActions);
     return "FULL_DASHBOARD";
   }
-  const style = projectProjection.layout.slotStyle, width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth : style.referenceWidth * interfaceState.dashboardZoomIntent / 100, scale = width / style.referenceWidth;
+  const scale = projectProjection.geometry.scale;
   if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event)) {
     syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
     syncDashboardCaptionWidth();
@@ -14979,7 +15016,7 @@ function applyDashboardProjectionInvalidation(event, mutationResult, interfaceSt
     const labels = new Map(projectProjection.orderedSlotLabels.map((label) => [label.slotId, label.displayLabel])), settings = projectProjection.annotations.labels.settings;
     for (const slot of slots) {
       const host = hosts.find((host2) => host2.dataset.slot === String(slot.id));
-      host.querySelectorAll(":scope > .slot-label").forEach((label2) => label2.remove());
+      host.querySelectorAll(":scope > .slot-decoration > .slot-label").forEach((label2) => label2.remove());
       if (!projectProjection.annotations.labels.enabled || !labels.has(slot.id)) continue;
       const label = document.createElement("span");
       label.className = "slot-label";
@@ -14989,26 +15026,26 @@ function applyDashboardProjectionInvalidation(event, mutationResult, interfaceSt
       label.style.top = `${settings.y * scale}px`;
       label.style.fontFamily = settings.fontFamily;
       label.style.fontSize = `${settings.fontSize * scale}px`;
-      host.append(label);
+      host.querySelector(":scope > .slot-decoration").append(label);
     }
   }
   return "TARGETED_PROJECTION";
 }
 function resolveSelectedChart(projectProjection, interfaceState) {
   const slot = projectProjection.visibleSlots.find((slot2) => slot2.id === interfaceState.selectedSlotId);
-  return slot && slot.contentType !== "image" ? slot.chart || null : null;
+  return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
 }
 function updateGraphViewProjection(projectProjection, interfaceState, frontendActions = {}) {
   const dashboard = $("dashboard"), slots = projectProjection.visibleSlots, hosts = new Map([...dashboard.children].filter((host) => host.classList.contains("slot")).map((host) => [host.dataset.slot, host])), generation = rendererRuntime.dashboardRenderGeneration;
   if (hosts.size !== slots.length || slots.some((slot) => {
     const host = hosts.get(String(slot.id)), record = rendererRuntime.graphInstances.get(slot.id), surface = rendererRuntime.imageSurfaces.get(slot.id);
     if (!host?.isConnected) return true;
-    if (slot.contentType !== "image" && slot.figure)
+    if (slot.content.contentType !== "image" && slot.figure)
       return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
     if (record) return true;
     return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
   })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  const chart = resolveSelectedChart(projectProjection, interfaceState), style = projectProjection.layout.slotStyle, scale = (interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth : style.referenceWidth * interfaceState.dashboardZoomIntent / 100) / style.referenceWidth;
+  const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
   for (const slot of slots) {
     const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
     hosts.get(String(slot.id)).classList.toggle("selected", selected);
@@ -15023,12 +15060,11 @@ function updateGraphViewProjection(projectProjection, interfaceState, frontendAc
   return { generation, completion };
 }
 function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
-  applyDashboardZoomProjection(projectProjection.layout, interfaceState);
-  installSlotClickControllerProjection(frontendActions);
-  const presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  applySlotStyleProjection(projectProjection.layout.slotStyle, interfaceState);
+  applyDashboardZoomProjection(projectProjection, interfaceState);
+  const clickController = installSlotClickControllerProjection(frontendActions), dropController = installDashboardFileDropControllerProjection(), presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+  applySlotStyleProjection(projectProjection);
   auditSuppliedRendererContracts(projectProjection, interfaceState);
-  return presentation;
+  return { clickController, dropController, presentation };
 }
 function auditSuppliedRendererContracts(projectProjection, interfaceState) {
   const slots = /* @__PURE__ */ new Map();
@@ -15043,24 +15079,7 @@ function auditSuppliedRendererContracts(projectProjection, interfaceState) {
     throw Error("renderer input의 selected slot reference가 유효하지 않습니다.");
 }
 function renderDashboardProjection(projectProjection, interfaceState, frontendActions = {}) {
-  const generation = ++rendererRuntime.dashboardRenderGeneration, dashboard = $("dashboard"), style = projectProjection.layout.slotStyle, width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth : style.referenceWidth * interfaceState.dashboardZoomIntent / 100, scale = width / style.referenceWidth, geometry = {
-    scale,
-    outerMargin: Math.min(style.outerMargin * scale, Math.min(width, width / style.aspect) * 0.49),
-    gap: style.gap * scale,
-    radius: style.radius * scale
-  }, slots = projectProjection.visibleSlots, labels = new Map(projectProjection.orderedSlotLabels.map((label) => [label.slotId, label.displayLabel]));
-  dashboard.style.width = dashboard.style.minWidth = `${width}px`;
-  dashboard.style.setProperty("--grid-cols", projectProjection.layout.gridCols);
-  dashboard.style.setProperty("--grid-rows", projectProjection.layout.gridRows);
-  dashboard.style.setProperty("--dashboard-outer-margin", `${geometry.outerMargin}px`);
-  dashboard.style.setProperty("--slot-gap", `${geometry.gap}px`);
-  dashboard.style.setProperty("--slot-radius", `${geometry.radius}px`);
-  dashboard.style.setProperty("--dashboard-aspect", `${style.aspect} / 1`);
-  dashboard.classList.toggle("fixed-aspect", Number.isFinite(style.aspect) && style.aspect > 0);
-  for (const host of [dashboard, $("dashboardCaption")]) {
-    host?.style.setProperty("--slot-border-color", style.showBorders ? "var(--ui-color)" : "transparent");
-    host?.style.setProperty("--layout-slot-border-style", style.showBorders ? "solid" : "dashed");
-  }
+  const generation = ++rendererRuntime.dashboardRenderGeneration, dashboard = $("dashboard"), geometry = projectProjection.geometry, scale = geometry.scale, slots = projectProjection.visibleSlots, labels = new Map(projectProjection.orderedSlotLabels.map((label) => [label.slotId, label.displayLabel]));
   applyUiPaletteProjection(projectProjection.appearance.uiPalette);
   const discard = (record) => {
     rendererRuntime.graphInstances.delete(record.slotId);
@@ -15080,34 +15099,31 @@ function renderDashboardProjection(projectProjection, interfaceState, frontendAc
   };
   for (const record of rendererRuntime.graphInstances.values()) {
     const slot = slots.find((slot2) => slot2.id === record.slotId);
-    if (!slot || slot.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId || !hasLiveGraphSurface(record)) discard(record);
+    if (!slot || slot.content.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId || !hasLiveGraphSurface(record)) discard(record);
   }
   for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
-  const ids = new Set(slots.map((slot) => String(slot.id)));
-  dashboard.querySelectorAll(":scope > .slot").forEach((host) => {
-    if (!ids.has(host.dataset.slot)) host.remove();
-  });
+  const frameView = renderDashboardFrame(dashboard, projectProjection.layout, slots, geometry);
+  $("dashboardCaption")?.style.setProperty(
+    "--slot-border-color",
+    projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent"
+  );
   for (const slot of slots) {
-    const graph = slot.contentType !== "image" && slot.figure, image = !graph && slot.imageView, selected = slot.id === interfaceState.selectedSlotId;
-    let record = rendererRuntime.graphInstances.get(slot.id), host = record?.host || [...dashboard.children].find((host2) => host2.dataset.slot === String(slot.id));
-    if (!host) {
-      host = document.createElement("section");
-      host.dataset.slot = slot.id;
-    }
+    const graph = slot.content.contentType !== "image" && slot.figure, image = !graph && slot.imageView, selected = slot.id === interfaceState.selectedSlotId;
+    let record = rendererRuntime.graphInstances.get(slot.id);
+    const { frame: host, content, decoration } = frameView.slots.get(slot.id);
     host.className = "slot" + (!graph && !image ? " empty" : "") + (selected ? " selected" : "");
-    host.style.gridArea = `${slot.row} / ${slot.col} / span ${slot.rowSpan} / span ${slot.colSpan}`;
     if (graph && !record) {
-      host.replaceChildren();
+      content.replaceChildren();
       const card = document.createElement("div"), plot = document.createElement("div");
       card.className = "chart-card";
       plot.className = "plot-item";
       plot.id = `plot-${slot.id}`;
       card.append(plot);
-      host.append(card);
+      content.append(card);
       record = { host, plot, slotId: slot.id, chartId: slot.content.chart, generation, pending: Promise.resolve() };
       rendererRuntime.graphInstances.set(slot.id, record);
     } else if (!graph) {
-      host.replaceChildren();
+      content.replaceChildren();
       if (image) {
         const frame = document.createElement("div"), element = document.createElement("img"), settings = image.settings;
         frame.className = "slot-image-frame";
@@ -15121,7 +15137,7 @@ function renderDashboardProjection(projectProjection, interfaceState, frontendAc
           element.style.top = `${settings.y}%`;
         } else element.style.objectFit = settings.fit;
         frame.append(element);
-        host.append(frame);
+        content.append(frame);
         const surface = { host, element, slotId: slot.id, imageInput: image, generation, pending: null };
         rendererRuntime.imageSurfaces.set(slot.id, surface);
         const current = () => generation === rendererRuntime.dashboardRenderGeneration && rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image && hasLiveImageSurface(surface) && element.parentElement === frame;
@@ -15141,15 +15157,16 @@ function renderDashboardProjection(projectProjection, interfaceState, frontendAc
         });
       }
     }
-    host.querySelectorAll(".slot-tab,.slot-label").forEach((element) => element.remove());
+    decoration.replaceChildren();
     if (graph || image) {
       const tab = document.createElement("button");
       tab.className = "slot-tab";
       tab.type = "button";
       tab.draggable = true;
       tab.setAttribute("aria-label", "슬롯 이동 및 선택");
+      tab.style.pointerEvents = "auto";
       tab.innerHTML = '<span class="slot-tab-shape"></span>';
-      host.append(tab);
+      decoration.append(tab);
     }
     if (projectProjection.annotations.labels.enabled && labels.has(slot.id)) {
       const label = document.createElement("span"), settings = projectProjection.annotations.labels.settings;
@@ -15160,7 +15177,7 @@ function renderDashboardProjection(projectProjection, interfaceState, frontendAc
       label.style.top = `${settings.y * scale}px`;
       label.style.fontFamily = settings.fontFamily;
       label.style.fontSize = `${settings.fontSize * scale}px`;
-      host.append(label);
+      decoration.append(label);
     }
     dashboard.append(host);
     if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
@@ -15865,10 +15882,8 @@ async function downloadExportPayload(payload) {
     }
   }
 }
-function applyDashboardZoomProjection(layout2, interfaceState, resize = true) {
-  const dashboard = $("dashboard"), style = layout2.slotStyle, width = interfaceState.dashboardZoomLocked ? interfaceState.dashboardZoomLockedWidth : style.referenceWidth * interfaceState.dashboardZoomIntent / 100;
-  dashboard.style.minWidth = dashboard.style.width = `${width}px`;
-  applyReferenceGeometryProjection(dashboard, style, width);
+function applyDashboardZoomProjection(projection, interfaceState, resize = true) {
+  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
   syncDashboardCaptionWidth();
   if (resize) schedulePlotResize();
 }
@@ -15941,6 +15956,12 @@ var InterfaceStateMachine = class {
     });
     this.listeners = /* @__PURE__ */ new Set();
     this.writeLocks = /* @__PURE__ */ new Set();
+    Object.assign(interfaceRuntime, {
+      selectedSlotId: null,
+      dashboardZoomIntent: 100,
+      dashboardZoomLocked: false,
+      dashboardZoomLockedWidth: null
+    });
   }
   definition(region, state = this.state[region]) {
     const definition = this.definitions[region]?.[state];
@@ -15960,7 +15981,8 @@ var InterfaceStateMachine = class {
     document.body.dataset.appOverlay = state.overlay;
     document.body.dataset.appAssetSelection = state.assetSelection;
     document.body.dataset.appGraphObject = state.graphObject;
-    this.listeners.forEach((listener) => listener(state, event));
+    const listeners = [...this.listeners];
+    for (const listener of listeners) listener();
     debugLog("fsm:transition", { event, ...state });
     return state;
   }
@@ -16070,7 +16092,9 @@ var InterfaceStateMachine = class {
   }
   subscribe(listener) {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 };
 function requestedWorkspaceState({ payload }) {
@@ -16617,13 +16641,12 @@ function readWorkspaceHint() {
 function installSlotClickController() {
   return installSlotClickControllerProjection({ slots: { select: setSelectedSlot, swap: swapSlots } });
 }
-function renderDashboard(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+function renderDashboard(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
   return renderDashboardProjection(projection, state, dashboardFrontendActions());
 }
 function startupCoreRuntime() {
-  const projection = readBackendProjection("renderer"), state = interfaceFSM.readState(), actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } }, presentation = startupCoreRuntimeProjection(projection, state, actions);
-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return presentation;
+  const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(), actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } }, runtime = startupCoreRuntimeProjection(projection, state, actions);
+  return runtime;
 }
 function applyCommittedDashboardProjection(event, result, state, projection) {
   if (!result.committed) return "NONE";
@@ -16652,25 +16675,24 @@ function dashboardFrontendActions() {
     }
   };
 }
-function syncDashboardCaption(view, projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
-  const style = projection.layout.slotStyle, width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
-  return syncDashboardCaptionProjection(view || projection.annotations.captions, width / style.referenceWidth);
+function syncDashboardCaption(view, projection = dispatchProjectQuery("renderer")) {
+  return syncDashboardCaptionProjection(view || projection.annotations.captions, projection.geometry.scale);
 }
 function applyReferenceGeometry(element) {
-  const style = readBackendProjection("renderer").layout.slotStyle, state = interfaceFSM.readState(), width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : style.referenceWidth * state.dashboardZoomIntent / 100;
-  return applyReferenceGeometryProjection(element, style, width);
+  return applyReferenceGeometryProjection(element, dispatchProjectQuery("renderer").geometry);
 }
 function applySlotStyle(_fromControls = false, notify = true) {
-  applySlotStyleProjection(readBackendProjection("renderer").layout.slotStyle, interfaceFSM.readState());
+  const result = applySlotStyleProjection(dispatchProjectQuery("renderer"));
   if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+  return result;
 }
 function applyDashboardZoom(resize = true) {
-  return applyDashboardZoomProjection(readBackendProjection("renderer").layout, interfaceFSM.readState(), resize);
+  return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
 }
 function syncDashboardZoomDisplay() {
   const width = readDashboardRenderedWidth(), state = interfaceFSM.readState();
   if (!width) return;
-  const reference = readBackendProjection("renderer").layout.slotStyle.referenceWidth;
+  const reference = dispatchProjectQuery("renderer").layout.slotStyle.referenceWidth;
   return state.dashboardZoomLocked ? Math.max(50, Math.min(200, Math.round(width / reference * 100))) : Math.round(state.dashboardZoomIntent);
 }
 function updateFileAvailability() {
@@ -16691,9 +16713,9 @@ function dispatchSlotSelection(slotId, pendingContentType = null, direction = "u
       });
     }
   }
-  return [state, projectResult, readBackendProjection("renderer", { frontendState: state })];
+  return [state, projectResult, dispatchProjectQuery("renderer", { frontendState: state })];
 }
-function updateGraphView(projection = readBackendProjection("renderer"), state = interfaceFSM.readState()) {
+function updateGraphView(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
   return updateGraphViewProjection(projection, state, dashboardFrontendActions());
 }
@@ -16706,7 +16728,7 @@ function applyUiPalette(palette, notify = true) {
   return result;
 }
 function applyCurrentUiPalette(notify = true) {
-  applyUiPalette(readBackendProjection("renderer", { operation: "ui-palette" }), notify);
+  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
   return renderDashboard();
 }
 function applyUiPaletteValues(values, notify = true) {
@@ -16723,8 +16745,14 @@ function renderProjectObject(projection, state) {
 }
 var BACKEND_REFERENCE_EVENTS = /* @__PURE__ */ new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
 var PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
-function dispatchProjectQuery(query, payload) {
-  return readBackendProjection(query, payload);
+function dispatchProjectQuery(query, payload = {}) {
+  const request = { ...payload };
+  if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
+    const state = interfaceFSM.readState(), layout2 = readBackendProjection("project-api", { operation: "layout.readState" });
+    request.frontendState = state;
+    request.width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : layout2.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
+  }
+  return readBackendProjection(query, request);
 }
 function dispatchInterfaceEvent(event, payload = {}) {
   const request = event === "SELECT_GRAPH_OBJECT" ? { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId } : payload ?? {}, validatedInput = BACKEND_REFERENCE_EVENTS.has(event) ? validateFrontendIntent(event, request) : { event, accepted: true, payload };
@@ -16760,7 +16788,7 @@ function dispatchProjectCommand(event, payload = {}) {
   if (!PROJECT_COMMANDS.has(event)) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
   const result = projectEFSM.send(event, payload), frontendBefore = interfaceFSM.readState();
   if (!result.committed) return [result, frontendBefore, null];
-  const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore), state = interfaceFSM.reconcileProjectResult(event, reconciliationInput), projection = readBackendProjection("renderer", { frontendState: state, mutationResult: result });
+  const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore), state = interfaceFSM.reconcileProjectResult(event, reconciliationInput), projection = dispatchProjectQuery("renderer", { frontendState: state, mutationResult: result });
   return [result, state, projection];
 }
 var appFSM = Object.freeze({
@@ -16982,8 +17010,8 @@ function applyGraphPaletteApi(colors) {
   const context = appFSM.query("project-api", { operation: "graphs.readData", frontendState: interfaceFSM.readState() });
   return graphEditorApplyPalette(context.chart?.id ?? null, colors);
 }
-function downloadSlotFfsx() {
-  return appFSM.run("exporting", "graphs.exportFfsx", () => exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportFfsx"));
+function downloadSlotFfsx(slotId) {
+  return appFSM.run("exporting", "graphs.exportFfsx", () => exportSelectedGraph(slotId, "graphs.exportFfsx"));
 }
 async function exportSelectedGraph(slotId, operation) {
   const payload = appFSM.query("export", {
@@ -16994,8 +17022,8 @@ async function exportSelectedGraph(slotId, operation) {
   if (payload === null) return;
   await downloadExportPayload(payload);
 }
-function downloadPlotlyJson() {
-  return appFSM.run("exporting", "graphs.exportPlotlyJson", () => exportSelectedGraph(interfaceFSM.readState().selectedSlotId, "graphs.exportPlotlyJson"));
+function downloadPlotlyJson(slotId) {
+  return appFSM.run("exporting", "graphs.exportPlotlyJson", () => exportSelectedGraph(slotId, "graphs.exportPlotlyJson"));
 }
 
 // sourcecode/application/public_api/assets.js
@@ -17078,7 +17106,7 @@ function connectProjectAssetToSlot(path, kind, slotId) {
 }
 function downloadProjectAsset(path) {
   return appFSM.run("exporting", "assets.download", async () => {
-    const target = path === void 0 ? interfaceFSM.readState().assetPath : path, payload = appFSM.query("export", { operation: "assets.download", path: target });
+    const payload = appFSM.query("export", { operation: "assets.download", path });
     if (payload === null) return false;
     await downloadExportPayload(payload);
     return true;
@@ -17227,8 +17255,8 @@ function setProjectName(value2, trim = false) {
   if (!result.committed) return null;
   return appFSM.query("project-api", { operation: "project.readName" });
 }
-function publishPublicApi() {
-  window.FastFigureApi = Object.freeze({
+function createPublicApi() {
+  return Object.freeze({
     project: Object.freeze({
       readName: () => appFSM.query("project-api", { operation: "project.readName" }),
       setName: setProjectName,
@@ -17273,7 +17301,7 @@ function publishPublicApi() {
       selectDirectory: selectDirectoryFromTree,
       selectCsv: selectProjectCsv,
       selectImage: selectImageFromTree,
-      download: downloadProjectAsset
+      download: (path) => downloadProjectAsset(path === void 0 ? interfaceFSM.readState().assetPath : path)
     }),
     graphs: Object.freeze({
       readData: readGraphDataApi,
@@ -17340,6 +17368,11 @@ function publishPublicApi() {
       splitSlots
     })
   });
+}
+function publishPublicApi() {
+  const api = createPublicApi();
+  window.FastFigureApi = api;
+  return api;
 }
 
 // sourcecode/frontend/mantine_ui.js
@@ -17414,30 +17447,23 @@ function mountMantineUi() {
       }
     },
     components: {
+      Group: Group.extend({ defaultProps: { align: "flex-end", gap: "xs", wrap: "wrap" } }),
       Button: Button.extend({
-        defaultProps: { size: "ff" },
-        vars: (_theme, props) => props.size === "ff" ? {
-          root: {
-            "--button-height": "38px",
-            "--button-padding-x": "12px",
-            "--button-fz": "14px"
-          }
-        } : { root: {} }
+        defaultProps: { size: "ff", radius: "ff" },
+        vars: () => ({ root: { "--button-height": "38px", "--button-padding-x": "12px", "--button-fz": "14px" } })
       }),
       ActionIcon: ActionIcon.extend({
-        defaultProps: { size: "ff" },
-        vars: (_theme, props) => props.size === "ff" ? { root: { "--ai-size": "38px" } } : { root: {} }
+        defaultProps: { size: "ff", radius: "ff" },
+        vars: () => ({ root: { "--ai-size": "38px" } })
       }),
       Input: Input.extend({
-        defaultProps: { size: "ff" },
-        vars: (_theme, props) => props.size === "ff" ? {
-          wrapper: {
-            "--input-height": "38px",
-            "--input-fz": "14px",
-            "--input-radius": "6px"
-          }
-        } : { wrapper: {} }
+        defaultProps: { size: "ff", radius: "ff" },
+        vars: () => ({ wrapper: { "--input-height": "38px", "--input-fz": "14px", "--input-radius": "6px" } })
       }),
+      TextInput: TextInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+      Select: Select.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+      NumberInput: NumberInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
+      ColorInput: ColorInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
       Modal: Modal.extend({
         defaultProps: {
           centered: true,
@@ -17465,6 +17491,72 @@ function mountMantineUi() {
     { value: "Georgia, serif", label: "Georgia" },
     { value: "Courier New, monospace", label: "Courier New" }
   ]);
+  function FoldSection({ title, initiallyOpen = false, children }) {
+    const [open, setOpen] = useState(initiallyOpen);
+    const id = React.useId(), button = useRef(null), content = useRef(null);
+    const toggle = () => {
+      if (open && content.current?.contains(document.activeElement)) button.current?.focus();
+      setOpen((value2) => !value2);
+    };
+    return React.createElement(
+      Stack,
+      { gap: "xs" },
+      React.createElement(Button, {
+        ref: button,
+        variant: "subtle",
+        onClick: toggle,
+        "aria-expanded": open,
+        "aria-controls": id
+      }, title),
+      React.createElement("div", { id, ref: content, hidden: !open }, children)
+    );
+  }
+  function LayoutPreview({ layout: layout2, selection, busy, onToggle }) {
+    const hostRef = useRef(null);
+    useEffect(() => {
+      const view = renderDashboardFrame(hostRef.current, layout2, layout2.visibleSlots, layout2.previewGeometry);
+      const listeners = [];
+      for (const slot of layout2.visibleSlots) {
+        const decoration = view.slots.get(slot.id).decoration;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.disabled = busy;
+        button.textContent = `${slot.row},${slot.col}`;
+        button.setAttribute("aria-pressed", String(selection.has(slot.id)));
+        Object.assign(button.style, {
+          position: "absolute",
+          inset: "0",
+          width: "100%",
+          height: "100%",
+          border: "0",
+          borderRadius: "inherit",
+          padding: "0",
+          pointerEvents: "auto",
+          color: "inherit",
+          background: selection.has(slot.id) ? "var(--mantine-primary-color-light)" : "transparent",
+          boxShadow: selection.has(slot.id) ? "inset 0 0 0 2px var(--mantine-primary-color-filled)" : "none"
+        });
+        const click = (event) => {
+          event.stopPropagation();
+          onToggle(slot.id);
+        };
+        button.addEventListener("click", click);
+        listeners.push([button, click]);
+        decoration.replaceChildren(button);
+      }
+      return () => listeners.forEach(([button, click]) => button.removeEventListener("click", click));
+    }, [layout2, selection, busy, onToggle]);
+    useEffect(() => {
+      const host = hostRef.current;
+      return () => host.replaceChildren();
+    }, []);
+    return React.createElement("div", {
+      ref: hostRef,
+      role: "grid",
+      "aria-label": "레이아웃 슬롯 선택",
+      style: { marginTop: 0 }
+    });
+  }
   function fontSelectData(options, currentValue) {
     const current = typeof currentValue === "string" ? currentValue : "";
     const values = options.some((option) => option.value === current) ? options : [
@@ -17609,10 +17701,10 @@ function mountMantineUi() {
     return window.FastFigureApi.project.exportFile().catch((error) => reportTaskError("PROJECT_EXPORT", error));
   }
   function exportSlotFfsxFromMantine() {
-    return window.FastFigureApi.graphs.exportFfsx().catch((error) => reportTaskError("SLOT_EXPORT", error));
+    return window.FastFigureApi.graphs.exportFfsx(appFSM.readState().selectedSlotId).catch((error) => reportTaskError("SLOT_EXPORT", error));
   }
   function exportPlotlyJsonFromMantine() {
-    return window.FastFigureApi.graphs.exportPlotlyJson().catch((error) => reportTaskError("PLOTLY_EXPORT", error));
+    return window.FastFigureApi.graphs.exportPlotlyJson(appFSM.readState().selectedSlotId).catch((error) => reportTaskError("PLOTLY_EXPORT", error));
   }
   function FastFigureToolbar() {
     const state = useAppState();
@@ -18165,7 +18257,6 @@ function mountMantineUi() {
               ActionIcon,
               {
                 variant: "subtle",
-                size: "sm",
                 "aria-label": `${projectPathName(path)} 폴더 작업`
               },
               "···"
@@ -18204,7 +18295,6 @@ function mountMantineUi() {
               ActionIcon,
               {
                 variant: "subtle",
-                size: "sm",
                 "aria-label": `${projectPathName(path)} 작업`
               },
               "···"
@@ -18315,7 +18405,6 @@ function mountMantineUi() {
         Button,
         {
           variant: "light",
-          size: "xs",
           disabled: busy,
           onClick: openFolderDialog
         },
@@ -18355,7 +18444,6 @@ function mountMantineUi() {
         Button,
         {
           variant: "light",
-          size: "xs",
           disabled: busy || !trashHasContents,
           onClick: openTrashDialog
         },
@@ -18482,7 +18570,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         Button,
         {
           variant: "subtle",
-          size: "xs",
           fullWidth: true,
           justify: "flex-start",
           "aria-expanded": slotsExpanded,
@@ -18499,7 +18586,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             {
               key: slot.id,
               variant: state.workspace !== "project" && selectedSlotId === slot.id ? "filled" : "subtle",
-              size: "xs",
               fullWidth: true,
               justify: "flex-start",
               disabled: busy,
@@ -18715,13 +18801,12 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       React.createElement(Text, { size: "sm", fw: 600 }, "그래프 오브젝트"),
       objects.length ? React.createElement(
         Stack,
-        { gap: 4 },
+        { gap: "xs" },
         ...objects.map((object, index) => React.createElement(
           Group,
           {
             key: `${chartId}-${index}`,
-            gap: 4,
-            wrap: "nowrap",
+            gap: "xs",
             draggable: editable && !busy,
             onDragStart: (event) => {
               if (!editable || busy) return event.preventDefault();
@@ -18741,20 +18826,23 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             }
           },
           React.createElement(Button, {
-            size: "xs",
             variant: selectedIndex === index ? "filled" : "light",
-            style: { flex: "1 1 auto", minWidth: 0 },
+            style: { flex: "1 1 auto", minWidth: 0, height: "auto", minHeight: "var(--button-height)" },
+            styles: { label: { whiteSpace: "normal", overflowWrap: "anywhere", display: "block" } },
+            "aria-label": `${index + 1}. ${editor.chart?.editor.title ? editor.chart.editor.title + " — " : ""}${object.legendName || `${object.x} · ${object.y}`}`,
             onClick: () => graphApi.selectObject(index)
-          }, `${index + 1}. ${object.legendName || `${object.x} · ${object.y}`}`),
+          }, React.createElement(
+            "span",
+            null,
+            editor.chart?.editor.title ? React.createElement("span", null, `${index + 1}. ${editor.chart.editor.title} — `) : `${index + 1}. `,
+            React.createElement("span", { style: { display: "block" } }, object.legendName || `${object.x} · ${object.y}`)
+          )),
           React.createElement(ColorInput, {
-            size: "xs",
             value: object.color,
-            style: { width: 72 },
             disabled: busy || !editable,
             onChange: (color) => graphApi.setObjectValues(chartId, index, { color })
           }),
           React.createElement(ActionIcon, {
-            size: "sm",
             variant: "subtle",
             disabled: busy || !editable,
             "aria-label": `${index + 1}번 그래프 오브젝트 삭제`,
@@ -18784,47 +18872,51 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           selectField("X 축", "xAxisSide", [{ value: "bottom", label: "아래" }, { value: "top", label: "위" }]),
           selectField("Y 축", "yAxisSide", [{ value: "left", label: "왼쪽" }, { value: "right", label: "오른쪽" }])
         ),
-        selectField("유형", "type", [
-          { value: "scatter", label: "선" },
-          { value: "markers", label: "마커" },
-          { value: "lines+markers", label: "선 + 마커" },
-          { value: "bar", label: "막대" },
-          { value: "hidden", label: "숨김" }
-        ]),
-        React.createElement(TextInput, {
-          label: "범례 이름",
-          value: selected.legendName,
-          disabled: busy,
-          onChange: (event) => update({ legendName: event.target.value })
-        }),
-        ["scatter", "lines+markers", "hidden"].includes(selected.type) ? React.createElement(
-          Group,
-          { gap: "xs", grow: true },
-          numberField("선 굵기", "lineWidth", 0.1, 20, 0.1),
+        React.createElement(
+          FoldSection,
+          { title: "종류별 세부 설정" },
+          selectField("유형", "type", [
+            { value: "scatter", label: "선" },
+            { value: "markers", label: "마커" },
+            { value: "lines+markers", label: "선 + 마커" },
+            { value: "bar", label: "막대" },
+            { value: "hidden", label: "숨김" }
+          ]),
           React.createElement(TextInput, {
-            label: "선 스타일",
-            value: selected.lineDash,
+            label: "범례 이름",
+            value: selected.legendName,
             disabled: busy,
-            onChange: (event) => update({ lineDash: event.target.value })
-          })
-        ) : null,
-        ["markers", "lines+markers"].includes(selected.type) ? React.createElement(
-          Group,
-          { gap: "xs", grow: true },
-          React.createElement(TextInput, {
-            label: "마커",
-            value: selected.markerSymbol,
-            disabled: busy,
-            onChange: (event) => update({ markerSymbol: event.target.value })
+            onChange: (event) => update({ legendName: event.target.value })
           }),
-          numberField("마커 크기", "markerSize", 1, 40)
-        ) : null,
-        selected.type === "bar" ? React.createElement(
-          Group,
-          { gap: "xs", grow: true },
-          numberField("막대 불투명도", "barOpacity", 0.05, 1, 0.05),
-          numberField("막대 테두리", "barLineWidth", 0, 10, 0.1)
-        ) : null
+          ["scatter", "lines+markers", "hidden"].includes(selected.type) ? React.createElement(
+            Group,
+            { gap: "xs", grow: true },
+            numberField("선 굵기", "lineWidth", 0.1, 20, 0.1),
+            React.createElement(TextInput, {
+              label: "선 스타일",
+              value: selected.lineDash,
+              disabled: busy,
+              onChange: (event) => update({ lineDash: event.target.value })
+            })
+          ) : null,
+          ["markers", "lines+markers"].includes(selected.type) ? React.createElement(
+            Group,
+            { gap: "xs", grow: true },
+            React.createElement(TextInput, {
+              label: "마커",
+              value: selected.markerSymbol,
+              disabled: busy,
+              onChange: (event) => update({ markerSymbol: event.target.value })
+            }),
+            numberField("마커 크기", "markerSize", 1, 40)
+          ) : null,
+          selected.type === "bar" ? React.createElement(
+            Group,
+            { gap: "xs", grow: true },
+            numberField("막대 불투명도", "barOpacity", 0.05, 1, 0.05),
+            numberField("막대 테두리", "barLineWidth", 0, 10, 0.1)
+          ) : null
+        )
       ) : null
     );
   }
@@ -18849,7 +18941,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const toggleGlobal = (key, label) => React.createElement(
       Button,
       {
-        size: "xs",
         variant: settings[key] ? "filled" : "light",
         disabled: busy || !editable,
         "aria-pressed": settings[key],
@@ -18869,7 +18960,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const axisToggle = (key, axis, field, label) => React.createElement(
       Button,
       {
-        size: "xs",
         variant: axis[field] ? "filled" : "light",
         disabled: busy || !editable,
         "aria-pressed": axis[field],
@@ -18881,9 +18971,8 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       const axis = settings.axes[key];
       const logScale = axis.scaleType === "log";
       return React.createElement(
-        Stack,
-        { key, gap: "xs" },
-        React.createElement(Text, { size: "sm", fw: 600 }, axisLabels[key]),
+        FoldSection,
+        { key, title: axisLabels[key] },
         React.createElement(TextInput, {
           label: "축 이름",
           value: axis.title,
@@ -19004,7 +19093,8 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           onChange: (value2) => updateGlobal({ legendFontSize: value2 === "" ? "" : String(value2) })
         })
       ),
-      ...Object.keys(axisLabels).map(axisEditor)
+      React.createElement(FoldSection, { title: "X축" }, axisEditor("xBottom"), axisEditor("xTop")),
+      React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEditor("yRight"))
     );
   }
   function FastFigureGraphPaletteActions() {
@@ -19286,55 +19376,56 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         telemetry.status || "준비됨"
       ),
       React.createElement(
-        Group,
-        { gap: "xs", grow: true },
+        FoldSection,
+        { title: "디버그 로그" },
         React.createElement(
-          Button,
-          {
-            size: "xs",
-            variant: telemetry.debugEnabled ? "filled" : "light",
-            disabled: busy,
-            "aria-pressed": telemetry.debugEnabled,
-            onClick: () => setDebugEnabled(!readDebugEnabled())
-          },
-          telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기"
+          Group,
+          { gap: "xs", grow: true },
+          React.createElement(
+            Button,
+            {
+              variant: telemetry.debugEnabled ? "filled" : "light",
+              disabled: busy,
+              "aria-pressed": telemetry.debugEnabled,
+              onClick: () => setDebugEnabled(!readDebugEnabled())
+            },
+            telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기"
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: "light",
+              disabled: busy || !telemetry.debugLines.length,
+              onClick: saveDebugOutput
+            },
+            "로그 저장"
+          ),
+          React.createElement(
+            Button,
+            {
+              variant: "light",
+              disabled: busy || !telemetry.debugLines.length,
+              onClick: clearDebugOutput
+            },
+            "로그 지우기"
+          )
         ),
-        React.createElement(
-          Button,
-          {
-            size: "xs",
-            variant: "light",
-            disabled: busy || !telemetry.debugLines.length,
-            onClick: saveDebugOutput
-          },
-          "로그 저장"
-        ),
-        React.createElement(
-          Button,
-          {
-            size: "xs",
-            variant: "light",
-            disabled: busy || !telemetry.debugLines.length,
-            onClick: clearDebugOutput
-          },
-          "로그 지우기"
-        )
-      ),
-      telemetry.debugEnabled ? React.createElement(
-        ScrollArea,
-        { h: 220, type: "auto" },
-        React.createElement(
-          Code,
-          {
-            block: true,
-            style: {
-              whiteSpace: "pre-wrap",
-              overflowWrap: "anywhere"
-            }
-          },
-          telemetry.debugLines.join("\n")
-        )
-      ) : null
+        telemetry.debugEnabled ? React.createElement(
+          ScrollArea,
+          { h: 220, type: "auto" },
+          React.createElement(
+            Code,
+            {
+              block: true,
+              style: {
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere"
+              }
+            },
+            telemetry.debugLines.join("\n")
+          )
+        ) : null
+      )
     );
   }
   function FastFigureReadmeOverlay() {
@@ -19932,7 +20023,11 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   function FastFigureLayoutOverlay() {
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => /* @__PURE__ */ new Set());
-    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(600);
+    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
+    const [dimensionEdits, setDimensionEdits] = useState({});
+    useEffect(() => {
+      setDimensionEdits({});
+    }, [state.overlay]);
     const previewFrameRef = useRef(null);
     const layoutApi = window.FastFigureApi.layout;
     const layout2 = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
@@ -19955,15 +20050,20 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
     const style = layout2.slotStyle;
-    const visibleSlots = layout2.visibleSlots;
-    const previewGeometry = layout2.previewGeometry;
     const clamp = (value2, fallback, min, max) => {
       const number = Number(value2);
       return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
     };
     const commitStyle = (patch) => layoutApi.setStyle(patch);
-    const changeGrid = (dimension, value2) => {
+    const changeGrid = (dimension, value2, editingFinished = false) => {
       if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
+      if (editingFinished) {
+        layoutApi.readState();
+        setDimensionEdits((current2) => ({ ...current2, [dimension]: void 0 }));
+        return null;
+      }
+      setDimensionEdits((current2) => ({ ...current2, [dimension]: value2 }));
+      if (value2 == null || value2 === "") return null;
       const current = layoutApi.readState();
       const number = typeof value2 === "number" || typeof value2 === "string" && value2.trim() !== "" ? Number(value2) : NaN;
       const bounds = current.gridLimits[dimension === "rows" ? "gridRows" : "gridCols"];
@@ -20008,21 +20108,25 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           { gap: "xs", grow: true },
           React.createElement(NumberInput, {
             label: "행",
-            value: layout2.gridRows,
+            value: dimensionEdits.rows ?? layout2.gridRows,
+            clampBehavior: "none",
             min: layout2.gridLimits.gridRows[0],
             max: layout2.gridLimits.gridRows[1],
             allowDecimal: false,
             disabled: busy,
-            onChange: (value2) => changeGrid("rows", value2)
+            onChange: (value2) => changeGrid("rows", value2),
+            onBlur: () => changeGrid("rows", dimensionEdits.rows, true)
           }),
           React.createElement(NumberInput, {
             label: "열",
-            value: layout2.gridCols,
+            value: dimensionEdits.cols ?? layout2.gridCols,
+            clampBehavior: "none",
             min: layout2.gridLimits.gridCols[0],
             max: layout2.gridLimits.gridCols[1],
             allowDecimal: false,
             disabled: busy,
-            onChange: (value2) => changeGrid("cols", value2)
+            onChange: (value2) => changeGrid("cols", value2),
+            onBlur: () => changeGrid("cols", dimensionEdits.cols, true)
           })
         ),
         React.createElement(
@@ -20123,64 +20227,16 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             style: {
               width: 600,
               maxWidth: "100%",
-              marginInline: "auto"
+              marginInline: "auto",
+              overflowX: "auto"
             }
           },
-          React.createElement(
-            "div",
-            {
-              role: "grid",
-              "aria-label": "레이아웃 슬롯 선택",
-              style: {
-                display: "grid",
-                boxSizing: "border-box",
-                width: "100%",
-                height: previewGeometry.height,
-                aspectRatio: `${style.aspect} / 1`,
-                gridTemplateColumns: `repeat(${layout2.gridCols}, minmax(0, 1fr))`,
-                gridTemplateRows: `repeat(${layout2.gridRows}, minmax(0, 1fr))`,
-                gap: previewGeometry.gap,
-                padding: previewGeometry.outerMargin,
-                border: "1px solid var(--mantine-color-default-border)",
-                borderRadius: previewGeometry.radius,
-                overflow: "hidden"
-              }
-            },
-            ...visibleSlots.map((slot) => {
-              const selected = layoutSelection.has(slot.id);
-              return React.createElement(
-                UnstyledButton,
-                {
-                  key: slot.id,
-                  disabled: busy,
-                  "aria-pressed": selected,
-                  onClick: (event) => {
-                    event.stopPropagation();
-                    toggleSlot(slot.id);
-                  },
-                  style: {
-                    gridColumn: `${slot.col} / span ${slot.colSpan}`,
-                    gridRow: `${slot.row} / span ${slot.rowSpan}`,
-                    width: "100%",
-                    height: "100%",
-                    minWidth: 0,
-                    minHeight: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0,
-                    borderWidth: 1,
-                    borderStyle: style.showBorders ? "solid" : "dashed",
-                    borderColor: selected ? "var(--mantine-primary-color-filled)" : "var(--mantine-color-default-border)",
-                    background: selected ? "var(--mantine-primary-color-light)" : "transparent",
-                    color: "inherit",
-                    cursor: busy ? "default" : "pointer"
-                  }
-                },
-                `${slot.row},${slot.col}`
-              );
-            })
-          )
+          React.createElement(LayoutPreview, {
+            layout: layout2,
+            selection: layoutSelection,
+            busy,
+            onToggle: toggleSlot
+          })
         ),
         React.createElement(
           Group,
@@ -20248,8 +20304,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           status("불러오기 실패: " + String(error?.message ?? error));
         }
       };
-      dashboard.addEventListener("drop", handleDrop, true);
-      return () => dashboard.removeEventListener("drop", handleDrop, true);
+      return bindDashboardFileDropReceiver(handleDrop);
     }, [choosePlan]);
     return modal;
   }
@@ -20335,11 +20390,11 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           React.createElement(FastFigureImageEditor),
           React.createElement(FastFigureProjectDataTree),
           React.createElement(FastFigureProjectActions),
-          React.createElement(FastFigureGraphDataEditor),
-          React.createElement(FastFigureGraphLayoutEditor),
+          React.createElement(FoldSection, { title: "오브젝트 설정", initiallyOpen: true }, React.createElement(FastFigureGraphDataEditor)),
+          React.createElement(FoldSection, { title: "전역 설정", initiallyOpen: true }, React.createElement(FastFigureGraphLayoutEditor)),
           React.createElement(FastFigureGraphPaletteActions),
           React.createElement(FastFigureGraphFileActions),
-          React.createElement(FastFigurePaletteActions),
+          React.createElement(FoldSection, { title: "UI 색상" }, React.createElement(FastFigurePaletteActions)),
           React.createElement(FastFigureStatusDebug),
           React.createElement(FastFigureUtilityActions)
         ),
@@ -20456,6 +20511,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     );
   }
   window.fastFigureUiRoot.render(React.createElement(FastFigureApp));
+  return window.fastFigureUiRoot;
 }
 
 // sourcecode/system.js
@@ -20476,21 +20532,22 @@ var REQUIRED_APP_FUNCTIONS = [
   ["createProjectState", () => typeof createProjectState === "function"],
   ["applyImageSettingsFromValues", () => typeof applyImageSettingsFromValues === "function"],
   ["projectClone", () => typeof projectClone === "function"],
-  ["ProjectObject", () => activeProject instanceof ProjectObject],
+  ["ProjectObject", () => typeof ProjectObject === "function"],
   ["buildProjectObject", () => typeof buildProjectObject === "function"],
   ["validateProjectObject", () => typeof validateProjectObject === "function"],
   ["renderProjectObject", () => typeof renderProjectObject === "function"],
-  ["projectObjects", () => projectObjects instanceof ProjectObjectRegistry],
-  ["interfaceFSM", () => interfaceFSM instanceof InterfaceStateMachine],
-  ["projectEFSM", () => projectEFSM instanceof ProjectStateMachine],
+  ["projectObjects", () => typeof ProjectObjectRegistry === "function"],
+  ["interfaceFSM", () => typeof InterfaceStateMachine === "function"],
+  ["projectEFSM", () => typeof ProjectStateMachine === "function"],
   ["auditApp", () => typeof auditApp === "function"]
 ];
 function requireCoreRuntimeAndRendererHosts() {
   const missing = REQUIRED_APP_FUNCTIONS.filter(([, check]) => !check()).map(([name]) => name);
   missing.push(...REQUIRED_RENDERER_HOSTS.filter((id) => !document.getElementById(id)));
   if (typeof window.Plotly?.react !== "function") missing.push("Plotly.react");
-  if (!window.FastFigureUiRuntime) missing.push("FastFigureUiRuntime");
-  if (!window.fastFigureUiRoot) missing.push("fastFigureUiRoot");
+  const ui = window.FastFigureUiRuntime;
+  if (typeof ui?.React?.createElement !== "function" || !ui?.MantineCore?.MantineProvider || typeof ui?.MantineCore?.createTheme !== "function") missing.push("FastFigureUiRuntime");
+  if (typeof window.fastFigureUiRoot?.render !== "function") missing.push("fastFigureUiRoot");
   if (missing.length) throw Error(`Fast Figure startup prerequisites missing: ${missing.join(", ")}`);
 }
 function auditObject(object, chartId, index, issues, allowNoCsv = false) {
@@ -20663,10 +20720,10 @@ function auditApp(context = "manual") {
   activeProject.slots.forEach((slot, index) => {
     if (!slot || typeof slot !== "object") issues.push({ kind: "invalid-slot", index });
     else {
-      if (slot.chart !== null && slot.chart !== void 0 && !chartIds.has(slot.chart))
-        issues.push({ kind: "orphan-slot-chart", slotId: slot.id, chart: slot.chart });
-      if (slot.imageId !== null && slot.imageId !== void 0 && !imageIds.has(slot.imageId))
-        issues.push({ kind: "orphan-slot-image", slotId: slot.id, imageId: slot.imageId });
+      if (slot.content.chart !== null && slot.content.chart !== void 0 && !chartIds.has(slot.content.chart))
+        issues.push({ kind: "orphan-slot-chart", slotId: slot.id, chart: slot.content.chart });
+      if (slot.content.imageId !== null && slot.content.imageId !== void 0 && !imageIds.has(slot.content.imageId))
+        issues.push({ kind: "orphan-slot-image", slotId: slot.id, imageId: slot.content.imageId });
       if (slot.caption !== null && typeof slot.caption !== "string")
         issues.push({
           kind: "invalid-slot-caption",
@@ -20690,11 +20747,12 @@ function auditApp(context = "manual") {
   return { summary, issues };
 }
 function initializeFastFigure() {
+  requireCoreRuntimeAndRendererHosts();
   initializeActiveProject();
   initializeProjectObjects();
   initializeInterfaceFSM();
   initializeProjectEFSM();
-  requireCoreRuntimeAndRendererHosts();
+  const frontendActions = publishPublicApi();
   window.addEventListener(
     "error",
     (event) => debugLog("window:error", {
@@ -20715,7 +20773,7 @@ function initializeFastFigure() {
     userAgent: navigator.userAgent,
     location: location.href
   });
-  startupCoreRuntime();
+  const coreRuntime = startupCoreRuntime();
   appFSM.ready();
   debugLog(
     "app:init-complete",
@@ -20726,10 +20784,9 @@ function initializeFastFigure() {
     },
     "info"
   );
-  publishPublicApi();
-  mountMantineUi();
+  const uiMount = mountMantineUi();
   auditApp("app:init");
-  return "initialized_runtime";
+  return { frontendActions, coreRuntime, uiMount };
 }
 initializeFastFigure();
 </script>
