@@ -9,7 +9,7 @@ from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
 from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
 from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
 from sourcescript.frontend.interface_fsm import interfaceFSM
-from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, readDashboardRenderedWidth, finishDashboardFileDropInteraction
+from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, finishDashboardFileDropInteraction
 
 
 
@@ -199,7 +199,7 @@ def finishDashboardFileDrop():
 
 
 def readLayoutApiState(previewWidth=None):
-    layoutState = "gridRows·gridCols·gridLimits·slotStyle·visibleSlots·previewGeometry·zoom·zoomLocked 딕셔너리."
+    layoutState = "gridRows·gridCols·gridLimits·slotStyle·visibleSlots·previewGeometry·zoom 딕셔너리."
     """
     Args:
     - previewWidth:
@@ -207,8 +207,8 @@ def readLayoutApiState(previewWidth=None):
 
     Return:
     - layoutState:
-      gridRows·gridCols·gridLimits·slotStyle·visibleSlots·previewGeometry·zoom·zoomLocked 딕셔너리.
-      layout detached fields에 session["dashboardZoomIntent"]/Locked를 zoom/zoomLocked로 합성한 immutable public state
+      gridRows·gridCols·gridLimits·slotStyle·visibleSlots·previewGeometry·zoom 딕셔너리.
+      layout 조회 결과에 현재 interfaceState["dashboardZoomIntent"]를 zoom으로 합성한 읽기 전용 결과.
 
     변경:
     - 없음.
@@ -216,10 +216,10 @@ def readLayoutApiState(previewWidth=None):
     처리:
         1. current layout["readState"] Backend query에 previewWidth만 전달한다.
            previewWidth의 omitted/invalid 기본값과 bounds는 Backend의 backend.defaults.preview에서만 read copy에 적용한다. Application은 값을 복제하지 않는다.
-           Backend의 gridRows/gridCols/gridLimits/slotStyle/visibleSlots/previewGeometry를 보존하고 현재 Frontend zoom/zoomLocked를 합성한다.
+           Backend의 gridRows/gridCols/gridLimits/slotStyle/visibleSlots/previewGeometry를 보존하고 현재 Frontend 확대 비율을 합성한다.
            visibleSlots의 contentType/chart/imageId와 assetDisplay는 Backend가 같은 project read에서 resolve한 detached 값이다.
            Application이 별도 chart/asset copy를 재조합하거나 canonical assets.readTree에 slot/chart를 끼워 넣지 않는다.
-           Application이 interfaceFSM의 zoom/lock scalar를 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
+           Application이 interfaceFSM의 확대 비율을 합성하며 previewGeometry를 session/Project에 저장하지 않는다.
            layoutState를 반환한다.
     """
     return layoutState
@@ -240,7 +240,7 @@ def setLayoutApiZoom(value):
     - Frontend dashboardZoomIntent.
 
     처리:
-        1. session event 뒤 fresh layout state; lock 중 no-op도 현재 read 반환, Project command 없음.
+        1. 배율 session event 뒤 현재 layout을 읽어 반환한다.
            dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})를 호출한다.
            readLayoutApiState()를 반환한다.
     """
@@ -268,31 +268,6 @@ def commitLayoutApiZoom():
     return layoutState
 
 
-def setLayoutApiZoomLocked(locked):
-    renderedWidth = "화면 대시보드 너비(px) 또는 None."
-    layoutState = "layout.readState 딕셔너리 또는 False."
-    """
-    Args:
-    - locked:
-      잠금 여부인 논리값.
-
-    Return:
-    - layoutState:
-      layout["readState"] 딕셔너리 또는 False.
-      invalid first-lock width이면 False, 그 외 readLayoutApiState()
-
-    변경:
-    - Frontend dashboardZoomLocked·dashboardZoomIntent.
-
-    처리:
-        1. public 인자는 locked 하나다. 처음 lock일 때만 기존 Frontend surface의 readDashboardRenderedWidth로 현재 width를 측정한다.
-           DOM access는 Frontend 책임이며 측정 실패/invalid width는 unchanged False다.
-           unlock/repeated lock은 재측정하지 않는다. accepted/no-op은 fresh layout state를 반환한다.
-           dispatchInterfaceEvent('SET_DASHBOARD_ZOOM_LOCK', {'locked': locked is True, 'renderedWidth': renderedWidth})의 값을 finalState에 대입한다.
-           layoutState를 반환한다.
-    """
-    return layoutState
-
 
 def resetLayoutApiZoom():
     layoutState = "layout.readState 딕셔너리 또는 False."
@@ -305,10 +280,10 @@ def resetLayoutApiZoom():
       layout["readState"] 딕셔너리 또는 False.
 
     변경:
-    - Frontend dashboardZoomLocked·dashboardZoomIntent.
+    - Frontend dashboardZoomIntent.
 
     처리:
-        1. 단일 RESET event로 unlock/100 percent 복귀 후 fresh read. persistent command 없음.
+        1. 단일 RESET event로 배율을 100%로 되돌리고 현재 layout을 읽는다.
            dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})를 호출한다.
            readLayoutApiState()를 반환한다.
     """
@@ -362,7 +337,7 @@ def setLayoutApiGrid(rows, cols):
 
     처리:
         1. Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
-           UI의 단일 dimension 입력은 mantine_ui.changeLayoutGridDimension이 이벤트 시점 공식 read로 두 값을 구성한다.
+           UI의 단일 dimension 확정은 mantine_ui.changeLayoutGridDimension이 공식 read로 두 값을 구성한다.
            이 read부터 동기 dispatch/candidate 검증까지 await·외부 callback이나 다른 command를 삽입하지 않는다.
            setLayoutApiGrid 자체는 두 명시 입력을 유지하며 생략 차원/telemetry/과거 layout copy를 권위 원천으로 해석하지 않는다.
            거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.

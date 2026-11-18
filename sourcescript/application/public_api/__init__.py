@@ -167,7 +167,6 @@ PUBLIC_API_METHODS = {
         'setGrid': layout_annotations.setLayoutApiGrid,
         'setZoom': layout_annotations.setLayoutApiZoom,
         'commitZoom': layout_annotations.commitLayoutApiZoom,
-        'setZoomLocked': layout_annotations.setLayoutApiZoomLocked,
         'resetZoom': layout_annotations.resetLayoutApiZoom,
         'mergeSlots': layout_annotations.mergeSlots,
         'splitSlots': layout_annotations.splitSlots,

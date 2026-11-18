@@ -75,7 +75,7 @@ def initializeFastFigure():
         3. public_api.FastFigureApi를 public command/query/event interface로 공개한다.
            renderer에는 이 action surface와 Application이 조회한 읽기 결과를 제공한다.
         4. adapter.dispatchProjectQuery("renderer", {})로 초기 project projection을 구성한다.
-           Application이 현재 Frontend zoom/lock과 현재 layout으로 정한 너비를 전달하고
+           Application이 현재 Frontend 확대 비율과 현재 layout으로 정한 너비를 전달하고
            Backend가 같은 project 조회에서 geometry를 제공한다.
            renderer.startupCoreRuntime에 이 projection·Frontend state·public actions를 전달하여
            dashboard projection과 slot interaction controller를 준비한다.

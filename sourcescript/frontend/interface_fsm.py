@@ -19,9 +19,7 @@ interfaceState = {'lifecycle': 'booting/ready/importing/exporting/error',
  'direction': 'ui-to-fsm/model-to-fsm/model-to-ui',
  'revision': 'frontend external-store subscriber용 revision',
  'error': '마지막 lifecycle task error projection 또는 없음',
- 'dashboardZoomIntent': '세션 대시보드 표시 배율. 단위: %.',
- 'dashboardZoomLocked': '대시보드 너비 잠금 여부인 논리값.',
- 'dashboardZoomLockedWidth': '잠금 기준 너비인 양수 또는 None. 단위: px.'}
+ 'dashboardZoomIntent': '세션 대시보드 표시 배율. 단위: %.'}
 
 INTERFACE_REGION_ORDER = ["lifecycle", "workspace", "overlay", "assetSelection", "graphObject"]
 
@@ -36,7 +34,6 @@ INTERFACE_EVENTS = {
     'OUTSIDE_CLICK': 'OUTSIDE_CLICK',
     'ESCAPE': 'ESCAPE',
     'SET_DASHBOARD_ZOOM': 'SET_DASHBOARD_ZOOM',
-    'SET_DASHBOARD_ZOOM_LOCK': 'SET_DASHBOARD_ZOOM_LOCK',
     'RESET_DASHBOARD_ZOOM': 'RESET_DASHBOARD_ZOOM',
     'LIFECYCLE_START': 'LIFECYCLE_START',
     'LIFECYCLE_COMPLETE': 'LIFECYCLE_COMPLETE',
@@ -69,8 +66,7 @@ class InterfaceStateMachine:
             2. selectedSlotId에 None을 둔다. interfaceState의 lifecycle은 booting,
                workspace는 project, overlay와 assetSelection과 graphObject는 none으로 둔다.
                assetPath, graphObjectIndex, error에는 None, direction에는 model-to-ui를 둔다.
-            3. revision에 0, dashboardZoomIntent에 100, dashboardZoomLocked에 False,
-               dashboardZoomLockedWidth에 None을 둔다.
+            3. revision에 0, dashboardZoomIntent에 100을 둔다.
         """
 
     def readState(self):
@@ -186,21 +182,18 @@ class InterfaceStateMachine:
                각 경우 다른 독립 선택 필드는 유지한다.
             6. INTERFACE_EVENTS["TOGGLE_OVERLAY"]이면 현재와 같은 이름은 none, 다른 이름은 전달된 overlay로 바꾼다.
                INTERFACE_EVENTS["CLOSE_OVERLAY"], INTERFACE_EVENTS["OUTSIDE_CLICK"], INTERFACE_EVENTS["ESCAPE"]이면 overlay를 none으로 둔다.
-            7. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM"]이면 lock 상태에서 현재 readState()를 반환한다.
-               잠금이 풀려 있으면 유한 수 입력을 50..200으로 제한하고 무효 입력은 100으로 정한다.
+            7. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM"]이면 유한 수 입력을 50..200으로 제한하고
+               무효 입력은 100으로 정하여 dashboardZoomIntent에 둔다.
                실제 배율 변화가 없으면 현재 읽기 결과를 반환한다.
-            8. INTERFACE_EVENTS["SET_DASHBOARD_ZOOM_LOCK"]이면 최초 lock=True에 전달된 유한 양수 renderedWidth를 anchor로 저장한다.
-               무효 너비이면 현재 읽기 결과를 반환하고, 이미 잠겼으면 기존 anchor를 유지한다.
-               lock=False이면 lock=False, width=None, zoom=100으로 둔다. 실제 변화가 없으면 현재 읽기 결과를 반환한다.
-            9. INTERFACE_EVENTS["RESET_DASHBOARD_ZOOM"]이면 lock=False, width=None, zoom=100으로 둔다.
-               실제 변화가 없으면 현재 읽기 결과를 반환한다.
-            10. INTERFACE_EVENTS["LIFECYCLE_START"]이면 전달된 importing/exporting과 error=None을 저장한다.
-                INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]이면 ready와 error=None을 저장한다.
-            11. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장하여 publish()한다.
+            8. INTERFACE_EVENTS["RESET_DASHBOARD_ZOOM"]이면 dashboardZoomIntent를 100으로 둔다.
+               실제 배율 변화가 없으면 현재 읽기 결과를 반환한다.
+            9. INTERFACE_EVENTS["LIFECYCLE_START"]이면 전달된 importing/exporting과 error=None을 저장한다.
+               INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]이면 ready와 error=None을 저장한다.
+            10. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장하여 publish()한다.
                 같은 오류 처리에서 lifecycle만 ready로 바꿔 다시 publish()한 결과를 반환한다.
                 error projection은 다음 START 또는 COMPLETE까지 유지한다.
-            12. 나머지 수락된 전이는 변경된 필드로 publish()한 결과를 반환한다.
-            13. projection를 반환한다.
+            11. 나머지 수락된 전이는 변경된 필드로 publish()한 결과를 반환한다.
+            12. projection을 반환한다.
         """
         return projection
 

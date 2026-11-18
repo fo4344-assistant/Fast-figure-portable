@@ -273,8 +273,15 @@ def renderDashboard(projectProjection, interfaceState):
            실제 dashboard host와 함께 renderDashboardFrame에 전달한다.
            반환값을 frameView에 두고 그 frame·content·decoration 참조를 이번 표시 작업에서 사용한다.
            너비·height·margin·gap·radius는 supplied geometry를 적용하고
-           zoom/anchor는 Frontend 세션에 유지한다. geometry 변경 뒤 current host만 resize한다.
+           확대 비율은 Frontend 세션에 유지한다. geometry 변경 뒤 current host만 resize한다.
         2. 공통 틀의 decoration 영역에 label/bookmark와 선택·상호작용 표시를 구성한다.
+           이번 interfaceState["selectedSlotId"]와 visible slot id를 비교하여 선택 표시를 정한다.
+           빈 슬롯이 선택되었으면 decoration 안쪽에 UI 색상의 4px 경계를 표시한다.
+           frame의 프로젝트 외곽선·content 치수·span·gap·radius는 유지한다.
+           graph/image의 bookmark는 같은 decoration에서 content보다 위에 표시하고 클릭·포커스 영역을 유지한다.
+           선택된 bookmark의 강조는 포인터가 벗어나도 유지한다. 선택 해제·이동 뒤에는 이전 강조를 지운다.
+           host 재사용·style·zoom·병합·분할 갱신에서도 현재 선택과 현재 틀의 치수로 장식을 다시 구성한다.
+           지난 host의 선택 장식만 정리하며 현재 Plotly·이미지 자원과 비동기 완료 검증은 유지한다.
            슬롯 content 영역은 graph·image 표시에 사용한다.
         3. graph slot은 Backend가 같은 project read에서 계산해 projection에 포함한 figure를 Plotly로 표시한다.
            supplied CSV/columns는 editor 표시용 read 값이며 Frontend에서 traces/chartFigure를 다시 계산하거나
@@ -647,7 +654,7 @@ def readDashboardRenderedWidth():
 
     처리:
         1. Frontend surface가 현재 dashboard bounding width를 한 번 측정해 finite positive scalar 또는 none을 반환한다.
-           DOM/control 값으로 Project layout을 역추론하지 않으며 session lock anchor 생성에만 사용한다.
+           측정값은 이번 Frontend 표시·캡처 작업에서만 사용하고 프로젝트 설정으로 저장하지 않는다.
            width를 반환한다.
     """
     return width
@@ -783,6 +790,7 @@ def renderDashboardTarget(snapshot, statusSink):
            target geometry/font/line/marker의 presentation scaling은 figure copy에만 적용하고 supplied snapshot/Project를 변경하지 않는다.
            ordinary FFPX whole-project snapshot을 raster용 precomputed figure input인 것처럼 대신 사용하지 않는다.
         8. label/caption을 같은 logical reference geometry에서 변환해 그린다.
+           실제 프로젝트 외곽선 설정만 사용하고 UI 선택 경계·bookmark 강조·미리보기 점선은 출력에서 제외한다.
         9. PNG/JPEG blob에 DPI metadata를 적용하고 downloadExportPayload로 한 번 전달한다.
         10. 정상 handoff 뒤 {outcome: saved, width: rasterWidth, height: rasterHeight, automaticHeight: heightMode==auto}를 반환한다.
            saved는 브라우저 다운로드 handoff 완료를 뜻한다. 거부는 {outcome: rejected, reason: raster-limit/caption-height/grid-geometry}다.
@@ -817,8 +825,10 @@ def renderDashboardCurrent(snapshot, statusSink):
         1. capture는 현재 supplied snapshot과 renderedWidth로 출력한다. 저장된 target width/height를 유지한다.
            Application이 제공한 snapshot과 현재 rendered viewport geometry를 one-shot source size로 사용할 수 있으며
            persistent dpi/format은 output encoding default로 읽을 수 있다.
-           current viewport는 Frontend surface가 이번 capture에 한 번 측정하며 Project target width/height로 저장하지 않는다.
+           current viewport 너비는 readDashboardRenderedWidth로 이번 capture에 한 번 측정하고,
+           필요한 높이도 같은 surface에서 측정한다. Project target width/height로 저장하지 않는다.
            target export와 같은 limit/encoding/download completion/error/finally 규칙을 적용한다.
+           현재 화면 선택·bookmark 강조와 편집용 점선은 캡처 출력에서 제외한다.
            성공 반환은 {outcome: saved, width: rasterWidth, height: rasterHeight, automaticHeight: False}이고 거부는 같은 rejected shape다.
            이미 캡처한 snapshot/viewport는 이 작업에서만 소비하고 다음 export의 원천으로 보관하지 않는다.
            result를 반환한다.
