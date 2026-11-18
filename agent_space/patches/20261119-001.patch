@@ -1,0 +1,39 @@
+diff --git a/development-versions.json b/development-versions.json
+index 4dbbffd315c8568254765d53bf5a96232981d737..e7a41f50d427d0a9ec3f3152d9d16a69bab8ffe4 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -12,7 +12,7 @@
+       "revision": 58,
+       "status": "current",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:3dffb61a2ff3f3ee4fb58a4cdcc97ecade691b40d219ee7f7bd937203ab3193d",
++      "fingerprint": "sha256:c600ec91da15ab7829c2ea2e9c3d65b515603d363961fdf3fb8deb1e2010fe9e",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+@@ -54,7 +54,7 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:d6defd7741b6e4ea39489aa3d59a371ec4f83fe7468cdf0b7a104982ccdc6eda",
++      "fingerprint": "sha256:964770daf924a990884745c78a00bff9aa269b3ae2175d4e7e6d82178a9d66a8",
+       "derived_from": {
+         "source-script": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7",
+         "pseudocode": "sha256:a832497cc42a4047f273365ba9b82733cd163425079ef524dbe4938768d7a8ed",
+diff --git a/scripts/check-development-layer-versions.py b/scripts/check-development-layer-versions.py
+index 759897c6a8ca20c3668dee496a1f654ef7e8bd49..ab8252df0e816e780fdc2aefde7f668b36f5d2fd 100644
+--- a/scripts/check-development-layer-versions.py
++++ b/scripts/check-development-layer-versions.py
+@@ -24,9 +24,9 @@ class VersionError(RuntimeError):
+ 
+ 
+ def git_blob_sha1(path: Path) -> str:
+-    data = path.read_bytes()
+-    header = f"blob {len(data)}\0".encode("ascii")
+-    return hashlib.sha1(header + data).hexdigest()
++    # Hash the working file through the same path-specific filters as git add.
++    relative = path.relative_to(ROOT).as_posix()
++    return git("hash-object", "--", relative).strip()
+ 
+ 
+ def layer_fingerprint(paths: list[Path]) -> str:

@@ -24,9 +24,9 @@ class VersionError(RuntimeError):
 
 
 def git_blob_sha1(path: Path) -> str:
-    data = path.read_bytes()
-    header = f"blob {len(data)}\0".encode("ascii")
-    return hashlib.sha1(header + data).hexdigest()
+    # Hash the working file through the same path-specific filters as git add.
+    relative = path.relative_to(ROOT).as_posix()
+    return git("hash-object", "--", relative).strip()
 
 
 def layer_fingerprint(paths: list[Path]) -> str:

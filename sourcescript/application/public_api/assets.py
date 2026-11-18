@@ -91,8 +91,6 @@ def selectProjectCsv(path):
     outcome = "CSV 자산 딕셔너리 또는 None."
     resolved = "삭제 대상 조회 딕셔너리 또는 None."
     target = "CSV 자산 딕셔너리."
-    priorRevision = "Frontend revision 정수."
-    finalState = "Frontend 상태 읽기 딕셔너리."
     """
     Args:
     - path:
@@ -100,22 +98,19 @@ def selectProjectCsv(path):
 
     Return:
     - outcome:
-      요청한 CSV의 분리된 공식 읽기 결과. 대상 부재·종류 불일치·선택 거부이면 None.
+      지정한 CSV의 공식 읽기 결과. 대상이 없거나 CSV가 아니면 None.
+      원형: /backend/project_state/readBackendProjection의 assets.readDeletionTarget 결과 중 target.
 
     변경:
-    - 수락된 SELECT_ASSET의 assetSelection, assetPath, graphObject, graphObjectIndex, revision.
+    - Frontend CSV 선택과 그래프 객체 선택.
 
     처리:
-        1. assets.readDeletionTarget 공식 조회에 path를 전달해 resolved에 둔다.
-           대상이 없거나 CSV가 아니면 None을 반환한다. resolved["target"]을 target에 둔다.
-        2. 현재 Frontend revision을 priorRevision에 둔다. target의 canonical 경로와 kind=csv를
-           SELECT_ASSET으로 dispatchInterfaceEvent에 전달하고 반환 상태를 finalState에 둔다.
-        3. Backend 참조 검증으로 수락된 전이는 asset 선택을 반영하고 graph object 선택을 해제한다.
-           슬롯 선택과 workspace, ProjectObject를 유지한다. 같은 CSV 선택도 revision을 한 번 증가시킨다.
-        4. finalState["revision"]이 priorRevision 이하이면 None을 반환한다.
-           최종 kind와 경로가 요청한 CSV인지 확인한다. 일치하지 않으면 None을 반환한다.
-        5. 해당 경로의 assets.readDeletionTarget을 다시 조회하고 현재 CSV target을 outcome에 둔다.
-           사라지거나 종류가 달라졌으면 None을 반환한다. 조회·전이 오류를 전파한다.
+        1. assets.readDeletionTarget 공식 조회에 path를 전달하고 결과를 resolved에 둔다.
+           대상이 없거나 kind가 csv가 아니면 None을 반환한다. resolved["target"]을 target에 둔다.
+        2. target["path"]와 kind=csv를 SELECT_ASSET의 입력으로 dispatchInterfaceEvent에 전달한다.
+           Frontend 전이는 CSV를 선택하고 그래프 객체 선택을 해제한다. 슬롯 선택은 유지한다.
+        3. target["path"]로 assets.readDeletionTarget을 조회하고 반환된 target을 outcome에 둔다.
+           조회 결과가 None이면 outcome을 None으로 둔다. 조회·전이 오류는 전파한다.
     """
     return outcome
 

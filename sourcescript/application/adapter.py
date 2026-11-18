@@ -72,7 +72,7 @@ class ApplicationInterface:
         """
         Args:
         - onStoreChange:
-          Frontend 상태 발행 후 호출할 알림 함수.
+          /frontend/interface_fsm/InterfaceStateMachine.publish의 notice를 받는 함수.
 
         Return:
         - unsubscribe:
@@ -150,7 +150,7 @@ def dispatchInterfaceEvent(event, payload=None):
            등록된 함수가 있으면 validator(event,payload)를 한 번 호출하여 validatedInput에 둔다.
         2. 그 외에는 accepted=True와 event의 입력을 담은 validatedInput을 구성한다.
         3. interfaceFSM.send(event, validatedInput)의 결과를 projection에 두고 반환한다.
-           accepted=False 입력은 Frontend 소유자가 상태와 revision을 유지한다.
+           accepted=False 입력은 Frontend 소유자가 현재 상태를 반환한다.
         4. 명시적 graph object 선택은 selectAsset=True를 전달하며 commit 뒤 index 보정은
            selectAsset=False로 구분한다. Backend 조회 실패는 호출자에게 전파한다.
     """
@@ -219,11 +219,12 @@ def dispatchProjectCommand(event, payload):
     - 기존 Backend 명령의 상태와 Frontend 참조. 허용된 표시 범위.
 
     처리:
-        1. 등록된 명령인지 확인하고 projectEFSM.send(event, payload)를 한 번 호출한다.
+        1. 등록된 명령인지 확인하고 projectEFSM.send(event, payload)를 한 번 호출하여 결과를 result에 둔다.
         2. interfaceFSM.readState()를 frontendBefore에 둔다.
            result["committed"]가 False이면 (result, frontendBefore, None)을 반환한다.
         3. buildFrontendReconciliationInput(event, result, frontendBefore)를 reconciliationInput에 둔다.
-           그 실제 delta·hint·index mapping을 interfaceFSM.reconcileProjectResult에 전달하여 interfaceState에 둔다.
+           interfaceFSM.reconcileProjectResult(event, reconciliationInput, result)의 결과를 interfaceState에 둔다.
+           참조 보정을 마친 뒤 이 명령의 변경과 값이 달라진 Frontend 필드를 한 번 알린다.
         4. PROJECT_LOADED이면 renderer.clearWorkspacePresentation()으로 이전 workspace 자원을 정리한다.
            workspace-structure 조회를 renderer.applyWorkspaceTransform에 전달해 새 빈 틀과 선택 장식만 준비한다.
            이 구조 조회를 rendererProjection에 둔다. 내용은 전체 버튼에서 표시한다.

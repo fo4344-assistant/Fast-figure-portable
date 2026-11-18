@@ -6,7 +6,7 @@ Python 문법으로 작성한 구현 명세다.
 """
 
 from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
+from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection, transformWorkspace
 from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
 from sourcescript.frontend.interface_fsm import interfaceFSM
 from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, finishDashboardFileDropInteraction
@@ -239,10 +239,9 @@ def readLayoutApiControls():
     - 없음.
 
     처리:
-        1. layout.readControls operation으로 dispatchProjectQuery를 한 번 호출한다.
-           Backend는 현재 layout의 grid·한계·style 필드만 분리하여 반환한다.
-        2. 같은 동기 처리에서 interfaceFSM.readState()의 dashboardZoomIntent를 zoom으로 합성한다.
-           visibleSlots·assetDisplay·previewGeometry를 요청하지 않는다. controls를 반환하고 조회 오류를 전파한다.
+        1. operation=layout.readControls로 dispatchProjectQuery('project-api', 요청)를 호출하고 반환된 gridRows, gridCols, gridLimits, slotStyle을 controls에 둔다.
+        2. 같은 동기 처리에서 interfaceFSM.readState()의 dashboardZoomIntent를 controls의 zoom에 둔다.
+        3. controls를 반환한다. 조회 오류는 전파한다.
     """
     return controls
 
@@ -262,11 +261,10 @@ def setLayoutApiZoom(value):
     - Frontend dashboardZoomIntent.
 
     처리:
-        1. 배율 session event 뒤 workspace-structure를 공식 조회하고 현재 Frontend 상태와 함께
-           renderer.applyWorkspaceTransform에 전달하여 기존 화면만 확대·축소한다.
-           Plotly 내용 갱신·resize·이미지 재해석을 실행하지 않는다. 현재 layout을 읽어 반환한다.
-           dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})를 호출한다.
-           readLayoutApiControls()를 반환한다.
+        1. 대시보드 확대·축소 입력으로 받은 value를 dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})에 전달한다.
+        2. transformWorkspace()를 호출한다. 대시보드를 새로 렌더링하지 않고,
+           이미 렌더링된 화면에 확정된 배율의 CSS 확대·축소만 적용한다.
+        3. readLayoutApiControls()의 결과를 layoutState에 둔다.
     """
     return layoutState
 
@@ -307,11 +305,10 @@ def resetLayoutApiZoom():
     - Frontend dashboardZoomIntent.
 
     처리:
-        1. 단일 RESET event로 배율을 100%로 되돌린다.
-           workspace-structure와 현재 Frontend 상태를 renderer.applyWorkspaceTransform에 전달한다.
-           기존 내용의 CSS 배율만 바꾸고 현재 layout을 읽는다.
-           dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})를 호출한다.
-           readLayoutApiControls()를 반환한다.
+        1. 대시보드 배율 초기화 버튼에서 이 API를 호출하면 dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})로 배율을 100%로 되돌린다.
+        2. transformWorkspace()를 호출해 이미 렌더링된 화면의 CSS 배율을 100%로 되돌린다.
+           대시보드를 새로 렌더링하지 않는다.
+        3. readLayoutApiControls()의 결과를 layoutState에 둔다.
     """
     return layoutState
 
@@ -362,14 +359,10 @@ def setLayoutApiGrid(rows, cols):
     - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
 
     처리:
-        1. Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
-           UI의 단일 dimension 확정은 mantine_ui.changeLayoutGridDimension이 공식 read로 두 값을 구성한다.
-           이 read부터 동기 dispatch/candidate 검증까지 await·외부 callback이나 다른 command를 삽입하지 않는다.
-           setLayoutApiGrid 자체는 두 명시 입력을 유지하며 생략 차원/telemetry/과거 layout copy를 권위 원천으로 해석하지 않는다.
-           거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
-           성공 candidate는 그 command가 한 번 commit한다.
-           commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
-           layoutState를 반환한다.
+        1. rows와 cols를 GRID_LAYOUT_CHANGED의 입력으로 dispatchProjectCommand에 전달한다.
+           Backend가 후보를 만들고 프로젝트 전체를 검증한 뒤 한 번 반영한다. Application이 성공 결과를 받아 선택을 보정한다.
+        2. 명령 결과의 committed가 False이면 False를 반환한다. 명령 오류는 전파한다.
+        3. readLayoutApiControls()의 결과를 layoutState에 두고 반환한다.
     """
     return layoutState
 
@@ -397,9 +390,9 @@ def mergeSlots(slotIds):
         4. Backend 명령은 covered non-anchor Slot의 content와 caption을 Slot 생성자의 기본값으로 되돌리고 hidden=True로 한다.
         5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
         6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
-        7. SLOTS_MERGED 내부에서 whole-project candidate를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
-        8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
-           layoutState를 반환한다.
+        7. 위 병합 처리는 dispatchProjectCommand에 slotIds를 전달받은 SLOTS_MERGED가 수행한다. Backend가 프로젝트 후보 전체를 검증하고 한 번 반영한다.
+        8. 명령 결과의 committed가 False이면 False를 반환한다. 명령 오류는 전파한다.
+        9. readLayoutApiControls()의 결과를 layoutState에 두고 반환한다.
     """
     return layoutState
 
@@ -422,9 +415,9 @@ def splitSlots(slotIds):
         1. current merged visible anchor를 resolve한다.
         2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
         3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
-        4. SLOTS_SPLIT 내부에서 candidate 전체를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
-        5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
-           layoutState를 반환한다.
+        4. 위 분할 처리는 dispatchProjectCommand에 slotIds를 전달받은 SLOTS_SPLIT가 수행한다. Backend가 프로젝트 후보 전체를 검증하고 한 번 반영한다.
+        5. 명령 결과의 committed가 False이면 False를 반환한다. 명령 오류는 전파한다.
+        6. readLayoutApiControls()의 결과를 layoutState에 두고 반환한다.
     """
     return layoutState
 
@@ -818,10 +811,9 @@ def setAppearanceApiPalette(values):
            result["committed"]가 False이면 False를 반환한다.
            선택 슬롯의 내용 표시는 dispatchProjectCommand가 한 번 수행한다.
            rendererInput은 그 선택 슬롯 또는 구조 조회 결과다. wrapper에서 표시 작업을 중복 실행하지 않는다.
-           UI 팔레트의 CSS는 공식 appearance.readPalette 결과로 applyUiPalette에 전달한다.
-           다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
-           interfaceFSM.notify("ui", "UI_PALETTE_CHANGED")로 한 번 알린다.
-           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})를 반환한다.
+           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})의 결과를 palette에 둔다.
+           palette를 applyUiPalette에 전달해 UI 색상을 적용한다. 다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
+           UI 팔레트 표시 알림은 dispatchProjectCommand가 발행한 APPEARANCE_CHANGED를 사용한다.
     """
     return palette
 

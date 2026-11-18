@@ -1,0 +1,747 @@
+diff --git a/development-versions.json b/development-versions.json
+index 594a6001f4530494030dafdbe8ba1c626b6ee3ca..4dbbffd315c8568254765d53bf5a96232981d737 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -9,10 +9,10 @@
+   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
+   "layers": {
+     "source-script": {
+-      "revision": 57,
+-      "status": "stale",
++      "revision": 58,
++      "status": "current",
+       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
+-      "fingerprint": "sha256:654768d76aea65960c883898f40093d485842997227df9a17ae1f074bdc995c7",
++      "fingerprint": "sha256:3dffb61a2ff3f3ee4fb58a4cdcc97ecade691b40d219ee7f7bd937203ab3193d",
+       "derived_from": null,
+       "closure": "open",
+       "closure_review": null
+diff --git a/sourcescript/application/adapter.py b/sourcescript/application/adapter.py
+index 5b2864c803c356bc4f36a60a3f1f9139745fccd2..b3f0d0314ea5d64204c408aaf3bd5f81c82b97fc 100644
+--- a/sourcescript/application/adapter.py
++++ b/sourcescript/application/adapter.py
+@@ -72,7 +72,7 @@ class ApplicationInterface:
+         """
+         Args:
+         - onStoreChange:
+-          Frontend 상태 발행 후 호출할 알림 함수.
++          /frontend/interface_fsm/InterfaceStateMachine.publish의 notice를 받는 함수.
+ 
+         Return:
+         - unsubscribe:
+@@ -150,7 +150,7 @@ def dispatchInterfaceEvent(event, payload=None):
+            등록된 함수가 있으면 validator(event,payload)를 한 번 호출하여 validatedInput에 둔다.
+         2. 그 외에는 accepted=True와 event의 입력을 담은 validatedInput을 구성한다.
+         3. interfaceFSM.send(event, validatedInput)의 결과를 projection에 두고 반환한다.
+-           accepted=False 입력은 Frontend 소유자가 상태와 revision을 유지한다.
++           accepted=False 입력은 Frontend 소유자가 현재 상태를 반환한다.
+         4. 명시적 graph object 선택은 selectAsset=True를 전달하며 commit 뒤 index 보정은
+            selectAsset=False로 구분한다. Backend 조회 실패는 호출자에게 전파한다.
+     """
+@@ -219,11 +219,12 @@ def dispatchProjectCommand(event, payload):
+     - 기존 Backend 명령의 상태와 Frontend 참조. 허용된 표시 범위.
+ 
+     처리:
+-        1. 등록된 명령인지 확인하고 projectEFSM.send(event, payload)를 한 번 호출한다.
++        1. 등록된 명령인지 확인하고 projectEFSM.send(event, payload)를 한 번 호출하여 결과를 result에 둔다.
+         2. interfaceFSM.readState()를 frontendBefore에 둔다.
+            result["committed"]가 False이면 (result, frontendBefore, None)을 반환한다.
+         3. buildFrontendReconciliationInput(event, result, frontendBefore)를 reconciliationInput에 둔다.
+-           그 실제 delta·hint·index mapping을 interfaceFSM.reconcileProjectResult에 전달하여 interfaceState에 둔다.
++           interfaceFSM.reconcileProjectResult(event, reconciliationInput, result)의 결과를 interfaceState에 둔다.
++           참조 보정을 마친 뒤 이 명령의 변경과 값이 달라진 Frontend 필드를 한 번 알린다.
+         4. PROJECT_LOADED이면 renderer.clearWorkspacePresentation()으로 이전 workspace 자원을 정리한다.
+            workspace-structure 조회를 renderer.applyWorkspaceTransform에 전달해 새 빈 틀과 선택 장식만 준비한다.
+            이 구조 조회를 rendererProjection에 둔다. 내용은 전체 버튼에서 표시한다.
+diff --git a/sourcescript/application/public_api/__init__.py b/sourcescript/application/public_api/__init__.py
+index 6be8fa940a43be33be61772ca7c1cfe49ca79360..b66d2b07fdcfe7f8f9bf144ada623016ccab2a95 100644
+--- a/sourcescript/application/public_api/__init__.py
++++ b/sourcescript/application/public_api/__init__.py
+@@ -83,10 +83,10 @@ def readGraphControls(csvId=None):
+     - 없음.
+ 
+     처리:
+-        1. appFSM.readState()에서 현재 selectedSlotId·assetSelection·assetPath·graphObjectIndex를 읽는다.
+-        2. 그 식별 필드와 csvId를 graphs.readControls operation에 담아 dispatchProjectQuery를 한 번 호출한다.
+-        3. Backend는 같은 현재 프로젝트에서 필요한 설정과 메타데이터만 구성한다.
+-           원래 조회 오류를 전파하고 controls를 반환한다.
++        1. adapter.appFSM.readState()의 결과를 current에 둔다.
++        2. current의 selectedSlotId, assetSelection, assetPath, graphObjectIndex를 요청의 frontendState에 넣고 csvId를 요청에 넣는다.
++        3. operation=BACKEND_QUERY_KINDS['project-api']['graphs.readControls']를 요청에 넣어
++           adapter.dispatchProjectQuery('project-api', 요청)를 호출한다. 결과를 controls에 두고 반환한다. 조회 오류는 전파한다.
+     """
+     return controls
+ 
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index c3d0c485275b3c75b59095b1feff57237228b3c5..336201369e1a39012769387e5d4125883c6e7fb9 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -91,8 +91,6 @@ def selectProjectCsv(path):
+     outcome = "CSV 자산 딕셔너리 또는 None."
+     resolved = "삭제 대상 조회 딕셔너리 또는 None."
+     target = "CSV 자산 딕셔너리."
+-    priorRevision = "Frontend revision 정수."
+-    finalState = "Frontend 상태 읽기 딕셔너리."
+     """
+     Args:
+     - path:
+@@ -100,22 +98,19 @@ def selectProjectCsv(path):
+ 
+     Return:
+     - outcome:
+-      요청한 CSV의 분리된 공식 읽기 결과. 대상 부재·종류 불일치·선택 거부이면 None.
++      지정한 CSV의 공식 읽기 결과. 대상이 없거나 CSV가 아니면 None.
++      원형: /backend/project_state/readBackendProjection의 assets.readDeletionTarget 결과 중 target.
+ 
+     변경:
+-    - 수락된 SELECT_ASSET의 assetSelection, assetPath, graphObject, graphObjectIndex, revision.
++    - Frontend CSV 선택과 그래프 객체 선택.
+ 
+     처리:
+-        1. assets.readDeletionTarget 공식 조회에 path를 전달해 resolved에 둔다.
+-           대상이 없거나 CSV가 아니면 None을 반환한다. resolved["target"]을 target에 둔다.
+-        2. 현재 Frontend revision을 priorRevision에 둔다. target의 canonical 경로와 kind=csv를
+-           SELECT_ASSET으로 dispatchInterfaceEvent에 전달하고 반환 상태를 finalState에 둔다.
+-        3. Backend 참조 검증으로 수락된 전이는 asset 선택을 반영하고 graph object 선택을 해제한다.
+-           슬롯 선택과 workspace, ProjectObject를 유지한다. 같은 CSV 선택도 revision을 한 번 증가시킨다.
+-        4. finalState["revision"]이 priorRevision 이하이면 None을 반환한다.
+-           최종 kind와 경로가 요청한 CSV인지 확인한다. 일치하지 않으면 None을 반환한다.
+-        5. 해당 경로의 assets.readDeletionTarget을 다시 조회하고 현재 CSV target을 outcome에 둔다.
+-           사라지거나 종류가 달라졌으면 None을 반환한다. 조회·전이 오류를 전파한다.
++        1. assets.readDeletionTarget 공식 조회에 path를 전달하고 결과를 resolved에 둔다.
++           대상이 없거나 kind가 csv가 아니면 None을 반환한다. resolved["target"]을 target에 둔다.
++        2. target["path"]와 kind=csv를 SELECT_ASSET의 입력으로 dispatchInterfaceEvent에 전달한다.
++           Frontend 전이는 CSV를 선택하고 그래프 객체 선택을 해제한다. 슬롯 선택은 유지한다.
++        3. target["path"]로 assets.readDeletionTarget을 조회하고 반환된 target을 outcome에 둔다.
++           조회 결과가 None이면 outcome을 None으로 둔다. 조회·전이 오류는 전파한다.
+     """
+     return outcome
+ 
+diff --git a/sourcescript/application/public_api/layout_annotations.py b/sourcescript/application/public_api/layout_annotations.py
+index 3ec94b72dd7f8d8915fed55d1e72f01c4115e308..6f5ff651e2a65d8ba1fe2e6124771d72f51ad790 100644
+--- a/sourcescript/application/public_api/layout_annotations.py
++++ b/sourcescript/application/public_api/layout_annotations.py
+@@ -6,7 +6,7 @@ Python 문법으로 작성한 구현 명세다.
+ """
+ 
+ from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
+-from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection
++from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection, transformWorkspace
+ from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
+ from sourcescript.frontend.interface_fsm import interfaceFSM
+ from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, finishDashboardFileDropInteraction
+@@ -239,10 +239,9 @@ def readLayoutApiControls():
+     - 없음.
+ 
+     처리:
+-        1. layout.readControls operation으로 dispatchProjectQuery를 한 번 호출한다.
+-           Backend는 현재 layout의 grid·한계·style 필드만 분리하여 반환한다.
+-        2. 같은 동기 처리에서 interfaceFSM.readState()의 dashboardZoomIntent를 zoom으로 합성한다.
+-           visibleSlots·assetDisplay·previewGeometry를 요청하지 않는다. controls를 반환하고 조회 오류를 전파한다.
++        1. operation=layout.readControls로 dispatchProjectQuery('project-api', 요청)를 호출하고 반환된 gridRows, gridCols, gridLimits, slotStyle을 controls에 둔다.
++        2. 같은 동기 처리에서 interfaceFSM.readState()의 dashboardZoomIntent를 controls의 zoom에 둔다.
++        3. controls를 반환한다. 조회 오류는 전파한다.
+     """
+     return controls
+ 
+@@ -262,11 +261,10 @@ def setLayoutApiZoom(value):
+     - Frontend dashboardZoomIntent.
+ 
+     처리:
+-        1. 배율 session event 뒤 workspace-structure를 공식 조회하고 현재 Frontend 상태와 함께
+-           renderer.applyWorkspaceTransform에 전달하여 기존 화면만 확대·축소한다.
+-           Plotly 내용 갱신·resize·이미지 재해석을 실행하지 않는다. 현재 layout을 읽어 반환한다.
+-           dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})를 호출한다.
+-           readLayoutApiControls()를 반환한다.
++        1. 대시보드 확대·축소 입력으로 받은 value를 dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})에 전달한다.
++        2. transformWorkspace()를 호출한다. 대시보드를 새로 렌더링하지 않고,
++           이미 렌더링된 화면에 확정된 배율의 CSS 확대·축소만 적용한다.
++        3. readLayoutApiControls()의 결과를 layoutState에 둔다.
+     """
+     return layoutState
+ 
+@@ -307,11 +305,10 @@ def resetLayoutApiZoom():
+     - Frontend dashboardZoomIntent.
+ 
+     처리:
+-        1. 단일 RESET event로 배율을 100%로 되돌린다.
+-           workspace-structure와 현재 Frontend 상태를 renderer.applyWorkspaceTransform에 전달한다.
+-           기존 내용의 CSS 배율만 바꾸고 현재 layout을 읽는다.
+-           dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})를 호출한다.
+-           readLayoutApiControls()를 반환한다.
++        1. 대시보드 배율 초기화 버튼에서 이 API를 호출하면 dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})로 배율을 100%로 되돌린다.
++        2. transformWorkspace()를 호출해 이미 렌더링된 화면의 CSS 배율을 100%로 되돌린다.
++           대시보드를 새로 렌더링하지 않는다.
++        3. readLayoutApiControls()의 결과를 layoutState에 둔다.
+     """
+     return layoutState
+ 
+@@ -362,14 +359,10 @@ def setLayoutApiGrid(rows, cols):
+     - buildGridResizeCandidate가 성공한 경우에만 activeProject grid/slot structure를 한 번 commit한다.
+ 
+     처리:
+-        1. Application은 rows/cols만 GRID_LAYOUT_CHANGED에 전달한다. Backend command가 buildGridResizeCandidate와 전체 project 검증을 수행한다.
+-           UI의 단일 dimension 확정은 mantine_ui.changeLayoutGridDimension이 공식 read로 두 값을 구성한다.
+-           이 read부터 동기 dispatch/candidate 검증까지 await·외부 callback이나 다른 command를 삽입하지 않는다.
+-           setLayoutApiGrid 자체는 두 명시 입력을 유지하며 생략 차원/telemetry/과거 layout copy를 권위 원천으로 해석하지 않는다.
+-           거부되면 원본 project를 유지하며 interface selection도 reconciliation 대상이 되지 않는다.
+-           성공 candidate는 그 command가 한 번 commit한다.
+-           commit 성공 후 selection 유지/해제는 ProjectMutationResult를 받은 Application boundary의 Backend reconciliation query와 Frontend FSM transition이 결정한다.
+-           layoutState를 반환한다.
++        1. rows와 cols를 GRID_LAYOUT_CHANGED의 입력으로 dispatchProjectCommand에 전달한다.
++           Backend가 후보를 만들고 프로젝트 전체를 검증한 뒤 한 번 반영한다. Application이 성공 결과를 받아 선택을 보정한다.
++        2. 명령 결과의 committed가 False이면 False를 반환한다. 명령 오류는 전파한다.
++        3. readLayoutApiControls()의 결과를 layoutState에 두고 반환한다.
+     """
+     return layoutState
+ 
+@@ -397,9 +390,9 @@ def mergeSlots(slotIds):
+         4. Backend 명령은 covered non-anchor Slot의 content와 caption을 Slot 생성자의 기본값으로 되돌리고 hidden=True로 한다.
+         5. anchor rowSpan/colSpan을 rectangle 크기로 설정한다.
+         6. 두 개 이상의 selected slot object가 non-default local state를 가지면 implicit merge/concatenation 없이 거부한다.
+-        7. SLOTS_MERGED 내부에서 whole-project candidate를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
+-        8. Frontend selection reconciliation과 renderer update는 ProjectMutationResult 이후 Application boundary가 수행한다.
+-           layoutState를 반환한다.
++        7. 위 병합 처리는 dispatchProjectCommand에 slotIds를 전달받은 SLOTS_MERGED가 수행한다. Backend가 프로젝트 후보 전체를 검증하고 한 번 반영한다.
++        8. 명령 결과의 committed가 False이면 False를 반환한다. 명령 오류는 전파한다.
++        9. readLayoutApiControls()의 결과를 layoutState에 두고 반환한다.
+     """
+     return layoutState
+ 
+@@ -422,9 +415,9 @@ def splitSlots(slotIds):
+         1. current merged visible anchor를 resolve한다.
+         2. anchor slot object의 chart/image/contentType/imageSettings/caption 등 모든 slot-local properties를 anchor에 유지한다.
+         3. covered cell은 visible 1x1 slot로 복원하고 모든 slot-local properties를 defaults로 시작한다.
+-        4. SLOTS_SPLIT 내부에서 candidate 전체를 검증하고 한 번 commit한다. wrapper는 slotIds만 보낸다.
+-        5. interface selection reconciliation과 renderer update는 project commit 이후 수행한다.
+-           layoutState를 반환한다.
++        4. 위 분할 처리는 dispatchProjectCommand에 slotIds를 전달받은 SLOTS_SPLIT가 수행한다. Backend가 프로젝트 후보 전체를 검증하고 한 번 반영한다.
++        5. 명령 결과의 committed가 False이면 False를 반환한다. 명령 오류는 전파한다.
++        6. readLayoutApiControls()의 결과를 layoutState에 두고 반환한다.
+     """
+     return layoutState
+ 
+@@ -818,10 +811,9 @@ def setAppearanceApiPalette(values):
+            result["committed"]가 False이면 False를 반환한다.
+            선택 슬롯의 내용 표시는 dispatchProjectCommand가 한 번 수행한다.
+            rendererInput은 그 선택 슬롯 또는 구조 조회 결과다. wrapper에서 표시 작업을 중복 실행하지 않는다.
+-           UI 팔레트의 CSS는 공식 appearance.readPalette 결과로 applyUiPalette에 전달한다.
+-           다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
+-           interfaceFSM.notify("ui", "UI_PALETTE_CHANGED")로 한 번 알린다.
+-           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})를 반환한다.
++           dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})의 결과를 palette에 둔다.
++           palette를 applyUiPalette에 전달해 UI 색상을 적용한다. 다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
++           UI 팔레트 표시 알림은 dispatchProjectCommand가 발행한 APPEARANCE_CHANGED를 사용한다.
+     """
+     return palette
+ 
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index a4839d8f373428223fa1858866c3076fcd61a9a4..56c7f8c1a54db3cad67dd9209a8b5c454c15c8ce 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -11,7 +11,14 @@ from sourcescript.backend import assets_files, graphs, layout_annotations
+ 
+ ProjectMutationResult = {'event': '프로젝트 명령 이름 문자열.',
+  'committed': '프로젝트 반영 성공 여부인 논리값.',
+- 'changed': '변경 asset·chart·slot의 실제 id, canonical 경로와 소유 관계를 담은 딕셔너리.',
++ 'changed': {
++     'slotIds': '반영 전후 값이 달라진 슬롯 id 배열.',
++     'chartIds': '반영 전후 값이 달라진 그래프 id 배열.',
++     'csvIds': '반영 전후 값이 달라진 CSV id 배열.',
++     'imageIds': '반영 전후 값이 달라진 이미지 id 배열.',
++     'assets': '반영한 자산의 종류·id·canonical 경로·소유 관계와 처리 종류를 담은 배열.',
++     'assetReferenceChanges': '참조 수가 달라진 자산의 kind와 id를 담은 배열. 같은 자산은 한 번 기록한다.',
++ },
+  'removedGraphReferenceCount': '실제 제거한 graph-object CSV reference 수',
+  'resetImageSlotCount': '실제 image reference를 비운 slot 수',
+  'selectionHints': '참조 식별자·경로·chartId·선택 index와 이전/이후 index 대응표를 담은 딕셔너리.',
+@@ -120,13 +127,15 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
+ 
+     처리:
+         1. result의 event에 event, committed에 True를 둔다.
+-           두 상태의 asset id·canonical 경로·chart id·Slot id와 소유 관계를 비교하여
+-           실제 생성·교체·이동·제거 항목을 changed에 넣는다.
++           기존 반영 전후 비교 결과에서 값이 달라진 슬롯·그래프·CSV·이미지의 식별자를 changed의
++           slotIds·chartIds·csvIds·imageIds에 각각 둔다. 생성·제거된 식별자도 포함한다.
++           두 상태의 asset id·canonical 경로와 소유 관계에서 실제 생성·교체·이동·제거 항목을 changed의 assets에 둔다.
+            생성·가져오기 asset은 입력 순서를 유지한다. DATA_OBJECT_REPLACED는 실제 CSV 경로,
+            directory 생성·이동은 최종 canonical 경로를 기록한다.
+         2. 두 상태의 collectAssetReferences 결과를 비교하여 실제 제거 graph-object CSV 참조 수와
+            image 참조를 비운 Slot 수를 각각 removedGraphReferenceCount와 resetImageSlotCount에 둔다.
+-           같은 CSV의 여러 object 참조는 각각 센다.
++           같은 CSV의 여러 object 참조는 각각 센다. 같은 반영 전후 참조 결과에서 kind와 id별 참조 수를 비교하여
++           수가 달라진 자산을 changed의 assetReferenceChanges에 두고, 자산별 식별자는 한 번씩 넣는다.
+            제거된 참조와 변경된 표시 입력으로 projectionEffect를 구성한다.
+         3. afterState의 실제 id·경로·chart 소유 관계에서 selectionHints를 구성하고
+            result["selectionHints"]에 둔다.
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index b8c0e9d09780a2fb4c983b20eed351887b305d2b..ccf18eed8b49ab85202e6532ccbc95ae938544dc 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -271,11 +271,17 @@ def readBackendProjection(kind, request):
+ 
+     - request:
+       등록된 Backend 조회별 식별자·입력 필드를 가진 딕셔너리.
++      이번에 추가한 project-api operation의 입력:
++      - assets.readList는 kind(csv 또는 image), assets.readPreview는 csvId와 선택적 start/count.
++      - graphs.readControls는 frontendState의 selectedSlotId, assetSelection, assetPath, graphObjectIndex와 선택적 chartId/csvId.
++        Frontend 식별 필드의 원천: /frontend/interface_fsm/InterfaceStateMachine.readState.
++      - graphs.readColumns는 csvId 또는 변환 chart의 chartId.
++      - images.readSettings와 labels.readSettings는 대상 slotId.
++      - slots.readDisplay, layout.readControls와 captions.readSettings는 operation만 받는다.
+ 
+     Return:
+     - projection:
+-      등록된 조회의 읽기 전용 결과.
+-      BACKEND_QUERY_KINDS 중 요청 kind에 필요한 current-authority read-only projection.
++      요청 operation의 읽기 전용 결과. 각 operation의 결과 필드와 대상 부재 시 반환값은 아래 해당 처리에서 정의한다.
+ 
+     변경:
+     - activeProject와 Frontend state를 변경하지 않는다.
+@@ -382,7 +388,8 @@ def readBackendProjection(kind, request):
+            - graphs.readControls: 현재 선택 또는 explicit chartId로 유일한 visible 소유 슬롯을 찾는다.
+              slotId/chartId/title/editable/selectedIndex와 그 index의 편집 object 필드 하나, currentCsv 메타데이터를 반환한다.
+              chart는 graphs.readData와 같은 id/editor.title/editor.editable 메타데이터 또는 None으로 제공하여 명령 성공 확인에 사용한다.
+-             object 필드는 11번과 같다. explicit csvId가 있으면 후속 헤더 확인의 currentCsv만 그 CSV로 정한다.
++             object는 11번 graphs.readData의 objects 원소와 같은 필드를 사용한다.
++             currentCsv는 11번과 같은 id/path/name/headerLines/rowCount를 담는다. 명시적 csvId가 있으면 currentCsv의 대상만 그 CSV로 정한다.
+              선택 CSV는 object.csvId로 대체하지 않는다. 누락 chart/object/CSV는 해당 필드 None이며 0은 유효하다.
+              모든 objects·chart.graph·CSV 행/bytes·열 정의를 구성하지 않는다.
+            - graphs.readColumns(csvId,chartId=None): explicit 정수 id의 CSV에 기존 graphs.columnDefinitions를 한 번 적용하여 id/index/label 배열만 반환한다.
+diff --git a/sourcescript/frontend/interface_fsm.py b/sourcescript/frontend/interface_fsm.py
+index 25de7a66097af8fc61143fe173e8ec506637a20a..0007e6500551745c942ef07150f6b0fa49ad0731 100644
+--- a/sourcescript/frontend/interface_fsm.py
++++ b/sourcescript/frontend/interface_fsm.py
+@@ -17,7 +17,6 @@ interfaceState = {'lifecycle': 'booting/ready/importing/exporting/error',
+  'graphObject': 'none/selected',
+  'graphObjectIndex': '선택 graph object의 0 기반 정수 index 또는 None.',
+  'direction': 'ui-to-fsm/model-to-fsm/model-to-ui',
+- 'revision': 'frontend external-store subscriber용 revision',
+  'error': '마지막 lifecycle task error projection 또는 없음',
+  'dashboardZoomIntent': '세션 대시보드 표시 배율. 단위: %.'}
+ 
+@@ -66,7 +65,7 @@ class InterfaceStateMachine:
+             2. selectedSlotId에 None을 둔다. interfaceState의 lifecycle은 booting,
+                workspace는 project, overlay와 assetSelection과 graphObject는 none으로 둔다.
+                assetPath, graphObjectIndex, error에는 None, direction에는 model-to-ui를 둔다.
+-            3. revision에 0, dashboardZoomIntent에 100을 둔다.
++            3. dashboardZoomIntent에 100을 둔다.
+         """
+ 
+     def readState(self):
+@@ -95,7 +94,7 @@ class InterfaceStateMachine:
+         """
+         Args:
+         - onStoreChange:
+-          상태 발행 뒤 인자 없이 호출하는 알림 함수.
++          publish의 notice를 인자로 받는 알림 함수.
+ 
+         Return:
+         - unsubscribe:
+@@ -125,29 +124,43 @@ class InterfaceStateMachine:
+             """
+         return unsubscribe
+ 
+-    def publish(self):
++    def publish(self, before, event, projectResult=None):
+         projection = "Frontend 상태 읽기 딕셔너리."
++        notice = {
++            "event": "이번 전이 또는 명령의 이름.",
++            "fields": "이번에 값이 바뀐 Frontend 읽기 필드 이름의 집합.",
++            "projectResult": "Application이 전달한 반영 결과의 읽기 전용 값 또는 None. 원형: /backend/project_efsm/ProjectMutationResult.",
++        }
+         """
+         Args:
+-        - 없음.
++        - before:
++          이번 전이 직전 readState의 결과.
++        - event:
++          이번 변경 이름.
++        - projectResult:
++          Backend가 반영한 명령의 결과 또는 None.
++          원형: /backend/project_efsm/ProjectMutationResult.
+ 
+         Return:
+         - projection:
+-          이번 발행의 상태 읽기 결과.
++          이번 전이 이후 readState의 결과.
+ 
+         변경:
+-        - interfaceState["revision"].
++        - 없음.
+ 
+         처리:
+-            1. 상태 필드와 selectedSlotId 변경을 마친 뒤 revision을 1 증가시킨다.
+-            2. readState() 결과를 projection에 둔다.
+-            3. 현재 등록된 listener들을 이번 통지 순회용 배열로 복사하여 각각 인자 없이 호출한다.
+-               통지 중 등록·해제는 다음 통지의 집합에 반영한다.
++            1. 상태 반영을 마친 뒤 self.readState()의 결과를 projection에 둔다.
++            2. before와 projection에서 값이 달라진 필드 이름을 notice의 fields에 모은다.
++               event와 projectResult를 notice의 각 필드에 둔다.
++            3. 현재 listener들을 순회용 배열에 담아 각각 notice를 전달한다.
++               통지 중 등록·해제는 다음 통지에 반영한다.
+             4. projection을 반환한다.
+         """
+         return projection
+ 
+     def send(self, event, validatedInput):
++        before = "전이 직전 Frontend 상태 읽기 딕셔너리."
++        failureState = "실패를 발행한 직후 Frontend 상태 읽기 딕셔너리."
+         projection = "Frontend 상태 읽기 딕셔너리."
+         """
+         Args:
+@@ -163,10 +176,10 @@ class InterfaceStateMachine:
+           이번 전이의 Frontend 읽기 결과.
+ 
+         변경:
+-        - interfaceState, selectedSlotId와 수락된 발행의 revision.
++        - interfaceState와 selectedSlotId.
+ 
+         처리:
+-            1. validatedInput의 accepted가 False이면 현재 readState()를 반환한다.
++            1. self.readState()의 결과를 before에 둔다. validatedInput의 accepted가 False이면 before를 반환한다.
+             2. INTERFACE_EVENTS["SELECT_SLOT"]이면 reference와 selectionHint를 확인한다.
+                reference가 None이거나 같은 id에 toggle-clear hint가 있으면 selectedSlotId를 None으로 둔다.
+                그 외에는 검증된 id를 selectedSlotId에 둔다. None의 workspace는 project, 나머지는 workspaceHint다.
+@@ -189,15 +202,15 @@ class InterfaceStateMachine:
+                실제 배율 변화가 없으면 현재 읽기 결과를 반환한다.
+             9. INTERFACE_EVENTS["LIFECYCLE_START"]이면 전달된 importing/exporting과 error=None을 저장한다.
+                INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]이면 ready와 error=None을 저장한다.
+-            10. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장하여 publish()한다.
+-                같은 오류 처리에서 lifecycle만 ready로 바꿔 다시 publish()한 결과를 반환한다.
++            10. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장한다.
++                self.publish(before, event)의 결과를 failureState에 둔다. lifecycle을 ready로 바꾸고 self.publish(failureState, event)의 결과를 반환한다.
+                 error projection은 다음 START 또는 COMPLETE까지 유지한다.
+-            11. 나머지 수락된 전이는 변경된 필드로 publish()한 결과를 반환한다.
+-            12. projection을 반환한다.
++            11. 나머지 수락된 전이는 self.publish(before, event)의 결과를 projection에 두고 반환한다.
+         """
+         return projection
+ 
+-    def reconcileProjectResult(self, event, reconciliationInput):
++    def reconcileProjectResult(self, event, reconciliationInput, projectResult):
++        before = "참조 보정 직전 Frontend 상태 읽기 딕셔너리."
+         projection = "Frontend 상태 읽기 딕셔너리."
+         """
+         Args:
+@@ -207,25 +220,27 @@ class InterfaceStateMachine:
+         - reconciliationInput:
+           buildFrontendReconciliationInput의 검증된 selectedSlotId, workspaceHint,
+           assetKind/path, graphObjectIndex와 방향을 담은 딕셔너리.
++        - projectResult:
++          반영한 명령의 결과. 원형: /backend/project_efsm/ProjectMutationResult.
+ 
+         Return:
+         - projection:
+           프로젝트 반영 결과와 참조를 맞춘 Frontend 읽기 결과.
+ 
+         변경:
+-        - selectedSlotId와 interfaceState의 선택 필드, workspace, direction, revision.
++        - selectedSlotId와 interfaceState의 선택 필드, workspace, direction.
+ 
+         처리:
+-            1. supplied selectedSlotId를 현재 선택 참조에 반영한다.
++            1. self.readState()의 결과를 before에 둔다. reconciliationInput의 selectedSlotId를 현재 선택 참조에 반영한다.
+             2. 선택이 None이면 workspace에 project, 그 외에는 workspaceHint를 넣는다.
+             3. assetKind/path와 graphObjectIndex를 전달된 값으로 반영한다.
+                index가 None이면 graphObject를 none, 그 외에는 selected로 둔다.
+-            4. direction을 model-to-fsm으로 두고 publish()한 결과를 반환한다.
+-               overlay와 독립 session zoom 값은 유지한다.
++            4. direction을 model-to-fsm으로 둔다. self.publish(before, event, projectResult)의 결과를 projection에 두고 반환한다.
+         """
+         return projection
+ 
+-    def notify(self, objectName, event, payload):
++    def notify(self, objectName, event, payload=None):
++        before = "통지 직전 Frontend 상태 읽기 딕셔너리."
+         projection = "Frontend 상태 읽기 딕셔너리."
+         """
+         Args:
+@@ -243,12 +258,11 @@ class InterfaceStateMachine:
+           알림 뒤의 Frontend 읽기 결과.
+ 
+         변경:
+-        - interfaceState["direction"]과 revision.
++        - interfaceState["direction"].
+ 
+         처리:
+-            1. 기존 interfaceState의 direction을 model-to-fsm으로 설정한다.
+-            2. self.publish()로 변경 후 revision을 발행하고 구독자에게 알린다.
+-            3. self.readState()의 결과를 projection에 두고 반환한다.
++            1. self.readState()의 결과를 before에 두고 direction을 model-to-fsm으로 설정한다.
++            2. self.publish(before, event)의 결과를 projection에 두고 반환한다.
+         """
+         return projection
+ 
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index 508415e50d541a56063d0aea439750a2f7b8c1d1..3e69c415e76a3403c25baa12f5033aaf1515dc4c 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -127,7 +127,9 @@ class UiCommand:
+           해당 기능군의 좁은 공식 조회를 한 번 호출하는 함수.
+           결과는 target, value, companions, ready 딕셔너리다.
+           target은 정수 id·object index·편집 범위의 tuple 또는 None이며 0은 유효하다.
+-          companions는 같은 명령에 필요한 x/y 또는 rows/cols 같은 값만 가진다.
++          companions는 FastFigureApp 처리 15번의 동반 값을 담는 딕셔너리다.
++          레이블 위치의 원천은 labels.readSettings의 settings.x/y이며, 행·열 변경의 원천은 layout.readControls의 gridRows/gridCols/gridLimits다.
++          동반 값을 쓰지 않는 입력에는 빈 딕셔너리를 둔다.
+         - prepare:
+           숫자 입력의 원문 판정 함수. 버튼은 None이다.
+         - invoke:
+@@ -190,11 +192,11 @@ class UiCommand:
+ 
+         처리:
+             1. 비활성·실행 중·조합 중·편집 없음이면 None을 반환한다.
+-            2. readCurrent를 한 번 호출한다. current의 target이 editTarget과 다르거나 None이면 cancel하고 None을 반환한다.
+-            3. prepare(text,current의 value)를 실행한다. 거부이면 cancel하고 None을 반환한다.
+-            4. editing/composing을 False로 바꾼 뒤 _sendCurrent(value,editTarget,current)를 호출한다.
+-               같은 동기 판정의 current를 이 내부 호출에만 넘긴다. Enter 이후 blur는 다시 전송하지 않는다.
+-               outcome을 반환한다.
++            2. self.readCurrent()의 결과를 current에 둔다. current["target"]이 None이거나 self.editTarget과 다르면 cancel하고 None을 반환한다.
++            3. self.prepare에 self.text와 current["value"]를 전달한다. 반환된 수락 여부와 확정 값을 각각 accepted와 value에 둔다.
++               accepted가 False이면 cancel하고 None을 반환한다.
++            4. self.editing과 self.composing을 False로 바꾼다. _sendCurrent(value, self.editTarget, current)의 결과를 outcome에 둔다.
++            5. outcome을 반환한다.
+         """
+         return outcome
+ 
+@@ -216,9 +218,9 @@ class UiCommand:
+         - 실행 중 상태와 기존 API가 반영하는 변경.
+ 
+         처리:
+-            1. 비활성 또는 실행 중이면 None을 반환한다. readCurrent를 한 번 호출한다.
+-            2. target 생략이면 current의 target을 사용한다.
+-            3. _sendCurrent(value,target,current)의 결과를 반환한다.
++            1. 비활성 또는 실행 중이면 None을 반환한다. self.readCurrent()의 결과를 current에 둔다.
++            2. target이 None이면 current["target"]을 target에 둔다.
++            3. _sendCurrent(value, target, current)의 결과를 outcome에 두고 반환한다.
+         """
+         return outcome
+ 
+@@ -231,7 +233,8 @@ class UiCommand:
+         - target:
+           이번 대상 식별자 tuple.
+         - current:
+-          같은 동기 판정에서 readCurrent가 반환한 값.
++          같은 동기 판정에서 self.readCurrent가 반환한 target/value/companions/ready 딕셔너리.
++          원형: /frontend/mantine_ui/UiCommand.__init__의 readCurrent 인수 설명.
+ 
+         Return:
+         - outcome:
+@@ -292,12 +295,12 @@ class UiCommand:
+         - 이 객체의 편집 상태와 확정 입력의 변경.
+ 
+         처리:
+-            1. 비활성·실행 중·조합 중·stepSize=None이면 None을 반환한다. readCurrent를 한 번 호출한다.
+-               target=None이면 cancel하고 None을 반환한다. 다른 대상의 미확정 편집은 버린다.
+-            2. 같은 대상의 완성 편집 숫자, 현재 공식 유한 숫자, 0 순서로 증감 기준을 선택한다.
+-            3. direction에 따라 stepSize를 더하거나 뺀 값을 value에 둔다. editing/composing을 False로 바꾼다.
+-            4. _sendCurrent(value,current의 target,current)를 한 번 호출한다. 위젯의 중복 onChange를 만들지 않는다.
+-               outcome을 반환한다.
++            1. 비활성·실행 중·조합 중이거나 self.stepSize가 None이면 None을 반환한다.
++            2. self.readCurrent()의 결과를 current에 둔다. current["target"]이 None이면 cancel하고 None을 반환한다.
++               편집 대상이 current["target"]과 다르면 이전 편집을 버린다.
++            3. 같은 대상의 완성 편집 숫자, current["value"]의 유한 숫자, 0 순서로 증감 기준을 선택한다.
++            4. direction에 따라 self.stepSize를 더하거나 뺀 값을 value에 둔다. self.editing과 self.composing을 False로 바꾼다.
++            5. _sendCurrent(value, current["target"], current)의 결과를 outcome에 두고 반환한다.
+         """
+         return outcome
+ 
+@@ -380,10 +383,11 @@ def changeLayoutGridDimension(dimension, value, companion=None):
+            같은 입력 판정에서 필요한 동반 좌표·한계만 사용하고 보관하지 않는다.
+            해당 gridLimits로 완성 값을 제한하고 기존 Backend 정수 검증을 사용한다.
+         3. rows이면 value와 현재 gridCols, cols이면 현재 gridRows와 value를 구성한다.
+-        4. 같은 동기 처리에서 layout.setGrid(rows, cols)를 한 번 호출한다.
++        4. 같은 동기 처리에서 layout.setGrid(rows, cols)의 결과를 outcome에 둔다.
+            동기 read부터 명령 진입까지 대기·외부 callback을 삽입하지 않는다.
+-        5. 성공 뒤 현재 공식 layout을 표시한다. 거부·예외이면 현재 값과 선택을 유지한다.
+-           grid shape 변경의 기존 local selection 정리 규칙은 유지한다.
++        5. 성공 결과로 현재 layout을 표시하고 grid shape 변경의 기존 local selection 정리 규칙을 적용한다.
++           거부이면 False를 반환하고 예외는 전파한다. 이때 기존 layout과 local selection을 유지한다.
++        6. outcome을 반환한다.
+     """
+     return outcome
+ 
+@@ -415,93 +419,72 @@ def handleDebugToggle():
+ 
+ 
+ def subscribeAppState(onStoreChange):
+-    unsubscribe = "등록 해제 함수."
++    unsubscribe = "이번 알림 등록을 해제하는 함수."
+     """
+     Args:
+     - onStoreChange:
+-      상태 발행 뒤 호출하는 알림 함수.
++      /frontend/interface_fsm/InterfaceStateMachine.publish의 notice를 받는 함수.
+ 
+     Return:
+     - unsubscribe:
+-      등록 해제 함수.
+-      이번 listener 등록을 해제하는 함수.
++      이번 등록을 해제하는 함수.
+ 
+     변경:
+-    - Application 경계를 통해 Frontend listener를 등록한다.
++    - Application을 통해 Frontend listener를 등록한다.
+ 
+     처리:
+-        1. 상태와 revision이 확정된 뒤 도착하는 변경 알림을 React에 전달한다.
+-           appFSM.subscribe(onStoreChange)를 반환한다.
++        1. appFSM.subscribe(onStoreChange)의 결과를 unsubscribe에 두고 반환한다.
+     """
+     return unsubscribe
+ 
+ 
+-def getAppStateSnapshot():
+-    revision = "Frontend revision 숫자."
+-    """
+-    Args:
+-    - 없음.
+-
+-    Return:
+-    - revision:
+-      Frontend revision 숫자.
+-      현재 Frontend revision 숫자.
+-
+-    변경:
+-    - 없음.
+-
+-    처리:
+-        1. appFSM.readState()의 revision 숫자를 revision에 둔다.
+-        2. revision을 반환한다.
+-    """
+-    return revision
+-
+-
+ def useAppState():
+-    current = "Frontend 상태 읽기 딕셔너리."
++    current = "이번 화면 구성에 쓰는 Frontend 상태 딕셔너리."
+     """
+     Args:
+     - 없음.
+ 
+     Return:
+     - current:
+-      Frontend 상태 읽기 딕셔너리.
+-      이번 render에서 사용할 Frontend 읽기전용 record.
++      lifecycle, workspace, overlay, selectedSlotId, assetSelection, assetPath, graphObjectIndex.
++      Source of Truth: /frontend/interface_fsm/InterfaceStateMachine.readState.
+ 
+     변경:
+-    - React가 관리하는 이번 component의 외부-store 구독.
++    - 화면 구성 component의 알림 등록과 표시 상태.
+ 
+     처리:
+-        1. React.useSyncExternalStore(subscribeAppState, getAppStateSnapshot)로 현재 revision의 변경을 구독한다.
+-        2. 이번 render에서 appFSM.readState()를 호출하여 current에 둔다.
+-        3. current를 반환한다.
++        1. 위 일곱 필드의 이름을 이 component의 관심 필드로 사용한다.
++        2. useControlSnapshot에 해당 필드만 공식 Frontend 읽기에서 가져오는 함수와,
++           notice의 fields에 관심 필드가 하나 이상 있는지 판정하는 함수를 전달한다.
++        3. 반환된 화면 구성 값을 current에 두고 반환한다.
+     """
+     return current
+ 
+ 
+-def useControlSnapshot(readCurrent):
+-    snapshot = "대상·표시 값·동반 값·ready의 원시 문자열 key."
++def useControlSnapshot(readCurrent, affectsDisplay):
++    snapshot = "이 component의 현재 표시 값."
+     """
+     Args:
+     - readCurrent:
+-      해당 component의 좁은 공식 query 함수.
++      이 component가 표시하는 값을 반환하는 공식 읽기 함수.
++    - affectsDisplay:
++      /frontend/interface_fsm/InterfaceStateMachine.publish의 notice와 이 component의
++      현재 표시 대상 및 열림 상태로 다시 읽을지 정하는 함수.
+ 
+     Return:
+     - snapshot:
+-      같은 표시 필드이면 같은 원시 문자열.
++      이 component의 표시 값. 형태는 readCurrent의 결과를 따른다.
+ 
+     변경:
+-    - component가 소유하는 구독과 callback 연결.
++    - 이 component의 알림 등록과 표시 값.
+ 
+     처리:
+-        1. React useSyncExternalStore의 subscribe는 기존 appFSM.subscribe에 연결한다.
+-           getSnapshot은 readCurrent 결과의 target/value/필요한 companions/ready만 일정한 필드 순서로 직렬화한다.
+-           전체 revision·chart·CSV·트리·표를 snapshot으로 사용하지 않는다.
+-        2. 같은 component의 함수 연결은 현재 것으로 유지하고 subscribe 함수 identity는 안정적으로 둔다.
+-           외부 publish에서 getSnapshot을 다시 실행해도 반환 key가 같으면 이 구독의 React 표시 갱신을 요구하지 않는다.
+-        3. getSnapshot에는 command·상태 변경·자원 할당을 넣지 않는다.
+-           임시 query 결과는 이 판정에서 끝내며 key를 다른 기능의 Project 읽기 원본으로 사용하지 않는다.
+-           component 해제 시 해당 subscribe를 정리하고 snapshot을 반환한다.
++        1. 표시를 시작할 때 subscribeAppState에 이 component의 알림 함수를 등록한다.
++           알림 함수는 affectsDisplay(notice)가 참이면 이 component의 표시 갱신을 요청한다.
++        2. 표시 갱신을 처리할 때, 등록 직후, 조회 대상·열림 상태가 바뀔 때 readCurrent()의 결과를 이 component의 표시 값에 둔다.
++           공식 조회 오류는 이 component의 표시 오류로 처리한다.
++        3. 현재 표시 값을 snapshot에 둔다. 입력 확정과 명령 전송은 UiCommand의 그 시점 공식 읽기를 사용한다.
++        4. component 해제 시 등록 해제 함수를 호출한다. snapshot을 반환한다.
+     """
+     return snapshot
+ 
+@@ -739,8 +722,9 @@ def FastFigureApp():
+     - UI-local component 상태·구독·입력 수신 수명주기.
+ 
+     처리:
+-        1. FastFigureApi.appearance.readPalette의 이번 읽기 결과를 palette에 둔다.
+-           매 render의 theme 값은 이 palette의 현재 필드에서 계산한다.
++        1. useControlSnapshot에 FastFigureApi.appearance.readPalette를 연결한다.
++           처음 표시할 때와 APPEARANCE_CHANGED 또는 PROJECT_LOADED 반영 알림에서 읽은 값을 palette에 둔다.
++           palette의 표시 값이 달라질 때 아래 규칙으로 theme을 구성한다.
+            theme.colors.ffui의 10개 shade는 모두 uiColor, primaryColor=ffui, color scheme=light다.
+            body=uiBackgroundColor, text/default-color/primary-light-color=fontColor, default=uiSurfaceColor,
+            default-border/primary-filled=uiColor, dimmed=uiMutedColor, placeholder=uiSubtleColor,
+@@ -783,9 +767,10 @@ def FastFigureApp():
+            assets.connectToSlot에 path·kind·대상 slotId를 전달한다.
+         5. project actions에는 project.readName/setName/importFile/exportFile을 연결한다.
+            GraphDataEditor는 graphs.readData의 currentCsv 메타데이터와 편집 objects만 표시한다.
+-           CSV 선택 옵션은 assets.readList('csv'), 열 선택은 명시적 CSV id 또는 chart id의 graphs.readColumns,
+-           펼쳐진 표 미리보기만 assets.readPreview(csvId,0,30)으로 요청한다.
+-           닫힌 미리보기와 단순 설정 입력은 열·표 조회를 실행하지 않는다.
++           CSV 선택 옵션은 assets.readList('csv')로 읽는다. 객체의 열 선택 입력에는 그 객체의 CSV id로
++           graphs.readColumns를 호출한다. 변환 데이터의 열은 CSV id에 None을 주고 chart id를 전달한다.
++           표 미리보기에 열기·닫기 버튼을 두고, 펼친 상태에서 현재 CSV가 있을 때 그 CSV의 열과
++           assets.readPreview(csvId, 0, 30)의 행을 읽는다. 같은 표시에서 두 열 조회의 입력이 같으면 반환 배열을 함께 사용한다.
+            CSV 선택·header 변경·object 선택/편집/이동/삭제를 각각 대응 graph API에 연결한다.
+            object 추가는 addSelectedGraphObject를 호출한다.
+            빈 CSV 입력은 assets.createEmptyCsv의 생성·선택 결과를 반영하고,
+@@ -915,11 +900,30 @@ def FastFigureApp():
+             원문·선택 범위·포커스를 일반 재렌더에서 유지하고 외부 공식 갱신으로 편집 문자열을 덮어쓰지 않는다.
+             대상 변경·Escape·overlay 닫힘은 cancel, unmount는 dispose를 호출한다.
+             같은 대상의 재렌더는 같은 객체를 유지하며 함수 연결은 현재 API·대상을 조회한다.
+-            각 숫자/명령 component의 구독은 useControlSnapshot(readCurrent)을 사용한다.
+-            FastFigureApp은 화면 전환·선택 식별자·lifecycle 같은 구조 표시 key만 구독한다.
+-            자산 트리·오브젝트 목록·설정·표 미리보기는 각 component의 필요한 공식 읽기와 표시 key를 사용한다.
+-            raw 입력은 해당 UiCommand의 로컬 표시만 갱신한다. 색상 theme은 현재 팔레트 원시 key가 달라질 때 구성한다.
+-            같은 함수 실행에서 얻은 query 결과로 필요한 표시 필드를 구성하며, component 사이의 공용 읽기 저장소를 만들지 않는다.
++            각 component는 표시 대상과 공식 조회에 맞는 affectsDisplay를 useControlSnapshot에 전달한다.
++            lifecycle 변경은 입력의 사용 가능 여부를, workspace·overlay·선택 참조 변경은 필요한 component와 조회 대상을 갱신한다.
++            반영한 Backend 명령의 알림은 다음 소비자에게 연결한다.
++            - 프로젝트 교체: 현재 표시 중인 component가 새 프로젝트에서 해당 API로 읽는다.
++            - PROJECT_NAME_CHANGED: 프로젝트 이름 표시에서 project.readName을 읽는다.
++            - 자산 트리: 디렉터리 생성·이동·휴지통 비우기, changed.assets의 자산 변경, changed.assetReferenceChanges의 참조 수 변경을 받으면
++              assets.readTree를 읽는다. 휴지통 표시가 열려 있으면 디렉터리·자산의 이동·삭제로 구성원이 바뀌거나,
++              표시 중인 자산의 kind/id가 changed.assetReferenceChanges에 있으면 assets.readTrash를 읽는다.
++              CSV 선택 목록은 CSV가 생성·삭제되거나 경로·이름이 달라진 경우 assets.readList('csv')를 읽는다.
++            - CSV 표시: changed.csvIds에 현재 선택 CSV가 있으면 헤더·행 수 표시를 갱신하고 열린 미리보기의 표를 다시 읽는다.
++              changed.csvIds에 편집 중인 graph object의 csvId가 있으면 그 열 선택을 읽는다. 현재 선택 CSV의 경로가 바뀌면 새 대상에서 읽는다.
++            - 슬롯 연결 표시: changed.slotIds 또는 연결 자산의 변경이 표시 슬롯의 연결·이름·경로에 영향을 주면 slots.readDisplay를 읽는다.
++              슬롯 편집기와 도구 모음은 표시 슬롯의 식별자가 바뀌거나 changed.slotIds에 속할 때 해당 슬롯을 읽는다.
++            - 그래프 표시: changed.chartIds에 표시 chart가 있으면 영향받은 조회를 읽는다.
++              GRAPH_OBJECTS_REPLACED는 객체 목록·객체 입력·팔레트, CHART_LAYOUT_CHANGED는 축·전역 설정과 제목이 포함된 객체 목록,
++              CHART_MODEL_REPLACED와 슬롯의 chart 교체는 현재 chart의 목록·설정·팔레트를 갱신한다.
++            - 레이아웃 변경: grid·style·슬롯 배치 중 수정된 값을 사용하는 입력과 열린 레이아웃 미리보기를 읽는다.
++              배율 변경은 배율 입력을 갱신한다. 확대·축소·100% 초기화 버튼의 API는 이미 렌더링된 화면에 CSS 배율만 적용한다.
++            - LABEL_SETTINGS_CHANGED는 레이블 설정과 열린 위치 편집기의 표시, LABEL_POSITION_CHANGED는 열린 위치 편집기의 좌표를 갱신한다.
++            - CAPTION_TEXT_INPUT·SLOT_CAPTIONS_INSERTED는 바뀐 캡션의 본문을, CAPTION_SETTINGS_CHANGED는 캡션 설정과 그 설정을 표시하는 편집기를 갱신한다.
++              슬롯 캡션을 읽을 때는 changed.slotIds와 표시 대상 id를 비교한다.
++            - EXPORT_SETTINGS_CHANGED는 열린 프린트 설정을 읽는다. APPEARANCE_CHANGED는 팔레트 편집기와 UI theme에서 appearance.readPalette를 읽는다.
++              theme은 팔레트 값이 달라졌을 때 구성한다.
++            raw 입력은 해당 UiCommand의 로컬 표시를 갱신한다. 명령 실행 시에는 그 시점의 공식 입력을 읽는다.
+         17. 위 component와 event handler를 FastFigureShell 아래 구성하고
+             theme을 적용한 MantineProvider 트리를 uiTree에 둔다.
+         18. uiTree를 반환한다.

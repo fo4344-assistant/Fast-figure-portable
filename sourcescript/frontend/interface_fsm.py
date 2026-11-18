@@ -17,7 +17,6 @@ interfaceState = {'lifecycle': 'booting/ready/importing/exporting/error',
  'graphObject': 'none/selected',
  'graphObjectIndex': '선택 graph object의 0 기반 정수 index 또는 None.',
  'direction': 'ui-to-fsm/model-to-fsm/model-to-ui',
- 'revision': 'frontend external-store subscriber용 revision',
  'error': '마지막 lifecycle task error projection 또는 없음',
  'dashboardZoomIntent': '세션 대시보드 표시 배율. 단위: %.'}
 
@@ -66,7 +65,7 @@ class InterfaceStateMachine:
             2. selectedSlotId에 None을 둔다. interfaceState의 lifecycle은 booting,
                workspace는 project, overlay와 assetSelection과 graphObject는 none으로 둔다.
                assetPath, graphObjectIndex, error에는 None, direction에는 model-to-ui를 둔다.
-            3. revision에 0, dashboardZoomIntent에 100을 둔다.
+            3. dashboardZoomIntent에 100을 둔다.
         """
 
     def readState(self):
@@ -95,7 +94,7 @@ class InterfaceStateMachine:
         """
         Args:
         - onStoreChange:
-          상태 발행 뒤 인자 없이 호출하는 알림 함수.
+          publish의 notice를 인자로 받는 알림 함수.
 
         Return:
         - unsubscribe:
@@ -125,29 +124,43 @@ class InterfaceStateMachine:
             """
         return unsubscribe
 
-    def publish(self):
+    def publish(self, before, event, projectResult=None):
         projection = "Frontend 상태 읽기 딕셔너리."
+        notice = {
+            "event": "이번 전이 또는 명령의 이름.",
+            "fields": "이번에 값이 바뀐 Frontend 읽기 필드 이름의 집합.",
+            "projectResult": "Application이 전달한 반영 결과의 읽기 전용 값 또는 None. 원형: /backend/project_efsm/ProjectMutationResult.",
+        }
         """
         Args:
-        - 없음.
+        - before:
+          이번 전이 직전 readState의 결과.
+        - event:
+          이번 변경 이름.
+        - projectResult:
+          Backend가 반영한 명령의 결과 또는 None.
+          원형: /backend/project_efsm/ProjectMutationResult.
 
         Return:
         - projection:
-          이번 발행의 상태 읽기 결과.
+          이번 전이 이후 readState의 결과.
 
         변경:
-        - interfaceState["revision"].
+        - 없음.
 
         처리:
-            1. 상태 필드와 selectedSlotId 변경을 마친 뒤 revision을 1 증가시킨다.
-            2. readState() 결과를 projection에 둔다.
-            3. 현재 등록된 listener들을 이번 통지 순회용 배열로 복사하여 각각 인자 없이 호출한다.
-               통지 중 등록·해제는 다음 통지의 집합에 반영한다.
+            1. 상태 반영을 마친 뒤 self.readState()의 결과를 projection에 둔다.
+            2. before와 projection에서 값이 달라진 필드 이름을 notice의 fields에 모은다.
+               event와 projectResult를 notice의 각 필드에 둔다.
+            3. 현재 listener들을 순회용 배열에 담아 각각 notice를 전달한다.
+               통지 중 등록·해제는 다음 통지에 반영한다.
             4. projection을 반환한다.
         """
         return projection
 
     def send(self, event, validatedInput):
+        before = "전이 직전 Frontend 상태 읽기 딕셔너리."
+        failureState = "실패를 발행한 직후 Frontend 상태 읽기 딕셔너리."
         projection = "Frontend 상태 읽기 딕셔너리."
         """
         Args:
@@ -163,10 +176,10 @@ class InterfaceStateMachine:
           이번 전이의 Frontend 읽기 결과.
 
         변경:
-        - interfaceState, selectedSlotId와 수락된 발행의 revision.
+        - interfaceState와 selectedSlotId.
 
         처리:
-            1. validatedInput의 accepted가 False이면 현재 readState()를 반환한다.
+            1. self.readState()의 결과를 before에 둔다. validatedInput의 accepted가 False이면 before를 반환한다.
             2. INTERFACE_EVENTS["SELECT_SLOT"]이면 reference와 selectionHint를 확인한다.
                reference가 None이거나 같은 id에 toggle-clear hint가 있으면 selectedSlotId를 None으로 둔다.
                그 외에는 검증된 id를 selectedSlotId에 둔다. None의 workspace는 project, 나머지는 workspaceHint다.
@@ -189,15 +202,15 @@ class InterfaceStateMachine:
                실제 배율 변화가 없으면 현재 읽기 결과를 반환한다.
             9. INTERFACE_EVENTS["LIFECYCLE_START"]이면 전달된 importing/exporting과 error=None을 저장한다.
                INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]이면 ready와 error=None을 저장한다.
-            10. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장하여 publish()한다.
-                같은 오류 처리에서 lifecycle만 ready로 바꿔 다시 publish()한 결과를 반환한다.
+            10. INTERFACE_EVENTS["LIFECYCLE_FAILED"]이면 error projection과 error lifecycle을 저장한다.
+                self.publish(before, event)의 결과를 failureState에 둔다. lifecycle을 ready로 바꾸고 self.publish(failureState, event)의 결과를 반환한다.
                 error projection은 다음 START 또는 COMPLETE까지 유지한다.
-            11. 나머지 수락된 전이는 변경된 필드로 publish()한 결과를 반환한다.
-            12. projection을 반환한다.
+            11. 나머지 수락된 전이는 self.publish(before, event)의 결과를 projection에 두고 반환한다.
         """
         return projection
 
-    def reconcileProjectResult(self, event, reconciliationInput):
+    def reconcileProjectResult(self, event, reconciliationInput, projectResult):
+        before = "참조 보정 직전 Frontend 상태 읽기 딕셔너리."
         projection = "Frontend 상태 읽기 딕셔너리."
         """
         Args:
@@ -207,25 +220,27 @@ class InterfaceStateMachine:
         - reconciliationInput:
           buildFrontendReconciliationInput의 검증된 selectedSlotId, workspaceHint,
           assetKind/path, graphObjectIndex와 방향을 담은 딕셔너리.
+        - projectResult:
+          반영한 명령의 결과. 원형: /backend/project_efsm/ProjectMutationResult.
 
         Return:
         - projection:
           프로젝트 반영 결과와 참조를 맞춘 Frontend 읽기 결과.
 
         변경:
-        - selectedSlotId와 interfaceState의 선택 필드, workspace, direction, revision.
+        - selectedSlotId와 interfaceState의 선택 필드, workspace, direction.
 
         처리:
-            1. supplied selectedSlotId를 현재 선택 참조에 반영한다.
+            1. self.readState()의 결과를 before에 둔다. reconciliationInput의 selectedSlotId를 현재 선택 참조에 반영한다.
             2. 선택이 None이면 workspace에 project, 그 외에는 workspaceHint를 넣는다.
             3. assetKind/path와 graphObjectIndex를 전달된 값으로 반영한다.
                index가 None이면 graphObject를 none, 그 외에는 selected로 둔다.
-            4. direction을 model-to-fsm으로 두고 publish()한 결과를 반환한다.
-               overlay와 독립 session zoom 값은 유지한다.
+            4. direction을 model-to-fsm으로 둔다. self.publish(before, event, projectResult)의 결과를 projection에 두고 반환한다.
         """
         return projection
 
-    def notify(self, objectName, event, payload):
+    def notify(self, objectName, event, payload=None):
+        before = "통지 직전 Frontend 상태 읽기 딕셔너리."
         projection = "Frontend 상태 읽기 딕셔너리."
         """
         Args:
@@ -243,12 +258,11 @@ class InterfaceStateMachine:
           알림 뒤의 Frontend 읽기 결과.
 
         변경:
-        - interfaceState["direction"]과 revision.
+        - interfaceState["direction"].
 
         처리:
-            1. 기존 interfaceState의 direction을 model-to-fsm으로 설정한다.
-            2. self.publish()로 변경 후 revision을 발행하고 구독자에게 알린다.
-            3. self.readState()의 결과를 projection에 두고 반환한다.
+            1. self.readState()의 결과를 before에 두고 direction을 model-to-fsm으로 설정한다.
+            2. self.publish(before, event)의 결과를 projection에 두고 반환한다.
         """
         return projection
 

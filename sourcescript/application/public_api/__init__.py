@@ -83,10 +83,10 @@ def readGraphControls(csvId=None):
     - 없음.
 
     처리:
-        1. appFSM.readState()에서 현재 selectedSlotId·assetSelection·assetPath·graphObjectIndex를 읽는다.
-        2. 그 식별 필드와 csvId를 graphs.readControls operation에 담아 dispatchProjectQuery를 한 번 호출한다.
-        3. Backend는 같은 현재 프로젝트에서 필요한 설정과 메타데이터만 구성한다.
-           원래 조회 오류를 전파하고 controls를 반환한다.
+        1. adapter.appFSM.readState()의 결과를 current에 둔다.
+        2. current의 selectedSlotId, assetSelection, assetPath, graphObjectIndex를 요청의 frontendState에 넣고 csvId를 요청에 넣는다.
+        3. operation=BACKEND_QUERY_KINDS['project-api']['graphs.readControls']를 요청에 넣어
+           adapter.dispatchProjectQuery('project-api', 요청)를 호출한다. 결과를 controls에 두고 반환한다. 조회 오류는 전파한다.
     """
     return controls
 

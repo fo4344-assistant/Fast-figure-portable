@@ -271,11 +271,17 @@ def readBackendProjection(kind, request):
 
     - request:
       등록된 Backend 조회별 식별자·입력 필드를 가진 딕셔너리.
+      이번에 추가한 project-api operation의 입력:
+      - assets.readList는 kind(csv 또는 image), assets.readPreview는 csvId와 선택적 start/count.
+      - graphs.readControls는 frontendState의 selectedSlotId, assetSelection, assetPath, graphObjectIndex와 선택적 chartId/csvId.
+        Frontend 식별 필드의 원천: /frontend/interface_fsm/InterfaceStateMachine.readState.
+      - graphs.readColumns는 csvId 또는 변환 chart의 chartId.
+      - images.readSettings와 labels.readSettings는 대상 slotId.
+      - slots.readDisplay, layout.readControls와 captions.readSettings는 operation만 받는다.
 
     Return:
     - projection:
-      등록된 조회의 읽기 전용 결과.
-      BACKEND_QUERY_KINDS 중 요청 kind에 필요한 current-authority read-only projection.
+      요청 operation의 읽기 전용 결과. 각 operation의 결과 필드와 대상 부재 시 반환값은 아래 해당 처리에서 정의한다.
 
     변경:
     - activeProject와 Frontend state를 변경하지 않는다.
@@ -382,7 +388,8 @@ def readBackendProjection(kind, request):
            - graphs.readControls: 현재 선택 또는 explicit chartId로 유일한 visible 소유 슬롯을 찾는다.
              slotId/chartId/title/editable/selectedIndex와 그 index의 편집 object 필드 하나, currentCsv 메타데이터를 반환한다.
              chart는 graphs.readData와 같은 id/editor.title/editor.editable 메타데이터 또는 None으로 제공하여 명령 성공 확인에 사용한다.
-             object 필드는 11번과 같다. explicit csvId가 있으면 후속 헤더 확인의 currentCsv만 그 CSV로 정한다.
+             object는 11번 graphs.readData의 objects 원소와 같은 필드를 사용한다.
+             currentCsv는 11번과 같은 id/path/name/headerLines/rowCount를 담는다. 명시적 csvId가 있으면 currentCsv의 대상만 그 CSV로 정한다.
              선택 CSV는 object.csvId로 대체하지 않는다. 누락 chart/object/CSV는 해당 필드 None이며 0은 유효하다.
              모든 objects·chart.graph·CSV 행/bytes·열 정의를 구성하지 않는다.
            - graphs.readColumns(csvId,chartId=None): explicit 정수 id의 CSV에 기존 graphs.columnDefinitions를 한 번 적용하여 id/index/label 배열만 반환한다.

@@ -11,7 +11,14 @@ from sourcescript.backend import assets_files, graphs, layout_annotations
 
 ProjectMutationResult = {'event': '프로젝트 명령 이름 문자열.',
  'committed': '프로젝트 반영 성공 여부인 논리값.',
- 'changed': '변경 asset·chart·slot의 실제 id, canonical 경로와 소유 관계를 담은 딕셔너리.',
+ 'changed': {
+     'slotIds': '반영 전후 값이 달라진 슬롯 id 배열.',
+     'chartIds': '반영 전후 값이 달라진 그래프 id 배열.',
+     'csvIds': '반영 전후 값이 달라진 CSV id 배열.',
+     'imageIds': '반영 전후 값이 달라진 이미지 id 배열.',
+     'assets': '반영한 자산의 종류·id·canonical 경로·소유 관계와 처리 종류를 담은 배열.',
+     'assetReferenceChanges': '참조 수가 달라진 자산의 kind와 id를 담은 배열. 같은 자산은 한 번 기록한다.',
+ },
  'removedGraphReferenceCount': '실제 제거한 graph-object CSV reference 수',
  'resetImageSlotCount': '실제 image reference를 비운 slot 수',
  'selectionHints': '참조 식별자·경로·chartId·선택 index와 이전/이후 index 대응표를 담은 딕셔너리.',
@@ -120,13 +127,15 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
 
     처리:
         1. result의 event에 event, committed에 True를 둔다.
-           두 상태의 asset id·canonical 경로·chart id·Slot id와 소유 관계를 비교하여
-           실제 생성·교체·이동·제거 항목을 changed에 넣는다.
+           기존 반영 전후 비교 결과에서 값이 달라진 슬롯·그래프·CSV·이미지의 식별자를 changed의
+           slotIds·chartIds·csvIds·imageIds에 각각 둔다. 생성·제거된 식별자도 포함한다.
+           두 상태의 asset id·canonical 경로와 소유 관계에서 실제 생성·교체·이동·제거 항목을 changed의 assets에 둔다.
            생성·가져오기 asset은 입력 순서를 유지한다. DATA_OBJECT_REPLACED는 실제 CSV 경로,
            directory 생성·이동은 최종 canonical 경로를 기록한다.
         2. 두 상태의 collectAssetReferences 결과를 비교하여 실제 제거 graph-object CSV 참조 수와
            image 참조를 비운 Slot 수를 각각 removedGraphReferenceCount와 resetImageSlotCount에 둔다.
-           같은 CSV의 여러 object 참조는 각각 센다.
+           같은 CSV의 여러 object 참조는 각각 센다. 같은 반영 전후 참조 결과에서 kind와 id별 참조 수를 비교하여
+           수가 달라진 자산을 changed의 assetReferenceChanges에 두고, 자산별 식별자는 한 번씩 넣는다.
            제거된 참조와 변경된 표시 입력으로 projectionEffect를 구성한다.
         3. afterState의 실제 id·경로·chart 소유 관계에서 selectionHints를 구성하고
            result["selectionHints"]에 둔다.
