@@ -1,37 +1,32 @@
 // Source: sourcescript/application/public_api/layout_annotations.py (same logical owner); pseudocode/application/public_api/layout_annotations.pcal.
-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, dispatchSlotSelection, renderDashboard, syncDashboardCaption, applyUiPaletteValues, updateGraphView } from '../adapter.js';
+import { appFSM, dispatchProjectCommand, dispatchSlotSelection, transformWorkspace, applyUiPaletteValues } from '../adapter.js';
 import { activeProject } from '../../backend/project_state.js';
 import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
-import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
+import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget } from '../../frontend/renderer.js';
 
 export function swapSlots(sourceSlotId, targetSlotId) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
-  if (result.committed) renderDashboard(projection, frontendState);
+
   return result.committed;
 }
 
 export function setSelectedSlot(slotId, direction = "ui-to-fsm", pendingContentType = null) {
-  const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
-  if (projection === null) return state;
-  updateGraphView(projection, state);
-  // Capture this selection's graph lifetimes now, not whichever workspace a
-  // delayed global resize event would find when it eventually runs.
-  schedulePlotResize();
+  const [state] = dispatchSlotSelection(slotId, pendingContentType, direction);
   return state;
 }
 
 export function mergeSlots(slotIds=[]) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
   if (!result.committed) return false;
-  renderDashboard(projection, frontendState);
+
   return readLayoutApiState();
 }
 
 export function splitSlots(slotIds=[]) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
   if (!result.committed) return false;
-  renderDashboard(projection, frontendState);
+
   return readLayoutApiState();
 }
 
@@ -45,13 +40,13 @@ export function insertEmptyImageIntoSelectedSlot() {
   if (!result.committed) return null;
   const path = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image").path,
     target = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }).target;
-  renderDashboard(projection, frontendState);
+
   return target;
 }
 
 export function setSlotContentType(slotId, contentType) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
-  if (result.committed) renderDashboard(projection, frontendState);
+
   return null;
 }
 
@@ -59,7 +54,7 @@ export function applyImageSettingsFromValues(slotId, values={}) {
   if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("SLOT_IMAGE_SETTINGS_CHANGED", result, frontendState, projection);
+
   appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
   return appFSM.query("project-api", { operation: "images.readEditor", slotId });
 }
@@ -72,7 +67,7 @@ export function readSelectedSlotApi() {
 
 export function resetSlotApi(slotId) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
-  if (result.committed) renderDashboard(projection, frontendState);
+
   return null;
 }
 
@@ -82,7 +77,7 @@ export function prepareDashboardFileDrop(slotId) {
   if (interfaceFSM.readState().selectedSlotId === slotId) return true;
   const [state, , projection] = dispatchSlotSelection(slotId, null, "model-to-fsm");
   if (projection === null || state.selectedSlotId !== slotId) return false;
-  updateGraphView(projection, state);
+
   return true;
 }
 
@@ -102,7 +97,7 @@ export function setAnnotationEnabled(kind, enabled) {
     appFSM.send("LABEL_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
   else
     appFSM.send("CAPTION_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
-  renderDashboard();
+
   debugLog(`annotation:${kind}`, { enabled });
   appFSM.notify(
     kind === "label" ? "labels" : "captions",
@@ -111,7 +106,7 @@ export function setAnnotationEnabled(kind, enabled) {
 }
 
 export function applyCaptionSettings(notify = true) {
-  syncDashboardCaption();
+
   debugLog("annotation:caption-settings", {
     name: activeProject.captionName,
     bold: activeProject.captionNameBold,
@@ -132,7 +127,7 @@ export function setCaptionsApiEnabled(enabled) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  applyCommittedDashboardProjection("CAPTION_SETTINGS_CHANGED", result, frontendState, projection);
+
   debugLog("annotation:caption", { enabled: state.enabled });
   appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
   return state;
@@ -144,7 +139,7 @@ export function setGlobalCaptionText(text) {
   });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
+
   return state;
 }
 
@@ -159,7 +154,7 @@ export function insertCaptionsApiSlotCaptions(slotIds = null) {
   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
   if (!result.committed) return false;
   let state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
+
   return state;
 }
 
@@ -167,7 +162,7 @@ export function setCaptionsApiName(name) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
+
   appFSM.notify("captions", "CAPTION_NAME_CHANGED");
   return state;
 }
@@ -176,7 +171,7 @@ export function setCaptionsApiNameBold(bold) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
+
   appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
   return state;
 }
@@ -185,7 +180,7 @@ export function setCaptionsApiSettings(patch = {}) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
+
   appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
   return state;
 }
@@ -222,7 +217,7 @@ export function readLabelsApiState() {
 export function setLabelsApiEnabled(enabled) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
+
   debugLog("annotation:label", { enabled });
   appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
   return readLabelsApiState();
@@ -231,7 +226,7 @@ export function setLabelsApiEnabled(enabled) {
 export function setLabelsApiSettings(patch = {}) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
+
   debugLog("mantine:label-settings", { ...patch });
   appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
   return readLabelsApiState();
@@ -240,7 +235,7 @@ export function setLabelsApiSettings(patch = {}) {
 export function updateLabelsApiPosition(x, y, eventName = null) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { x, y });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
+
   if (eventName) {
     debugLog("mantine:label-settings", { x, y });
     appFSM.notify("labels", eventName);
@@ -261,7 +256,7 @@ export function finishLabelsApiPositionInteraction() {
 export function resetLabelsApiPosition() {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
+
   appFSM.notify("labels", "LABEL_POSITION_RESET");
   return readLabelsApiState();
 }
@@ -287,7 +282,7 @@ export function readLayoutApiState(previewWidth = null) {
 export function setLayoutApiStyle(patch = {}) {
   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LAYOUT_STYLE_CHANGED", result, frontendState, projection);
+
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiState();
 }
@@ -295,7 +290,7 @@ export function setLayoutApiStyle(patch = {}) {
 export function setLayoutApiGrid(rows, cols) {
   const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("GRID_LAYOUT_CHANGED", result, frontendState, projection);
+
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiState();
 }
@@ -303,7 +298,7 @@ export function setLayoutApiGrid(rows, cols) {
 export function setLayoutApiZoom(value) {
   const session = interfaceFSM.readState();
   const state = appFSM.send("SET_DASHBOARD_ZOOM", { value });
-  if (state.revision !== session.revision) renderDashboard();
+  if (state.revision !== session.revision) transformWorkspace();
   return readLayoutApiState();
 }
 
@@ -315,6 +310,6 @@ export function commitLayoutApiZoom() {
 export function resetLayoutApiZoom() {
   const session = interfaceFSM.readState();
   const state = appFSM.send("RESET_DASHBOARD_ZOOM");
-  if (state.revision !== session.revision) renderDashboard();
+  if (state.revision !== session.revision) transformWorkspace();
   return readLayoutApiState();
 }

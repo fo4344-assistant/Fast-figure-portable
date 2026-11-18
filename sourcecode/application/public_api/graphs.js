@@ -1,5 +1,5 @@
 // Source: sourcescript/application/public_api/graphs.py (same logical owner); pseudocode/application/public_api/graphs.pcal.
-import { appFSM, dispatchProjectCommand, renderDashboard, updateFileAvailability } from '../adapter.js';
+import { appFSM, dispatchProjectCommand, updateFileAvailability } from '../adapter.js';
 import { prepareCopiedImportFiles, selectProjectCsv } from './assets.js';
 import { createEmptyProjectCsv, projectAssetPath } from '../../backend/assets_files.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
@@ -28,7 +28,7 @@ export function graphEditorObjectValues(chartId, index, values = {}) {
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
+
   return chart;
 }
 
@@ -46,7 +46,7 @@ export function graphEditorAdd(slotId, csvId) {
     [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
-  renderDashboard(projection, state);
+
   return chart;
 }
 
@@ -67,7 +67,7 @@ export function graphEditorMove(chartId, from, to) {
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
+
   return chart;
 }
 
@@ -77,7 +77,7 @@ export function graphEditorDelete(chartId, index) {
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
+
   return chart;
 }
 
@@ -100,7 +100,7 @@ export function graphEditorHeaderLines(csvId, value) {
   if (!result.committed) return result;
   const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
     read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
-  renderDashboard(projection, state);
+
   return read.target.headerLines;
 }
 
@@ -108,7 +108,7 @@ export function graphEditorSetEditable(slotId, chartId, editable) {
   const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
+
   return chart.editor.editable;
 }
 
@@ -145,7 +145,7 @@ export async function importSelectedGraphFile(file, slotId) {
   const chart = appFSM.query("project-api", {
     operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
   }).chart;
-  renderDashboard(projection, state); updateFileAvailability();
+  updateFileAvailability();
   status(`${file.name}을 슬롯에 불러왔습니다.`);
   return chart;
 }
@@ -154,7 +154,7 @@ export function graphEditorUpdateLayout(slotId, chartId, values) {
   const [result, state, projection] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
   if (!result.committed) return result;
   const output = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
-  renderDashboard(projection, state);
+
   return output;
 }
 
@@ -168,7 +168,7 @@ export function graphEditorApplyPalette(chartId, colors) {
   const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
+
   return chart;
 }
 

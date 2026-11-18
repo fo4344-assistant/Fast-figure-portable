@@ -152,18 +152,19 @@ export function renderDashboardFrame(host, layout, visibleSlots, geometry) {
     Object.assign(content.style, { width: "100%", height: "100%", minWidth: "0", minHeight: "0",
       overflow: "hidden", borderRadius: "inherit", position: "relative", zIndex: "0" });
     Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit", zIndex: "2" });
+    if (Object.hasOwn(slot, "contentType")) {
+      const empty = slot.chartId == null && slot.imageId == null;
+      frame.classList.toggle("empty", empty);
+      if (empty) decoration.querySelector(":scope > .slot-tab")?.remove();
+    }
     host.append(frame); slots.set(slot.id, { frame, content, decoration }); existing.delete(slot.id);
   }
   for (const frame of existing.values()) frame.remove();
   return { grid: host, slots };
 }
 
-export function applySlotStyleProjection(projection) {
-  const view = renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
-  $("dashboardCaption")?.style.setProperty("--slot-border-color",
-    projection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
-  syncDashboardCaptionWidth();
-  return view;
+export function applySlotStyleProjection(projection, interfaceState) {
+  return applyWorkspaceTransform(projection, interfaceState);
 }
 
 export const projectImageDisplayUrls = new Map();
@@ -212,67 +213,19 @@ function hasLiveImageSurface(surface) {
 function releaseImageSurface(surface) {
   if (rendererRuntime.imageSurfaces.get(surface.slotId) === surface)
     rendererRuntime.imageSurfaces.delete(surface.slotId);
+  surface.frame?.remove();
   surface.element.remove();
   surface.element.removeAttribute("src");
 }
 
-function currentResizeRequests() {
-  return [...rendererRuntime.graphInstances.values()].map(record => ({
-    record, generation: record.generation, operation: record.operation,
-    slotId: record.slotId, chartId: record.chartId, host: record.host, plot: record.plot,
-  }));
-}
-
-export function resizePlots(requests = currentResizeRequests()) {
-  for (const { record, generation, operation, slotId, chartId, host, plot } of requests) {
-    if (generation !== rendererRuntime.dashboardRenderGeneration || record.generation !== generation ||
-        record.operation !== operation || record.slotId !== slotId || record.chartId !== chartId ||
-        record.host !== host || record.plot !== plot || rendererRuntime.graphInstances.get(slotId) !== record ||
-        !hasLiveGraphSurface(record)) continue;
-    try {
-      Plotly.Plots.resize(plot);
-    } catch (_) {}
-  }
-}
-
-export function schedulePlotResize() {
-  // Coalesce to the latest explicit request, never implicitly acquire a newer
-  // graph operation when an older frame callback finally runs.
-  rendererRuntime.resizeRequests = currentResizeRequests();
-  if (rendererRuntime.resizePending) return;
-  rendererRuntime.resizePending = true;
-  requestAnimationFrame(() => {
-    const requests = rendererRuntime.resizeRequests;
-    rendererRuntime.resizeRequests = [];
-    rendererRuntime.resizePending = false;
-    resizePlots(requests);
-  });
-}
-
 export function installResizeObserver(frontendActions = {}) {
   if (rendererRuntime.resizeObserverInstalled) return;
-  const target = $("dashboard"), area = $("graphArea"), handleResize = () => {
-    if (frontendActions.refreshDashboard) { frontendActions.refreshDashboard(); return; }
-    schedulePlotResize();
-  };
+  const handleResize = () => frontendActions.transformWorkspace?.();
   if (window.ResizeObserver) {
-    let dashboardObserver, graphAreaObserver;
-    try {
-      dashboardObserver = new ResizeObserver(() => {
-        syncDashboardCaptionWidth(); schedulePlotResize();
-      });
-      dashboardObserver.observe(target);
-      graphAreaObserver = new ResizeObserver(handleResize);
-      if (area) graphAreaObserver.observe(area);
-    } catch (error) {
-      // Partial installation owns only these observers; release without masking
-      // the original failure or marking a failed installation as ready.
-      try { dashboardObserver?.disconnect(); } catch {}
-      try { graphAreaObserver?.disconnect(); } catch {}
-      throw error;
-    }
-    rendererRuntime.dashboardObserver = dashboardObserver;
-    rendererRuntime.graphAreaObserver = graphAreaObserver;
+    const observer = new ResizeObserver(handleResize);
+    try { if ($("graphArea")) observer.observe($("graphArea")); }
+    catch (error) { observer.disconnect(); throw error; }
+    rendererRuntime.graphAreaObserver = observer;
   } else window.addEventListener("resize", handleResize);
   rendererRuntime.resizeObserverInstalled = true;
 }
@@ -444,24 +397,27 @@ export function syncDashboardCaptionProjection(view, scale = 1) {
 }
 
 // One host has one latest presentation attempt, including narrow palette refreshes.
-function presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions) {
-  record.generation = generation;
-  const operation = {}, slotId = slot.id, chartId = slot.content.chart;
-  record.operation = operation;
-  const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
-    record.generation === generation && record.operation === operation && record.slotId === slotId &&
-    record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
-  // Serialize updates to a reused Plotly host; old work must settle before the next
-  // react. A superseded queued generation skips work rather than overwriting it.
-  record.pending = record.pending.catch(() => {}).then(async () => {
+function presentSuppliedGraph(record, slot, selected, lifetime, operation, scale, frontendActions) {
+  record.lifetime = lifetime; record.operation = operation;
+  const slotId = slot.id, chartId = slot.content.chart,
+    current = () => lifetime === rendererRuntime.workspaceLifetime && record.lifetime === lifetime &&
+      record.operation === operation && rendererRuntime.slotOperations.get(slotId) === operation &&
+      record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
+  record.pending = (rendererRuntime.slotPending.get(slotId) || record.pending).catch(() => {}).then(async () => {
     if (!current()) return;
-    const figure = scalePlotlyFigure(slot.figure, scale);
+    const content = record.host.querySelector(":scope > .slot-content"),
+      baseWidth = content.clientWidth, baseHeight = content.clientHeight, figure = scalePlotlyFigure(slot.figure, scale);
+    if (!(baseWidth > 0 && baseHeight > 0)) return;
+    Object.assign(record.card.style, { width: `${baseWidth}px`, height: `${baseHeight}px`, transform: "none" });
+    Object.assign(record.plot.style, { width: "100%", height: "100%" });
     await Plotly.react(record.plot, figure.data, figure.layout,
-      { ...figure.config, staticPlot: !selected, responsive: true, displaylogo: false, doubleClick: "reset" });
+      { ...figure.config, staticPlot: !selected, responsive: false, displaylogo: false, doubleClick: "reset" });
     if (!current()) return;
+    record.baseWidth = baseWidth; record.baseHeight = baseHeight; scaleSurface(record);
     record.plot.removeAllListeners?.("plotly_relayout"); record.plot.removeAllListeners?.("plotly_doubleclick");
     const report = (event = {}, all = false) => {
-      if (!current() || rendererRuntime.programmaticPlotlyRelayout.get(record.plot) > 0) return;
+      if (!current() || !record.host.classList.contains("selected") ||
+          rendererRuntime.programmaticPlotlyRelayout.get(record.plot) > 0) return;
       const ranges = {};
       for (const axis of ["xaxis", "xaxis2", "yaxis", "yaxis2"]) {
         if (all || Object.keys(event).some(key => key === axis + ".autorange" || key === axis + ".range" || key.startsWith(axis + ".range["))) {
@@ -473,84 +429,37 @@ function presentSuppliedGraph(record, slot, selected, generation, scale, fronten
     };
     record.plot.on?.("plotly_relayout", event => report(event));
     record.plot.on?.("plotly_doubleclick", () => setTimeout(() => report({}, true), 0));
-    requestAnimationFrame(() => { if (current()) { try { Plotly.Plots.resize(record.plot); } catch {} } });
   }).catch(error => {
     if (!current()) return;
     try { status(`그래프 렌더링 오류: ${error?.message || error}`); } catch {}
     throw error;
   });
+  trackSlotPending(slotId, record.pending);
+}
+
+function trackSlotPending(slotId, pending) {
+  rendererRuntime.slotPending.set(slotId, pending);
+  pending.finally(() => {
+    if (rendererRuntime.slotPending.get(slotId) === pending) rendererRuntime.slotPending.delete(slotId);
+  }).catch(() => {});
 }
 
 // Post-reconciliation presentation effect; result facts and domain values are supplied.
-export function applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection, frontendActions = {}) {
-  if (mutationResult.projectionEffect?.pathOnly && !mutationResult.projectionEffect?.referencesRemoved)
-    return "NONE";
-  const slots = projectProjection.visibleSlots, dashboard = $("dashboard"),
-    hosts = [...dashboard.querySelectorAll(":scope > .slot")],
-    sameHosts = hosts.length === slots.length && slots.every(slot => {
-      const host = hosts.find(host => host.dataset.slot === String(slot.id));
-      if (!host) return false;
-      if (slot.content.contentType !== "image" && slot.figure) {
-        const record = rendererRuntime.graphInstances.get(slot.id);
-        return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
-      }
-      if (slot.imageView) {
-        const surface = rendererRuntime.imageSurfaces.get(slot.id);
-        return surface?.host === host && hasLiveImageSurface(surface) && surface.imageInput.src === slot.imageView.src;
-      }
-      return host.classList.contains("empty");
-    }),
-    narrow = ["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED",
-      "LABEL_SETTINGS_CHANGED", "LABEL_POSITION_CHANGED", "SLOT_IMAGE_SETTINGS_CHANGED", "APPEARANCE_CHANGED"].includes(event);
-  if (mutationResult.projectionEffect?.referencesRemoved || !narrow || !sameHosts) {
-    renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-    return "FULL_DASHBOARD";
+export function applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projection, frontendActions = {}) {
+  cleanupSurfaceOwners(projection.visibleSlots);
+  if (projection.operation === "workspace-structure") {
+    applyWorkspaceTransform(projection, interfaceState); return "STRUCTURE";
   }
-  const scale = projectProjection.geometry.scale;
-  if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event)) {
-    syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
-    syncDashboardCaptionWidth();
-  } else if (event === "APPEARANCE_CHANGED") {
-    applyUiPaletteProjection(projectProjection.appearance.uiPalette);
-    for (const slot of slots) {
-      const record = rendererRuntime.graphInstances.get(slot.id);
-      if (record) presentSuppliedGraph(record, slot, slot.id === interfaceState.selectedSlotId,
-        rendererRuntime.dashboardRenderGeneration, scale, frontendActions);
-    }
-    // Passive observation does not convert the original per-host rejection to success.
-    Promise.all([...rendererRuntime.graphInstances.values()].map(record => record.pending)).catch(() => {});
-  } else if (event === "SLOT_IMAGE_SETTINGS_CHANGED") {
-    for (const slot of slots) {
-      if (!slot.imageView) continue;
-      const element = rendererRuntime.imageSurfaces.get(slot.id).element, settings = slot.imageView.settings;
-      element.classList.toggle("manual", settings.fit === "manual");
-      element.style.width = settings.fit === "manual" ? `${settings.scale}%` : "";
-      element.style.left = settings.fit === "manual" ? `${settings.x}%` : "";
-      element.style.top = settings.fit === "manual" ? `${settings.y}%` : "";
-      element.style.objectFit = settings.fit === "manual" ? "" : settings.fit;
-    }
-  } else {
-    const labels = new Map(projectProjection.orderedSlotLabels.map(label => [label.slotId, label.displayLabel])),
-      settings = projectProjection.annotations.labels.settings;
-    for (const slot of slots) {
-      const host = hosts.find(host => host.dataset.slot === String(slot.id));
-      host.querySelectorAll(":scope > .slot-decoration > .slot-label").forEach(label => label.remove());
-      if (!projectProjection.annotations.labels.enabled || !labels.has(slot.id)) continue;
-      const label = document.createElement("span");
-      label.className = "slot-label"; label.textContent = labels.get(slot.id);
-      label.setAttribute("aria-label", "슬롯 식별자");
-      label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
-      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`;
-      host.querySelector(":scope > .slot-decoration").append(label);
-    }
-  }
-  return "TARGETED_PROJECTION";
+  if (mutationResult.projectionEffect?.pathOnly && !mutationResult.projectionEffect?.referencesRemoved) return "NONE";
+  if (interfaceState.selectedSlotId === null || projection.targetSlot?.id !== interfaceState.selectedSlotId) return "NONE";
+  renderDashboardProjection(projection, interfaceState, frontendActions);
+  return "SELECTED_SLOT";
 }
 
 // One-call resolved relation, never a retained editing pointer or Backend lookup.
-export function resolveSelectedChart(projectProjection, interfaceState) {
-  const slot = projectProjection.visibleSlots.find(slot => slot.id === interfaceState.selectedSlotId);
-  return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
+export function resolveSelectedChart(projection, interfaceState) {
+  const slot = projection.targetSlot;
+  return slot?.id === interfaceState.selectedSlotId && slot.content.contentType !== "image" ? slot.chart || null : null;
 }
 
 function presentSlotSelection(host, selected, empty) {
@@ -565,171 +474,211 @@ function presentSlotSelection(host, selected, empty) {
   if (tab) { tab.setAttribute("aria-pressed", String(selected)); tab.style.zIndex = "3"; }
 }
 
-// Selection/workspace presentation owns existing surfaces, not domain selection.
-// React workspace controls subscribe to the final FSM state and use public reads;
-// no chart/image snapshot is published as another editor store here.
-export function updateGraphViewProjection(projectProjection, interfaceState, frontendActions = {}) {
-  const dashboard = $("dashboard"), slots = projectProjection.visibleSlots,
-    hosts = new Map([...dashboard.children].filter(host => host.classList.contains("slot"))
-      .map(host => [host.dataset.slot, host])), generation = rendererRuntime.dashboardRenderGeneration;
-  // Association/host checks are presentation-lifetime guards, not project reads.
-  // A structural/content replacement must use the normal owner cleanup path.
-  if (hosts.size !== slots.length || slots.some(slot => {
-    const host = hosts.get(String(slot.id)), record = rendererRuntime.graphInstances.get(slot.id),
-      surface = rendererRuntime.imageSurfaces.get(slot.id);
-    if (!host?.isConnected) return true;
-    if (slot.content.contentType !== "image" && slot.figure)
-      return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
-    if (record) return true;
-    return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
-  })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
-  for (const slot of slots) {
-    const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
-    const host = hosts.get(String(slot.id));
-    host.classList.toggle("selected", selected);
-    presentSlotSelection(host, selected, !slot.figure && !slot.imageView);
-    if (record) presentSuppliedGraph(record, slot, selected && slot.chart === chart, generation, scale, frontendActions);
-  }
-  const completion = Promise.all([
-    ...[...rendererRuntime.graphInstances.values()].map(record => record.pending),
-    ...[...rendererRuntime.imageSurfaces.values()].map(surface => surface.pending),
-  ]);
-  completion.catch(() => {});
-  return { generation, completion };
-}
-
-// Source startupCoreRuntime: one supplied initial read, in the declared order.
-// Lifecycle ready and Backend acquisition belong to the Application boundary.
-export function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
-  applyDashboardZoomProjection(projectProjection, interfaceState);
-  const clickController = installSlotClickControllerProjection(frontendActions),
-    dropController = installDashboardFileDropControllerProjection(),
-    presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  applySlotStyleProjection(projectProjection);
-  auditSuppliedRendererContracts(projectProjection, interfaceState);
-  return { clickController, dropController, presentation };
-}
-
-// Low-level realization of startup's supplied project/reference/runtime audit.
-// This checks the boundary input; it does not resolve Backend state or repair it.
-function auditSuppliedRendererContracts(projectProjection, interfaceState) {
-  const slots = new Map();
-  for (const slot of projectProjection.visibleSlots) {
-    if (slots.has(slot.id) || slot.hidden ||
-        (slot.content.chart != null && slot.chart?.id !== slot.content.chart) ||
-        (slot.imageView && slot.imageView.slotId !== slot.id))
-      throw Error("renderer input의 visible slot reference가 유효하지 않습니다.");
-    slots.set(slot.id, slot);
-  }
-  for (const label of projectProjection.orderedSlotLabels)
-    if (!slots.has(label.slotId)) throw Error("renderer input의 label reference가 유효하지 않습니다.");
-  if (interfaceState.selectedSlotId != null && !slots.has(interfaceState.selectedSlotId))
-    throw Error("renderer input의 selected slot reference가 유효하지 않습니다.");
-}
-
-// Physical renderer entry for Source renderDashboard(projectProjection, interfaceState).
-// All domain content is supplied by Application; associations below own only DOM lifetimes.
-export function renderDashboardProjection(projectProjection, interfaceState, frontendActions = {}) {
-  const generation = ++rendererRuntime.dashboardRenderGeneration,
-    dashboard = $("dashboard"), geometry = projectProjection.geometry, scale = geometry.scale,
-    slots = projectProjection.visibleSlots,
-    labels = new Map(projectProjection.orderedSlotLabels.map(label => [label.slotId, label.displayLabel]));
-  applyUiPaletteProjection(projectProjection.appearance.uiPalette);
-  const discard = record => {
+function discardGraph(record) {
+  if (rendererRuntime.graphInstances.get(record.slotId) === record)
     rendererRuntime.graphInstances.delete(record.slotId);
-    record.host.remove();
-    record.plot.remove();
-    try { Plotly.purge(record.plot); } catch {}
-    // A pending Plotly operation may finish after detach; it must never revive a live view.
-    record.pending?.finally(() => { try { Plotly.purge(record.plot); } catch {} }).catch(() => {});
-  };
+  record.card.remove();
+  try { Plotly.purge(record.plot); } catch {}
+  record.pending?.finally(() => { try { Plotly.purge(record.plot); } catch {} }).catch(() => {});
+}
+
+function cleanupSurfaceOwners(slots) {
+  const byId = new Map(slots.map(slot => [slot.id, slot]));
   for (const record of rendererRuntime.graphInstances.values()) {
-    const slot = slots.find(slot => slot.id === record.slotId);
-    if (!slot || slot.content.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
-        !hasLiveGraphSurface(record)) discard(record);
+    const slot = byId.get(record.slotId);
+    if (!slot || slot.contentType !== "graph" || slot.chartId !== record.chartId || !hasLiveGraphSurface(record))
+      discardGraph(record);
   }
-  // Image elements are surface-owned decode handles, never shared asset handles.
-  // Detach before dropping src; an obsolete decode may reject but is no longer current.
+  for (const surface of rendererRuntime.imageSurfaces.values()) {
+    const slot = byId.get(surface.slotId);
+    if (!slot || slot.contentType !== "image" || slot.imageId !== surface.imageId || !hasLiveImageSurface(surface))
+      releaseImageSurface(surface);
+  }
+}
+
+function canReuseGrid(projection) {
+  const host = $("dashboard"), frames = [...host.children].filter(child => child.classList.contains("slot"));
+  return Number(host.style.getPropertyValue("--grid-cols")) === projection.layout.gridCols &&
+    Number(host.style.getPropertyValue("--grid-rows")) === projection.layout.gridRows &&
+    frames.length === projection.visibleSlots.length && projection.visibleSlots.every(slot => {
+      const frame = frames.find(frame => Number(frame.dataset.slot) === slot.id);
+      return frame && Number(frame.style.gridRowStart) === slot.row && Number(frame.style.gridColumnStart) === slot.col &&
+        frame.style.gridRowEnd === `span ${slot.rowSpan}` && frame.style.gridColumnEnd === `span ${slot.colSpan}`;
+    });
+}
+
+function hasContentFrames() {
+  return rendererRuntime.graphInstances.size > 0 || rendererRuntime.imageSurfaces.size > 0;
+}
+
+function wholeRenderingRequired() {
+  status("레이아웃이 변경되었습니다. 렌더 버튼으로 전체 작업영역을 갱신해 주세요.");
+  return { outcome: "whole-rendering-required" };
+}
+
+function scaleSurface(surface) {
+  if (!(surface.baseWidth > 0 && surface.baseHeight > 0)) return;
+  const content = surface.host.querySelector(":scope > .slot-content"), pixels = surface.card || surface.frame,
+    sx = content.clientWidth / surface.baseWidth, sy = content.clientHeight / surface.baseHeight;
+  if (!(sx > 0 && sy > 0)) return;
+  Object.assign(pixels.style, { width: `${surface.baseWidth}px`, height: `${surface.baseHeight}px`,
+    transformOrigin: "0 0", transform: `translate(0px, 0px) scale(${sx}, ${sy})` });
+  // Native transformed DOM hit testing and Plotly's bounding-client-rect input
+  // conversion use the inverse of this same CSS transform; never mutate events.
+}
+
+export function updateSelectionDecoration(interfaceState) {
+  for (const host of $("dashboard").querySelectorAll(":scope > .slot")) {
+    const selected = Number(host.dataset.slot) === interfaceState.selectedSlotId;
+    host.classList.toggle("selected", selected);
+    presentSlotSelection(host, selected, host.classList.contains("empty"));
+    const record = rendererRuntime.graphInstances.get(Number(host.dataset.slot));
+    if (record) record.plot.style.pointerEvents = selected ? "auto" : "none";
+  }
+}
+
+export function applyWorkspaceTransform(projection, interfaceState) {
+  cleanupSurfaceOwners(projection.visibleSlots);
+  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
+  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  for (const surface of [...rendererRuntime.graphInstances.values(), ...rendererRuntime.imageSurfaces.values()])
+    scaleSurface(surface);
+  updateSelectionDecoration(interfaceState);
+  syncDashboardCaptionWidth();
+  return $("dashboard");
+}
+
+export function clearWorkspacePresentation() {
+  rendererRuntime.workspaceLifetime++;
+  for (const record of rendererRuntime.graphInstances.values()) discardGraph(record);
   for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
-  const frameView = renderDashboardFrame(dashboard, projectProjection.layout, slots, geometry);
-  $("dashboardCaption")?.style.setProperty("--slot-border-color",
-    projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
-  for (const slot of slots) {
-    const graph = slot.content.contentType !== "image" && slot.figure,
-      image = !graph && slot.imageView,
-      selected = slot.id === interfaceState.selectedSlotId;
-    let record = rendererRuntime.graphInstances.get(slot.id);
-    const { frame: host, content, decoration } = frameView.slots.get(slot.id);
-    host.className = "slot" + (!graph && !image ? " empty" : "") + (selected ? " selected" : "");
-    if (graph && !record) {
+  rendererRuntime.slotOperations.clear();
+  rendererRuntime.slotPending.clear();
+  $("dashboard").replaceChildren();
+  $("dashboardCaption")?.classList.add("hidden");
+}
+
+function presentSlotLabels(slot, projection) {
+  const host = $("dashboard").querySelector(`:scope > .slot[data-slot="${slot.id}"]`),
+    decoration = host.querySelector(":scope > .slot-decoration");
+  decoration.querySelectorAll(":scope > .slot-label, :scope > .slot-caption-view").forEach(label => label.remove());
+  if (projection.annotations.captions.enabled && slot.caption !== null && slot.caption !== "") {
+    const caption = document.createElement("span"), settings = projection.annotations.captions.settings;
+    caption.className = "slot-caption-view"; caption.textContent = slot.caption;
+    Object.assign(caption.style, { position: "absolute", bottom: "0", left: "0", right: "0",
+      fontFamily: settings.fontFamily, fontSize: `${settings.fontSize * projection.geometry.scale}px`,
+      lineHeight: String(settings.lineHeight), whiteSpace: "pre-wrap" });
+    decoration.append(caption);
+  }
+  const entry = projection.orderedSlotLabels?.find(label => label.slotId === slot.id),
+    settings = projection.annotations?.labels.settings, scale = projection.geometry.scale;
+  if (!projection.annotations?.labels.enabled || !entry) return;
+  const label = document.createElement("span");
+  label.className = "slot-label"; label.textContent = entry.displayLabel;
+  label.setAttribute("aria-label", "슬롯 식별자");
+  Object.assign(label.style, { left: `${settings.x * scale}px`, top: `${settings.y * scale}px`,
+    fontFamily: settings.fontFamily, fontSize: `${settings.fontSize * scale}px` });
+  decoration.append(label);
+}
+
+function presentSlotContent(slot, interfaceState, geometry, frontendActions) {
+  const host = $("dashboard").querySelector(`:scope > .slot[data-slot="${slot.id}"]`);
+  if (!host) return Promise.resolve();
+  const content = host.querySelector(":scope > .slot-content"), decoration = host.querySelector(":scope > .slot-decoration"),
+    graph = slot.content.contentType === "graph" && slot.figure, image = !graph && slot.imageView,
+    lifetime = rendererRuntime.workspaceLifetime,
+    operation = (rendererRuntime.slotOperations.get(slot.id) || 0) + 1;
+  rendererRuntime.slotOperations.set(slot.id, operation);
+  let record = rendererRuntime.graphInstances.get(slot.id), surface = rendererRuntime.imageSurfaces.get(slot.id);
+  if (record && (!graph || record.chartId !== slot.content.chart)) { discardGraph(record); record = null; }
+  if (surface) { releaseImageSurface(surface); surface = null; }
+  host.classList.toggle("empty", !graph && !image);
+  if (graph) {
+    if (!record) {
       content.replaceChildren();
       const card = document.createElement("div"), plot = document.createElement("div");
       card.className = "chart-card"; plot.className = "plot-item"; plot.id = `plot-${slot.id}`;
       card.append(plot); content.append(card);
-      record = { host, plot, slotId: slot.id, chartId: slot.content.chart, generation, pending: Promise.resolve() };
+      record = { host, card, plot, slotId: slot.id, chartId: slot.content.chart, pending: Promise.resolve() };
       rendererRuntime.graphInstances.set(slot.id, record);
-    } else if (!graph) {
-      // Copied pure URLs avoid shared revocation. Each native decode still belongs
-      // to this surface/generation and must settle without reviving replaced DOM.
-      content.replaceChildren();
-      if (image) {
-        const frame = document.createElement("div"), element = document.createElement("img"),
-          settings = image.settings;
-        frame.className = "slot-image-frame"; element.className = "slot-image";
-        element.alt = image.name || "슬롯 이미지"; element.src = image.src;
-        if (settings.fit === "manual") {
-          element.classList.add("manual");
-          element.style.width = `${settings.scale}%`; element.style.left = `${settings.x}%`; element.style.top = `${settings.y}%`;
-        } else element.style.objectFit = settings.fit;
-        frame.append(element); content.append(frame);
-        const surface = { host, element, slotId: slot.id, imageInput: image, generation, pending: null };
-        rendererRuntime.imageSurfaces.set(slot.id, surface);
-        const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
-          rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image &&
-          hasLiveImageSurface(surface) && element.parentElement === frame;
-        surface.pending = Promise.resolve().then(async () => {
-          if (!current()) { releaseImageSurface(surface); return; }
-          try {
-            await element.decode();
-            if (!current()) releaseImageSurface(surface);
-          } catch (error) {
-            const wasCurrent = current();
-            // Release only this decode's surface, including stale work whose
-            // frame was removed without a newer dashboard render.
-            releaseImageSurface(surface);
-            if (wasCurrent) throw error;
-          }
-        });
-      }
     }
-    decoration.replaceChildren();
-    if (graph || image) {
-      const tab = document.createElement("button"); tab.className = "slot-tab"; tab.type = "button"; tab.draggable = true;
-      tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.style.pointerEvents = "auto";
-      tab.innerHTML = '<span class="slot-tab-shape"></span>'; decoration.append(tab);
+    presentSuppliedGraph(record, slot, slot.id === interfaceState.selectedSlotId,
+      lifetime, operation, geometry.scale, frontendActions);
+  } else {
+    content.replaceChildren();
+    if (image) {
+      const frame = document.createElement("div"), element = document.createElement("img"), settings = image.settings;
+      frame.className = "slot-image-frame"; element.className = "slot-image";
+      element.alt = image.name || "슬롯 이미지";
+      if (settings.fit === "manual") {
+        element.classList.add("manual"); Object.assign(element.style, {
+          width: `${settings.scale}%`, left: `${settings.x}%`, top: `${settings.y}%` });
+      } else element.style.objectFit = settings.fit;
+      frame.append(element); content.append(frame);
+      surface = { host, frame, element, slotId: slot.id, imageId: slot.content.imageId,
+        imageInput: image, lifetime, operation, baseWidth: content.clientWidth, baseHeight: content.clientHeight };
+      rendererRuntime.imageSurfaces.set(slot.id, surface);
+      const current = () => lifetime === rendererRuntime.workspaceLifetime &&
+        rendererRuntime.slotOperations.get(slot.id) === operation &&
+        rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image && hasLiveImageSurface(surface);
+      surface.pending = (rendererRuntime.slotPending.get(slot.id) || Promise.resolve()).catch(() => {}).then(async () => {
+        if (!current()) { releaseImageSurface(surface); return; }
+        element.src = image.src;
+        try { await element.decode(); if (current()) scaleSurface(surface); else releaseImageSurface(surface); }
+        catch (error) { const live = current(); releaseImageSurface(surface); if (live) throw error; }
+      });
+      trackSlotPending(slot.id, surface.pending);
     }
-    if (projectProjection.annotations.labels.enabled && labels.has(slot.id)) {
-      const label = document.createElement("span"), settings = projectProjection.annotations.labels.settings;
-      label.className = "slot-label"; label.textContent = labels.get(slot.id); label.setAttribute("aria-label", "슬롯 식별자");
-      label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
-      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; decoration.append(label);
-    }
-    presentSlotSelection(host, selected, !graph && !image);
-    dashboard.append(host);
-    if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
   }
-  syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
+  let tab = decoration.querySelector(":scope > .slot-tab");
+  if ((graph || image) && !tab) {
+    tab = document.createElement("button"); tab.className = "slot-tab"; tab.type = "button"; tab.draggable = true;
+    tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.style.pointerEvents = "auto";
+    tab.innerHTML = '<span class="slot-tab-shape"></span>'; decoration.append(tab);
+  } else if (!graph && !image) tab?.remove();
+  presentSlotSelection(host, slot.id === interfaceState.selectedSlotId, !graph && !image);
+  const pending = record?.pending || surface?.pending || Promise.resolve();
+  pending.catch(() => {});
+  return pending;
+}
+
+export function renderDashboardProjection(projection, interfaceState, frontendActions = {}) {
+  cleanupSurfaceOwners(projection.visibleSlots);
+  updateSelectionDecoration(interfaceState);
+  const slot = projection.targetSlot;
+  if (interfaceState.selectedSlotId === null || !slot || slot.id !== interfaceState.selectedSlotId) return null;
+  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
+  if (!hasContentFrames()) renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  const completion = presentSlotContent(slot, interfaceState, projection.geometry, frontendActions);
+  presentSlotLabels(slot, projection);
+  return { completion };
+}
+
+export function renderWholeWorkspaceProjection(projection, interfaceState, frontendActions = {}) {
+  if (projection.operation !== "whole-workspace") throw Error("전체 렌더링에는 명시적 whole-workspace 조회가 필요합니다.");
+  cleanupSurfaceOwners(projection.visibleSlots);
+  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  const completions = projection.contentSlots.map(slot => {
+    const completion = presentSlotContent(slot, interfaceState, projection.geometry, frontendActions);
+    presentSlotLabels(slot, projection); return completion;
+  });
+  applyUiPaletteProjection(projection.appearance.uiPalette);
+  syncDashboardCaptionProjection(projection.annotations.captions, projection.geometry.scale);
   syncDashboardCaptionWidth();
+  const completion = Promise.all(completions); completion.catch(() => {});
+  return { completion };
+}
+
+export function updateGraphViewProjection(projection, interfaceState, frontendActions = {}) {
+  return renderDashboardProjection(projection, interfaceState, frontendActions);
+}
+
+export function startupCoreRuntimeProjection(projection, interfaceState, frontendActions) {
+  const clickController = installSlotClickControllerProjection(frontendActions),
+    dropController = installDashboardFileDropControllerProjection(),
+    presentation = applyWorkspaceTransform(projection, interfaceState);
   installResizeObserver(frontendActions);
-  const completion = Promise.all([
-    ...[...rendererRuntime.graphInstances.values()].map(record => record.pending),
-    ...[...rendererRuntime.imageSurfaces.values()].map(surface => surface.pending),
-  ]);
-  // Presentation callers may await the original rejection. The passive observer
-  // prevents an unhandled-rejection side effect when UI event callers ignore it.
-  completion.catch(() => {});
-  return { generation, completion };
+  return { clickController, dropController, presentation };
 }
 
 export function plotlyConfig(chart, extra = {}) {
@@ -1462,10 +1411,8 @@ export async function downloadExportPayload(payload) {
   }
 }
 
-export function applyDashboardZoomProjection(projection, interfaceState, resize = true) {
-  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
-  syncDashboardCaptionWidth();
-  if (resize) schedulePlotResize();
+export function applyDashboardZoomProjection(projection, interfaceState) {
+  return applyWorkspaceTransform(projection, interfaceState);
 }
 
 export function readDashboardRenderedWidth() {
@@ -1492,13 +1439,12 @@ export function applyUiPaletteProjection(palette) {
 export const rendererRuntime = {
   graphInstances: new Map(),
   imageSurfaces: new Map(),
-  dashboardObserver: null,
   graphAreaObserver: null,
-  resizePending: false,
-  resizeRequests: [],
   resizeObserverInstalled: false,
   programmaticPlotlyRelayout: new WeakMap(),
-  dashboardRenderGeneration: 0,
+  workspaceLifetime: 0,
+  slotOperations: new Map(),
+  slotPending: new Map(),
   slotDragSourceId: null,
   slotDragSuppressClick: false
 };

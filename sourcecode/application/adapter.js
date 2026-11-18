@@ -3,7 +3,7 @@ import { projectVfs } from '../backend/assets_files.js';
 import { PROJECT_COMMAND_ACTIONS, projectEFSM } from '../backend/project_efsm.js';
 import { buildFrontendReconciliationInput, getChart, getProjectCsv, readBackendProjection, validateFrontendIntent } from '../backend/project_state.js';
 import { interfaceFSM } from '../frontend/interface_fsm.js';
-import { applyDashboardProjectionInvalidation, applyDashboardZoomProjection, applyReferenceGeometryProjection, applySlotStyleProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
+import { applyDashboardProjectionInvalidation, applyWorkspaceTransform, clearWorkspacePresentation, renderWholeWorkspaceProjection, updateSelectionDecoration, applyReferenceGeometryProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
 import { axisRangeValueFromPlotly } from '../backend/graphs.js';
 import { readAppearanceApiPalette, setSelectedSlot, swapSlots } from './public_api/layout_annotations.js';
 
@@ -25,7 +25,7 @@ export function renderDashboard(projection = dispatchProjectQuery("renderer"), s
 }
 
 export function startupCoreRuntime() {
-  const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(),
+  const projection = dispatchProjectQuery("renderer", { operation: "workspace-structure" }), state = interfaceFSM.readState(),
     actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } },
     runtime = startupCoreRuntimeProjection(projection, state, actions);
   return runtime;
@@ -38,7 +38,7 @@ export function applyCommittedDashboardProjection(event, result, state, projecti
 
 function dashboardFrontendActions() {
   return {
-    refreshDashboard: renderDashboard,
+    transformWorkspace,
     graphRangesChanged(slotId, chartId, ranges) {
       const current = readBackendProjection("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
       if (!current || current.chartId !== chartId || !current.editable) return false;
@@ -65,13 +65,22 @@ export function syncDashboardCaption(view, projection = dispatchProjectQuery("re
 export function applyReferenceGeometry(element) {
   return applyReferenceGeometryProjection(element, dispatchProjectQuery("renderer").geometry);
 }
+export function transformWorkspace() {
+  const projection = dispatchProjectQuery("renderer", { operation: "workspace-structure" });
+  return applyWorkspaceTransform(projection, interfaceFSM.readState());
+}
+export function renderWholeWorkspace() {
+  if (interfaceFSM.readState().lifecycle !== "ready") return null;
+  const projection = dispatchProjectQuery("renderer", { operation: "whole-workspace" });
+  return renderWholeWorkspaceProjection(projection, interfaceFSM.readState(), dashboardFrontendActions()).completion;
+}
 export function applySlotStyle(_fromControls = false, notify = true) {
-  const result = applySlotStyleProjection(dispatchProjectQuery("renderer"));
+  const result = transformWorkspace();
   if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return result;
 }
-export function applyDashboardZoom(resize = true) {
-  return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
+export function applyDashboardZoom() {
+  return transformWorkspace();
 }
 export function syncDashboardZoomDisplay() {
   return Math.round(interfaceFSM.readState().dashboardZoomIntent);
@@ -84,16 +93,23 @@ export function updateFileAvailability() {
 export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
-  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), projectResult = null;
+  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), commandTuple = null;
   if (state.selectedSlotId !== null && pendingContentType !== null) {
     const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
-    if (context?.empty && context.contentType !== pendingContentType) {
-      [projectResult, state] = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+    if (context?.empty && context.contentType !== pendingContentType)
+      commandTuple = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
         slotId: state.selectedSlotId, contentType: pendingContentType,
       });
-    }
   }
-  return [state, projectResult, dispatchProjectQuery("renderer", { frontendState: state })];
+  state = interfaceFSM.readState();
+  updateSelectionDecoration(state);
+  if (state.selectedSlotId === null)
+    return [state, commandTuple?.[0] ?? null, dispatchProjectQuery("renderer", { operation: "workspace-structure" })];
+  if (commandTuple && commandTuple[1].selectedSlotId === state.selectedSlotId)
+    return [state, commandTuple[0], commandTuple[2]];
+  const projection = dispatchProjectQuery("renderer", { operation: "selected-slot" });
+  updateGraphView(projection, state);
+  return [state, commandTuple?.[0] ?? null, projection];
 }
 
 export function updateGraphView(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
@@ -110,19 +126,17 @@ export function applyUiPalette(palette, notify = true) {
 }
 export function applyCurrentUiPalette(notify = true) {
   applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
-  return renderDashboard();
+  return null;
 }
 export function applyUiPaletteValues(values, notify = true) {
   const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result, state, projection);
   if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
   return readAppearanceApiPalette();
 }
 export function renderProjectObject(projection, state) {
-  const presentation = renderDashboard(projection, state);
   updateFileAvailability();
-  return presentation;
+  return projection;
 }
 
 export const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
@@ -134,6 +148,8 @@ export function dispatchProjectQuery(query, payload = {}) {
   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
     const state = interfaceFSM.readState(),
       layout = readBackendProjection("project-api", { operation: "layout.readState" });
+    request.operation ??= "selected-slot";
+    if (request.operation === "selected-slot") request.slotId = state.selectedSlotId;
     request.frontendState = state;
     request.width = layout.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
   }
@@ -178,7 +194,18 @@ export function dispatchProjectCommand(event, payload = {}) {
   if (!result.committed) return [result, frontendBefore, null];
   const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore),
     state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
-    projection = dispatchProjectQuery("renderer", { frontendState: state, mutationResult: result });
+    effect = reconciliationInput.projectionEffect ?? result.projectionEffect ?? {};
+  if (event === "PROJECT_LOADED") clearWorkspacePresentation();
+  if (event === "PROJECT_LOADED" || event === "APPEARANCE_CHANGED")
+    applyUiPaletteProjection(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
+  const structural = ["PROJECT_LOADED", "GRID_LAYOUT_CHANGED", "SLOTS_MERGED", "SLOTS_SPLIT",
+    "SLOTS_SWAPPED", "LAYOUT_STYLE_CHANGED"].includes(event),
+    skipContent = structural || (effect.pathOnly && !effect.referencesRemoved) || event === "EXPORT_SETTINGS_CHANGED",
+    projection = dispatchProjectQuery("renderer", {
+      operation: skipContent || state.selectedSlotId === null ? "workspace-structure" : "selected-slot",
+    });
+  if (structural) applyWorkspaceTransform(projection, state);
+  else if (!skipContent) applyCommittedDashboardProjection(event, result, state, projection);
   return [result, state, projection];
 }
 
@@ -223,7 +250,7 @@ export function dashboardProjectionEffect(event, payload = {}) {
 
 export function dispatchDashboardAffectingEvent(event, payload = {}) {
   const [result, state, projection] = dispatchProjectCommand(event, payload),
-    projectionEffect = applyCommittedDashboardProjection(event, result, state, projection);
+    projectionEffect = result.committed ? projection.operation : "NONE";
   return { state, payload, projectionEffect };
 }
 

@@ -1,0 +1,1418 @@
+diff --git a/development-versions.json b/development-versions.json
+index cdd93526449e192961290b37cf334e67f2aea005..0978f38468946cfb9c55d0ef734192dbb35d465c 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -30,7 +30,7 @@
+       "validation_review": null
+     },
+     "source-code": {
+-      "revision": 161,
++      "revision": 162,
+       "status": "stale",
+       "paths": [
+         "package-lock.json",
+@@ -54,14 +54,14 @@
+         "sourcecode/portable_build/portable_build.mjs",
+         "sourcecode/system.js"
+       ],
+-      "fingerprint": "sha256:53c011311165f75075e9132fbf679a24db2dffb5ce810a0aa05456ab9116a7da",
++      "fingerprint": "sha256:476accb6be4f04817e8b1ad50375f0fb8ae21966493449abf8e3e8e8d7895d00",
+       "derived_from": {
+-        "source-script": "sha256:3f2615ec38ee772db09faa669568bf393df8f85bd9c3e0609375145352306913",
+-        "pseudocode": "sha256:b7b82a6a200d26568648282767a2ab01ec56d1cfd6101a6d2e286f7b39734566",
++        "source-script": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4",
++        "pseudocode": "sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129",
+         "verification-model": "sha256:3d016684d15b73a3fd8889944088bd6dc21f7e1bdd041182c9dac3ac37d96e0a"
+       },
+       "validation_review": null,
+-      "translation_review": "agent_space/reviews/review-20261118-005-plan042-source-code.md"
++      "translation_review": "agent_space/reviews/review-20261118-009-plan044-source-code.md"
+     },
+     "pseudocode": {
+       "revision": 33,
+diff --git a/sourcecode/application/adapter.js b/sourcecode/application/adapter.js
+index 375dd266b61a9a9cf0339a9c6b3fb961c630ce4e..f5ec77e544ca7f74fd5ba0db7c83db4b4cb5edd7 100644
+--- a/sourcecode/application/adapter.js
++++ b/sourcecode/application/adapter.js
+@@ -3,7 +3,7 @@ import { projectVfs } from '../backend/assets_files.js';
+ import { PROJECT_COMMAND_ACTIONS, projectEFSM } from '../backend/project_efsm.js';
+ import { buildFrontendReconciliationInput, getChart, getProjectCsv, readBackendProjection, validateFrontendIntent } from '../backend/project_state.js';
+ import { interfaceFSM } from '../frontend/interface_fsm.js';
+-import { applyDashboardProjectionInvalidation, applyDashboardZoomProjection, applyReferenceGeometryProjection, applySlotStyleProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
++import { applyDashboardProjectionInvalidation, applyWorkspaceTransform, clearWorkspacePresentation, renderWholeWorkspaceProjection, updateSelectionDecoration, applyReferenceGeometryProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
+ import { axisRangeValueFromPlotly } from '../backend/graphs.js';
+ import { readAppearanceApiPalette, setSelectedSlot, swapSlots } from './public_api/layout_annotations.js';
+ 
+@@ -25,7 +25,7 @@ export function renderDashboard(projection = dispatchProjectQuery("renderer"), s
+ }
+ 
+ export function startupCoreRuntime() {
+-  const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(),
++  const projection = dispatchProjectQuery("renderer", { operation: "workspace-structure" }), state = interfaceFSM.readState(),
+     actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } },
+     runtime = startupCoreRuntimeProjection(projection, state, actions);
+   return runtime;
+@@ -38,7 +38,7 @@ export function applyCommittedDashboardProjection(event, result, state, projecti
+ 
+ function dashboardFrontendActions() {
+   return {
+-    refreshDashboard: renderDashboard,
++    transformWorkspace,
+     graphRangesChanged(slotId, chartId, ranges) {
+       const current = readBackendProjection("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
+       if (!current || current.chartId !== chartId || !current.editable) return false;
+@@ -65,13 +65,22 @@ export function syncDashboardCaption(view, projection = dispatchProjectQuery("re
+ export function applyReferenceGeometry(element) {
+   return applyReferenceGeometryProjection(element, dispatchProjectQuery("renderer").geometry);
+ }
++export function transformWorkspace() {
++  const projection = dispatchProjectQuery("renderer", { operation: "workspace-structure" });
++  return applyWorkspaceTransform(projection, interfaceFSM.readState());
++}
++export function renderWholeWorkspace() {
++  if (interfaceFSM.readState().lifecycle !== "ready") return null;
++  const projection = dispatchProjectQuery("renderer", { operation: "whole-workspace" });
++  return renderWholeWorkspaceProjection(projection, interfaceFSM.readState(), dashboardFrontendActions()).completion;
++}
+ export function applySlotStyle(_fromControls = false, notify = true) {
+-  const result = applySlotStyleProjection(dispatchProjectQuery("renderer"));
++  const result = transformWorkspace();
+   if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return result;
+ }
+-export function applyDashboardZoom(resize = true) {
+-  return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
++export function applyDashboardZoom() {
++  return transformWorkspace();
+ }
+ export function syncDashboardZoomDisplay() {
+   return Math.round(interfaceFSM.readState().dashboardZoomIntent);
+@@ -84,16 +93,23 @@ export function updateFileAvailability() {
+ export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
+   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
+   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
+-  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), projectResult = null;
++  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), commandTuple = null;
+   if (state.selectedSlotId !== null && pendingContentType !== null) {
+     const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
+-    if (context?.empty && context.contentType !== pendingContentType) {
+-      [projectResult, state] = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
++    if (context?.empty && context.contentType !== pendingContentType)
++      commandTuple = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+         slotId: state.selectedSlotId, contentType: pendingContentType,
+       });
+-    }
+   }
+-  return [state, projectResult, dispatchProjectQuery("renderer", { frontendState: state })];
++  state = interfaceFSM.readState();
++  updateSelectionDecoration(state);
++  if (state.selectedSlotId === null)
++    return [state, commandTuple?.[0] ?? null, dispatchProjectQuery("renderer", { operation: "workspace-structure" })];
++  if (commandTuple && commandTuple[1].selectedSlotId === state.selectedSlotId)
++    return [state, commandTuple[0], commandTuple[2]];
++  const projection = dispatchProjectQuery("renderer", { operation: "selected-slot" });
++  updateGraphView(projection, state);
++  return [state, commandTuple?.[0] ?? null, projection];
+ }
+ 
+ export function updateGraphView(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
+@@ -110,19 +126,17 @@ export function applyUiPalette(palette, notify = true) {
+ }
+ export function applyCurrentUiPalette(notify = true) {
+   applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
+-  return renderDashboard();
++  return null;
+ }
+ export function applyUiPaletteValues(values, notify = true) {
+   const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result, state, projection);
+   if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+   return readAppearanceApiPalette();
+ }
+ export function renderProjectObject(projection, state) {
+-  const presentation = renderDashboard(projection, state);
+   updateFileAvailability();
+-  return presentation;
++  return projection;
+ }
+ 
+ export const BACKEND_REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
+@@ -134,6 +148,8 @@ export function dispatchProjectQuery(query, payload = {}) {
+   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
+     const state = interfaceFSM.readState(),
+       layout = readBackendProjection("project-api", { operation: "layout.readState" });
++    request.operation ??= "selected-slot";
++    if (request.operation === "selected-slot") request.slotId = state.selectedSlotId;
+     request.frontendState = state;
+     request.width = layout.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
+   }
+@@ -178,7 +194,18 @@ export function dispatchProjectCommand(event, payload = {}) {
+   if (!result.committed) return [result, frontendBefore, null];
+   const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore),
+     state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
+-    projection = dispatchProjectQuery("renderer", { frontendState: state, mutationResult: result });
++    effect = reconciliationInput.projectionEffect ?? result.projectionEffect ?? {};
++  if (event === "PROJECT_LOADED") clearWorkspacePresentation();
++  if (event === "PROJECT_LOADED" || event === "APPEARANCE_CHANGED")
++    applyUiPaletteProjection(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
++  const structural = ["PROJECT_LOADED", "GRID_LAYOUT_CHANGED", "SLOTS_MERGED", "SLOTS_SPLIT",
++    "SLOTS_SWAPPED", "LAYOUT_STYLE_CHANGED"].includes(event),
++    skipContent = structural || (effect.pathOnly && !effect.referencesRemoved) || event === "EXPORT_SETTINGS_CHANGED",
++    projection = dispatchProjectQuery("renderer", {
++      operation: skipContent || state.selectedSlotId === null ? "workspace-structure" : "selected-slot",
++    });
++  if (structural) applyWorkspaceTransform(projection, state);
++  else if (!skipContent) applyCommittedDashboardProjection(event, result, state, projection);
+   return [result, state, projection];
+ }
+ 
+@@ -223,7 +250,7 @@ export function dashboardProjectionEffect(event, payload = {}) {
+ 
+ export function dispatchDashboardAffectingEvent(event, payload = {}) {
+   const [result, state, projection] = dispatchProjectCommand(event, payload),
+-    projectionEffect = applyCommittedDashboardProjection(event, result, state, projection);
++    projectionEffect = result.committed ? projection.operation : "NONE";
+   return { state, payload, projectionEffect };
+ }
+ 
+diff --git a/sourcecode/application/public_api/assets.js b/sourcecode/application/public_api/assets.js
+index 0047800eb38358c488f1c988345c72ff326b9f21..3672f200969dbc75c43c81bbd3ff7926c1bdc568 100644
+--- a/sourcecode/application/public_api/assets.js
++++ b/sourcecode/application/public_api/assets.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/application/public_api/assets.py (same logical owner); pseudocode/application/public_api/assets.pcal.
+-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, runLifecycleTask, renderDashboard, updateFileAvailability } from '../adapter.js';
++import { appFSM, dispatchProjectCommand, runLifecycleTask, updateFileAvailability } from '../adapter.js';
+ import { importSelectedGraphFile } from './graphs.js';
+ import { setSelectedSlot } from './layout_annotations.js';
+ import { PROJECT_ASSET_DIRECTORIES, projectParentPath, projectPathName } from '../../backend/assets_files.js';
+@@ -57,7 +57,7 @@ export async function importProjectFilesToDirectory(files, directory, planImport
+     [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
+   if (!result.committed) return result;
+   const imported = readImportedAssets(result);
+-  updateFileAvailability(); renderDashboard(projection, state); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
++  updateFileAvailability(); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
+   return imported;
+ }
+ 
+@@ -119,7 +119,7 @@ export function deleteProjectAsset(target) {
+   });
+   if (!result.committed) return null;
+   const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
+-  if (count) renderDashboard(projection, state);
++
+   status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
+   return null;
+ }
+@@ -140,7 +140,7 @@ export function moveProjectNode(plan, useUniqueName = false) {
+   if (!result.committed) return null;
+   const path = result.changed.movedPathTo,
+     trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
+-  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result, state, projection);
++
+   status(trashed
+     ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.`
+     : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
+@@ -158,7 +158,7 @@ export function createProjectDirectory(parent, name) {
+ export function emptyProjectTrash() {
+   const [result, state, projection] = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
+   if (!result.committed) return null;
+-  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result, state, projection);
++
+   updateFileAvailability();
+   status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
+   return null;
+@@ -185,7 +185,7 @@ export async function importProjectFileToSlot(file, slotId, choosePlan) {
+     [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
+   if (!result.committed) return result;
+   const imported = readImportedAssets(result)[0];
+-  renderDashboard(projection, state); updateFileAvailability();
++  updateFileAvailability();
+   return imported;
+ }
+ 
+diff --git a/sourcecode/application/public_api/graphs.js b/sourcecode/application/public_api/graphs.js
+index b5d7dc4a91c271aacb9c3fba5b7d6e5d9bc2607d..4a9143b7a5ef2ea7dacef6cb6f204499e0f2dfea 100644
+--- a/sourcecode/application/public_api/graphs.js
++++ b/sourcecode/application/public_api/graphs.js
+@@ -1,5 +1,5 @@
+ // Source: sourcescript/application/public_api/graphs.py (same logical owner); pseudocode/application/public_api/graphs.pcal.
+-import { appFSM, dispatchProjectCommand, renderDashboard, updateFileAvailability } from '../adapter.js';
++import { appFSM, dispatchProjectCommand, updateFileAvailability } from '../adapter.js';
+ import { prepareCopiedImportFiles, selectProjectCsv } from './assets.js';
+ import { createEmptyProjectCsv, projectAssetPath } from '../../backend/assets_files.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+@@ -28,7 +28,7 @@ export function graphEditorObjectValues(chartId, index, values = {}) {
+   });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard(projection, state);
++
+   return chart;
+ }
+ 
+@@ -46,7 +46,7 @@ export function graphEditorAdd(slotId, csvId) {
+     [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
+-  renderDashboard(projection, state);
++
+   return chart;
+ }
+ 
+@@ -67,7 +67,7 @@ export function graphEditorMove(chartId, from, to) {
+   });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard(projection, state);
++
+   return chart;
+ }
+ 
+@@ -77,7 +77,7 @@ export function graphEditorDelete(chartId, index) {
+   });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard(projection, state);
++
+   return chart;
+ }
+ 
+@@ -100,7 +100,7 @@ export function graphEditorHeaderLines(csvId, value) {
+   if (!result.committed) return result;
+   const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"),
+     read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
+-  renderDashboard(projection, state);
++
+   return read.target.headerLines;
+ }
+ 
+@@ -108,7 +108,7 @@ export function graphEditorSetEditable(slotId, chartId, editable) {
+   const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard(projection, state);
++
+   return chart.editor.editable;
+ }
+ 
+@@ -145,7 +145,7 @@ export async function importSelectedGraphFile(file, slotId) {
+   const chart = appFSM.query("project-api", {
+     operation: "graphs.readData", frontendState: { selectedSlotId: slotId },
+   }).chart;
+-  renderDashboard(projection, state); updateFileAvailability();
++  updateFileAvailability();
+   status(`${file.name}을 슬롯에 불러왔습니다.`);
+   return chart;
+ }
+@@ -154,7 +154,7 @@ export function graphEditorUpdateLayout(slotId, chartId, values) {
+   const [result, state, projection] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
+   if (!result.committed) return result;
+   const output = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
+-  renderDashboard(projection, state);
++
+   return output;
+ }
+ 
+@@ -168,7 +168,7 @@ export function graphEditorApplyPalette(chartId, colors) {
+   const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
+   if (!result.committed) return result;
+   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
+-  renderDashboard(projection, state);
++
+   return chart;
+ }
+ 
+diff --git a/sourcecode/application/public_api/index.js b/sourcecode/application/public_api/index.js
+index 1ed4b6383ae36c48a92ea5bab501aad16ebad0f7..b78104926b0a4b41d9d691f34bc0b6898d6b697a 100644
+--- a/sourcecode/application/public_api/index.js
++++ b/sourcecode/application/public_api/index.js
+@@ -1,6 +1,6 @@
+ // Source: sourcescript/application/public_api/__init__.py; pseudocode/application/public_api/contract.pcal.
+ // Public API composition; domain operations are implemented in the sibling modules.
+-import { appFSM, dispatchProjectCommand, renderProjectObject } from '../adapter.js';
++import { appFSM, dispatchProjectCommand, renderProjectObject, renderWholeWorkspace } from '../adapter.js';
+ import { connectProjectAssetPathToSlot, createProjectDirectory, deleteProjectAsset, downloadProjectAsset, draggableProjectAsset, emptyProjectTrash, importProjectAssetFiles, importProjectFileToSlot, importProjectFilesToDirectory, moveProjectNode, prepareCopiedImportFiles, projectNodeMoveOptions, readAssetCollisionModel, readAssetDeletionTarget, readAssetFileKind, readAssetImportPlan, readProjectTrash, selectDirectoryFromTree, selectImageFromTree, selectProjectCsv } from './assets.js';
+ import { createEmptyProjectCsvAndSelect, downloadPlotlyJson, downloadSlotFfsx, graphEditorAdd, graphEditorApplyPalette, graphEditorDelete, graphEditorHeaderLines, graphEditorMove, graphEditorObjectValues, graphEditorSelectCsv, graphEditorSelectObject, graphEditorSetEditable, graphEditorUpdateLayout, importSelectedGraphFile, readGraphDataApi, readGraphLayoutApi, readGraphPaletteApi } from './graphs.js';
+ import { applyImageSettingsFromValues, capturePrintApi, commitLayoutApiZoom, finishDashboardFileDrop, finishLabelsApiPositionInteraction, insertCaptionsApiSlotCaptions, insertEmptyImageIntoSelectedSlot, mergeSlots, prepareDashboardFileDrop, readAppearanceApiPalette, readGlobalCaptionState, readImageEditorApi, readLabelsApiState, readLayoutApiState, readPrintApiSettings, readSelectedSlotApi, readSlotCaptionState, resetAppearanceApiPalette, resetLabelsApiPosition, resetLayoutApiZoom, resetSlotApi, savePrintApi, setAppearanceApiPalette, setCaptionsApiEnabled, setCaptionsApiName, setCaptionsApiNameBold, setCaptionsApiSettings, setGlobalCaptionText, setLabelsApiEnabled, setLabelsApiPosition, setLabelsApiSettings, setLayoutApiGrid, setLayoutApiStyle, setLayoutApiZoom, setPrintApiSettings, setSelectedSlot, setSlotCaptionText, setSlotContentType, splitSlots, swapSlots } from './layout_annotations.js';
+@@ -41,6 +41,7 @@ export function setProjectName(value, trim = false) {
+ 
+ export function createPublicApi() {
+ return Object.freeze({
++  workspace: Object.freeze({ render: renderWholeWorkspace }),
+   project: Object.freeze({
+     readName: () => appFSM.query("project-api", { operation: "project.readName" }),
+     setName: setProjectName,
+diff --git a/sourcecode/application/public_api/layout_annotations.js b/sourcecode/application/public_api/layout_annotations.js
+index eb6502de7e9658a4e0fffe29a52e6e299a692f63..131502f22fad27afcf6fc9d30ca3e59c95e99e0f 100644
+--- a/sourcecode/application/public_api/layout_annotations.js
++++ b/sourcecode/application/public_api/layout_annotations.js
+@@ -1,37 +1,32 @@
+ // Source: sourcescript/application/public_api/layout_annotations.py (same logical owner); pseudocode/application/public_api/layout_annotations.pcal.
+-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, dispatchSlotSelection, renderDashboard, syncDashboardCaption, applyUiPaletteValues, updateGraphView } from '../adapter.js';
++import { appFSM, dispatchProjectCommand, dispatchSlotSelection, transformWorkspace, applyUiPaletteValues } from '../adapter.js';
+ import { activeProject } from '../../backend/project_state.js';
+ import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
+ import { interfaceFSM } from '../../frontend/interface_fsm.js';
+-import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
++import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget } from '../../frontend/renderer.js';
+ 
+ export function swapSlots(sourceSlotId, targetSlotId) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
+-  if (result.committed) renderDashboard(projection, frontendState);
++
+   return result.committed;
+ }
+ 
+ export function setSelectedSlot(slotId, direction = "ui-to-fsm", pendingContentType = null) {
+-  const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
+-  if (projection === null) return state;
+-  updateGraphView(projection, state);
+-  // Capture this selection's graph lifetimes now, not whichever workspace a
+-  // delayed global resize event would find when it eventually runs.
+-  schedulePlotResize();
++  const [state] = dispatchSlotSelection(slotId, pendingContentType, direction);
+   return state;
+ }
+ 
+ export function mergeSlots(slotIds=[]) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
+   if (!result.committed) return false;
+-  renderDashboard(projection, frontendState);
++
+   return readLayoutApiState();
+ }
+ 
+ export function splitSlots(slotIds=[]) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
+   if (!result.committed) return false;
+-  renderDashboard(projection, frontendState);
++
+   return readLayoutApiState();
+ }
+ 
+@@ -45,13 +40,13 @@ export function insertEmptyImageIntoSelectedSlot() {
+   if (!result.committed) return null;
+   const path = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "image").path,
+     target = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }).target;
+-  renderDashboard(projection, frontendState);
++
+   return target;
+ }
+ 
+ export function setSlotContentType(slotId, contentType) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
+-  if (result.committed) renderDashboard(projection, frontendState);
++
+   return null;
+ }
+ 
+@@ -59,7 +54,7 @@ export function applyImageSettingsFromValues(slotId, values={}) {
+   if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
+   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("SLOT_IMAGE_SETTINGS_CHANGED", result, frontendState, projection);
++
+   appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
+   return appFSM.query("project-api", { operation: "images.readEditor", slotId });
+ }
+@@ -72,7 +67,7 @@ export function readSelectedSlotApi() {
+ 
+ export function resetSlotApi(slotId) {
+   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
+-  if (result.committed) renderDashboard(projection, frontendState);
++
+   return null;
+ }
+ 
+@@ -82,7 +77,7 @@ export function prepareDashboardFileDrop(slotId) {
+   if (interfaceFSM.readState().selectedSlotId === slotId) return true;
+   const [state, , projection] = dispatchSlotSelection(slotId, null, "model-to-fsm");
+   if (projection === null || state.selectedSlotId !== slotId) return false;
+-  updateGraphView(projection, state);
++
+   return true;
+ }
+ 
+@@ -102,7 +97,7 @@ export function setAnnotationEnabled(kind, enabled) {
+     appFSM.send("LABEL_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
+   else
+     appFSM.send("CAPTION_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
+-  renderDashboard();
++
+   debugLog(`annotation:${kind}`, { enabled });
+   appFSM.notify(
+     kind === "label" ? "labels" : "captions",
+@@ -111,7 +106,7 @@ export function setAnnotationEnabled(kind, enabled) {
+ }
+ 
+ export function applyCaptionSettings(notify = true) {
+-  syncDashboardCaption();
++
+   debugLog("annotation:caption-settings", {
+     name: activeProject.captionName,
+     bold: activeProject.captionNameBold,
+@@ -132,7 +127,7 @@ export function setCaptionsApiEnabled(enabled) {
+   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
+   if (!result.committed) return false;
+   const state = readGlobalCaptionState();
+-  applyCommittedDashboardProjection("CAPTION_SETTINGS_CHANGED", result, frontendState, projection);
++
+   debugLog("annotation:caption", { enabled: state.enabled });
+   appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
+   return state;
+@@ -144,7 +139,7 @@ export function setGlobalCaptionText(text) {
+   });
+   if (!result.committed) return false;
+   const state = readGlobalCaptionState();
+-  syncDashboardCaption(state, projection, frontendState);
++
+   return state;
+ }
+ 
+@@ -159,7 +154,7 @@ export function insertCaptionsApiSlotCaptions(slotIds = null) {
+   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
+   if (!result.committed) return false;
+   let state = readGlobalCaptionState();
+-  syncDashboardCaption(state, projection, frontendState);
++
+   return state;
+ }
+ 
+@@ -167,7 +162,7 @@ export function setCaptionsApiName(name) {
+   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
+   if (!result.committed) return false;
+   const state = readGlobalCaptionState();
+-  syncDashboardCaption(state, projection, frontendState);
++
+   appFSM.notify("captions", "CAPTION_NAME_CHANGED");
+   return state;
+ }
+@@ -176,7 +171,7 @@ export function setCaptionsApiNameBold(bold) {
+   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
+   if (!result.committed) return false;
+   const state = readGlobalCaptionState();
+-  syncDashboardCaption(state, projection, frontendState);
++
+   appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
+   return state;
+ }
+@@ -185,7 +180,7 @@ export function setCaptionsApiSettings(patch = {}) {
+   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
+   if (!result.committed) return false;
+   const state = readGlobalCaptionState();
+-  syncDashboardCaption(state, projection, frontendState);
++
+   appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
+   return state;
+ }
+@@ -222,7 +217,7 @@ export function readLabelsApiState() {
+ export function setLabelsApiEnabled(enabled) {
+   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
++
+   debugLog("annotation:label", { enabled });
+   appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
+   return readLabelsApiState();
+@@ -231,7 +226,7 @@ export function setLabelsApiEnabled(enabled) {
+ export function setLabelsApiSettings(patch = {}) {
+   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
++
+   debugLog("mantine:label-settings", { ...patch });
+   appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
+   return readLabelsApiState();
+@@ -240,7 +235,7 @@ export function setLabelsApiSettings(patch = {}) {
+ export function updateLabelsApiPosition(x, y, eventName = null) {
+   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { x, y });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
++
+   if (eventName) {
+     debugLog("mantine:label-settings", { x, y });
+     appFSM.notify("labels", eventName);
+@@ -261,7 +256,7 @@ export function finishLabelsApiPositionInteraction() {
+ export function resetLabelsApiPosition() {
+   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
++
+   appFSM.notify("labels", "LABEL_POSITION_RESET");
+   return readLabelsApiState();
+ }
+@@ -287,7 +282,7 @@ export function readLayoutApiState(previewWidth = null) {
+ export function setLayoutApiStyle(patch = {}) {
+   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("LAYOUT_STYLE_CHANGED", result, frontendState, projection);
++
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return readLayoutApiState();
+ }
+@@ -295,7 +290,7 @@ export function setLayoutApiStyle(patch = {}) {
+ export function setLayoutApiGrid(rows, cols) {
+   const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
+   if (!result.committed) return false;
+-  applyCommittedDashboardProjection("GRID_LAYOUT_CHANGED", result, frontendState, projection);
++
+   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
+   return readLayoutApiState();
+ }
+@@ -303,7 +298,7 @@ export function setLayoutApiGrid(rows, cols) {
+ export function setLayoutApiZoom(value) {
+   const session = interfaceFSM.readState();
+   const state = appFSM.send("SET_DASHBOARD_ZOOM", { value });
+-  if (state.revision !== session.revision) renderDashboard();
++  if (state.revision !== session.revision) transformWorkspace();
+   return readLayoutApiState();
+ }
+ 
+@@ -315,6 +310,6 @@ export function commitLayoutApiZoom() {
+ export function resetLayoutApiZoom() {
+   const session = interfaceFSM.readState();
+   const state = appFSM.send("RESET_DASHBOARD_ZOOM");
+-  if (state.revision !== session.revision) renderDashboard();
++  if (state.revision !== session.revision) transformWorkspace();
+   return readLayoutApiState();
+ }
+diff --git a/sourcecode/backend/project_state.js b/sourcecode/backend/project_state.js
+index d413f6652d6f71aa04ec11cceb76390364365892..b03705df2ceb542ea9a76c4a8b5718de29a055e6 100644
+--- a/sourcecode/backend/project_state.js
++++ b/sourcecode/backend/project_state.js
+@@ -473,18 +473,38 @@ export function readBackendProjection(kind, request = {}) {
+       (kind === "renderer" && request.operation === "slot-image")) {
+     return immutableProjectCopy(buildBackendImageRead(activeProject._state, request.slotId));
+   }
+-  if (kind === "renderer" ||
+-      (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
++  if (kind === "renderer") {
++    const source = activeProject._state, operation = request.operation ?? "selected-slot";
++    if (!["workspace-structure", "selected-slot", "whole-workspace"].includes(operation))
++      throw Error("알 수 없는 workspace 조회 범위입니다.");
++    if (!Number.isFinite(request.width) || request.width <= 0)
++      throw Error("renderer 너비는 유한한 양수여야 합니다.");
++    const output = {
++      operation, layout: structuredClone(source.layout),
++      geometry: dashboardGeometryInProject(source, request.width),
++      visibleSlots: source.slots.filter(slot => !slot.hidden).map(slot => ({
++        id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
++        contentType: slot.content.contentType, chartId: slot.content.chart, imageId: slot.content.imageId,
++      })),
++    };
++    if (operation === "workspace-structure") return immutableProjectCopy(output);
++    const target = operation === "selected-slot"
++      ? source.slots.find(slot => slot.id === request.slotId && !slot.hidden) : null;
++    if (operation === "selected-slot" && !target)
++      return immutableProjectCopy({ ...output, targetSlot: null });
++    output.appearance = structuredClone(source.appearance);
++    output.annotations = structuredClone(source.annotations);
++    output.orderedSlotLabels = orderedSlotLabels(source).filter(label =>
++      operation === "whole-workspace" || label.slotId === target.id);
++    output.captionReferenceStyle = structuredClone(BackendSettings.defaults.captionReferenceStyle);
++    if (operation === "selected-slot") output.targetSlot = buildSlotContentRead(source, target);
++    else output.contentSlots = source.slots.filter(slot => !slot.hidden).map(slot => buildSlotContentRead(source, slot));
++    return immutableProjectCopy(output);
++  }
++  if (kind === "export" && ["print.save", "print.capture"].includes(request.operation)) {
+     const source = activeProject._state, output = buildBackendSurfaceRead(source);
+-    if (kind === "renderer") {
+-      if (!Number.isFinite(request.width) || request.width <= 0)
+-        throw Error("renderer 너비는 유한한 양수여야 합니다.");
+-      output.geometry = dashboardGeometryInProject(source, request.width);
+-    }
+-    if (kind === "export") {
+-      output.export = structuredClone(source.export);
+-      output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
+-    }
++    output.export = structuredClone(source.export);
++    output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
+     return immutableProjectCopy(output);
+   }
+   if (kind === "export" && request.operation == null) {
+@@ -555,31 +575,31 @@ export function buildBackendImageRead(source, slotId) {
+   };
+ }
+ 
++function buildSlotContentRead(source, original) {
++  const slot = structuredClone(original), chart = source.charts.find(item => item.id === original.content.chart);
++  if (chart) {
++    slot.chart = structuredClone(chart);
++    slot.figure = chartFigure(structuredClone(chart), source);
++    slot.csvViews = [];
++    if (!chartUsesConversionView(chart)) {
++      for (const object of chart.editor.objects) {
++        const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
++        if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
++      }
++    }
++  }
++  if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
++  return slot;
++}
++
+ export function buildBackendSurfaceRead(source) {
+-  const output = {
++  return {
+     layout: structuredClone(source.layout), appearance: structuredClone(source.appearance),
+-    annotations: structuredClone(source.annotations), visibleSlots: [],
++    annotations: structuredClone(source.annotations),
++    visibleSlots: source.slots.filter(slot => !slot.hidden).map(slot => buildSlotContentRead(source, slot)),
+     orderedSlotLabels: orderedSlotLabels(source),
+     captionReferenceStyle: structuredClone(BackendSettings.defaults.captionReferenceStyle),
+   };
+-  for (const original of source.slots) {
+-    if (original.hidden) continue;
+-    const slot = structuredClone(original), chart = source.charts.find(item => item.id === original.content.chart);
+-    if (chart) {
+-      slot.chart = structuredClone(chart);
+-      slot.figure = chartFigure(structuredClone(chart), source);
+-      slot.csvViews = [];
+-      if (!chartUsesConversionView(chart)) {
+-        for (const object of chart.editor.objects) {
+-          const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
+-          if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
+-        }
+-      }
+-    }
+-    if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
+-    output.visibleSlots.push(slot);
+-  }
+-  return output;
+ }
+ 
+ export function validateFrontendIntent(event, payload = {}) {
+diff --git a/sourcecode/frontend/mantine_ui.js b/sourcecode/frontend/mantine_ui.js
+index 549f030609cb1c3995afcd8d2dc615ee219b5b6d..2523a58895adfb01d761a2cb85fc91928501eedb 100644
+--- a/sourcecode/frontend/mantine_ui.js
++++ b/sourcecode/frontend/mantine_ui.js
+@@ -1,7 +1,7 @@
+ // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
+-import { appFSM } from '../application/adapter.js';
++import { transformWorkspace, appFSM } from '../application/adapter.js';
+ import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
+-import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
++import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+ 
+ // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
+ // the mounted UI owns only its collision resolver and drag finalization.
+@@ -584,6 +584,7 @@ React.createElement(
+   },
+   selectedTargetText(state),
+ ),
++React.createElement(Button, { disabled: state.lifecycle !== "ready", "aria-label": "작업영역 전체 렌더링", onClick: () => window.FastFigureApi.workspace.render() }, "렌더"),
+ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트"),
+     );
+   }
+@@ -3249,7 +3250,7 @@ app.style.setProperty(
+   "--ff-renderer-navbar-width",
+   navbarCollapsed ? "0px" : `${navbarWidth}px`,
+ );
+-requestAnimationFrame(() => schedulePlotResize());
++requestAnimationFrame(() => transformWorkspace());
+     }, [navbarWidth, navbarCollapsed]);
+     const toggleNavbar = () => {
+ setNavbarCollapsed((collapsed) => !collapsed);
+diff --git a/sourcecode/frontend/renderer.js b/sourcecode/frontend/renderer.js
+index a1cc6c799454abb2901745272eea57c15f49b8e2..a58e876884fc020552ba99e317073c773ed631ae 100644
+--- a/sourcecode/frontend/renderer.js
++++ b/sourcecode/frontend/renderer.js
+@@ -152,18 +152,19 @@ export function renderDashboardFrame(host, layout, visibleSlots, geometry) {
+     Object.assign(content.style, { width: "100%", height: "100%", minWidth: "0", minHeight: "0",
+       overflow: "hidden", borderRadius: "inherit", position: "relative", zIndex: "0" });
+     Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit", zIndex: "2" });
++    if (Object.hasOwn(slot, "contentType")) {
++      const empty = slot.chartId == null && slot.imageId == null;
++      frame.classList.toggle("empty", empty);
++      if (empty) decoration.querySelector(":scope > .slot-tab")?.remove();
++    }
+     host.append(frame); slots.set(slot.id, { frame, content, decoration }); existing.delete(slot.id);
+   }
+   for (const frame of existing.values()) frame.remove();
+   return { grid: host, slots };
+ }
+ 
+-export function applySlotStyleProjection(projection) {
+-  const view = renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+-  $("dashboardCaption")?.style.setProperty("--slot-border-color",
+-    projection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+-  syncDashboardCaptionWidth();
+-  return view;
++export function applySlotStyleProjection(projection, interfaceState) {
++  return applyWorkspaceTransform(projection, interfaceState);
+ }
+ 
+ export const projectImageDisplayUrls = new Map();
+@@ -212,67 +213,19 @@ function hasLiveImageSurface(surface) {
+ function releaseImageSurface(surface) {
+   if (rendererRuntime.imageSurfaces.get(surface.slotId) === surface)
+     rendererRuntime.imageSurfaces.delete(surface.slotId);
++  surface.frame?.remove();
+   surface.element.remove();
+   surface.element.removeAttribute("src");
+ }
+ 
+-function currentResizeRequests() {
+-  return [...rendererRuntime.graphInstances.values()].map(record => ({
+-    record, generation: record.generation, operation: record.operation,
+-    slotId: record.slotId, chartId: record.chartId, host: record.host, plot: record.plot,
+-  }));
+-}
+-
+-export function resizePlots(requests = currentResizeRequests()) {
+-  for (const { record, generation, operation, slotId, chartId, host, plot } of requests) {
+-    if (generation !== rendererRuntime.dashboardRenderGeneration || record.generation !== generation ||
+-        record.operation !== operation || record.slotId !== slotId || record.chartId !== chartId ||
+-        record.host !== host || record.plot !== plot || rendererRuntime.graphInstances.get(slotId) !== record ||
+-        !hasLiveGraphSurface(record)) continue;
+-    try {
+-      Plotly.Plots.resize(plot);
+-    } catch (_) {}
+-  }
+-}
+-
+-export function schedulePlotResize() {
+-  // Coalesce to the latest explicit request, never implicitly acquire a newer
+-  // graph operation when an older frame callback finally runs.
+-  rendererRuntime.resizeRequests = currentResizeRequests();
+-  if (rendererRuntime.resizePending) return;
+-  rendererRuntime.resizePending = true;
+-  requestAnimationFrame(() => {
+-    const requests = rendererRuntime.resizeRequests;
+-    rendererRuntime.resizeRequests = [];
+-    rendererRuntime.resizePending = false;
+-    resizePlots(requests);
+-  });
+-}
+-
+ export function installResizeObserver(frontendActions = {}) {
+   if (rendererRuntime.resizeObserverInstalled) return;
+-  const target = $("dashboard"), area = $("graphArea"), handleResize = () => {
+-    if (frontendActions.refreshDashboard) { frontendActions.refreshDashboard(); return; }
+-    schedulePlotResize();
+-  };
++  const handleResize = () => frontendActions.transformWorkspace?.();
+   if (window.ResizeObserver) {
+-    let dashboardObserver, graphAreaObserver;
+-    try {
+-      dashboardObserver = new ResizeObserver(() => {
+-        syncDashboardCaptionWidth(); schedulePlotResize();
+-      });
+-      dashboardObserver.observe(target);
+-      graphAreaObserver = new ResizeObserver(handleResize);
+-      if (area) graphAreaObserver.observe(area);
+-    } catch (error) {
+-      // Partial installation owns only these observers; release without masking
+-      // the original failure or marking a failed installation as ready.
+-      try { dashboardObserver?.disconnect(); } catch {}
+-      try { graphAreaObserver?.disconnect(); } catch {}
+-      throw error;
+-    }
+-    rendererRuntime.dashboardObserver = dashboardObserver;
+-    rendererRuntime.graphAreaObserver = graphAreaObserver;
++    const observer = new ResizeObserver(handleResize);
++    try { if ($("graphArea")) observer.observe($("graphArea")); }
++    catch (error) { observer.disconnect(); throw error; }
++    rendererRuntime.graphAreaObserver = observer;
+   } else window.addEventListener("resize", handleResize);
+   rendererRuntime.resizeObserverInstalled = true;
+ }
+@@ -444,24 +397,27 @@ export function syncDashboardCaptionProjection(view, scale = 1) {
+ }
+ 
+ // One host has one latest presentation attempt, including narrow palette refreshes.
+-function presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions) {
+-  record.generation = generation;
+-  const operation = {}, slotId = slot.id, chartId = slot.content.chart;
+-  record.operation = operation;
+-  const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
+-    record.generation === generation && record.operation === operation && record.slotId === slotId &&
+-    record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
+-  // Serialize updates to a reused Plotly host; old work must settle before the next
+-  // react. A superseded queued generation skips work rather than overwriting it.
+-  record.pending = record.pending.catch(() => {}).then(async () => {
++function presentSuppliedGraph(record, slot, selected, lifetime, operation, scale, frontendActions) {
++  record.lifetime = lifetime; record.operation = operation;
++  const slotId = slot.id, chartId = slot.content.chart,
++    current = () => lifetime === rendererRuntime.workspaceLifetime && record.lifetime === lifetime &&
++      record.operation === operation && rendererRuntime.slotOperations.get(slotId) === operation &&
++      record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
++  record.pending = (rendererRuntime.slotPending.get(slotId) || record.pending).catch(() => {}).then(async () => {
+     if (!current()) return;
+-    const figure = scalePlotlyFigure(slot.figure, scale);
++    const content = record.host.querySelector(":scope > .slot-content"),
++      baseWidth = content.clientWidth, baseHeight = content.clientHeight, figure = scalePlotlyFigure(slot.figure, scale);
++    if (!(baseWidth > 0 && baseHeight > 0)) return;
++    Object.assign(record.card.style, { width: `${baseWidth}px`, height: `${baseHeight}px`, transform: "none" });
++    Object.assign(record.plot.style, { width: "100%", height: "100%" });
+     await Plotly.react(record.plot, figure.data, figure.layout,
+-      { ...figure.config, staticPlot: !selected, responsive: true, displaylogo: false, doubleClick: "reset" });
++      { ...figure.config, staticPlot: !selected, responsive: false, displaylogo: false, doubleClick: "reset" });
+     if (!current()) return;
++    record.baseWidth = baseWidth; record.baseHeight = baseHeight; scaleSurface(record);
+     record.plot.removeAllListeners?.("plotly_relayout"); record.plot.removeAllListeners?.("plotly_doubleclick");
+     const report = (event = {}, all = false) => {
+-      if (!current() || rendererRuntime.programmaticPlotlyRelayout.get(record.plot) > 0) return;
++      if (!current() || !record.host.classList.contains("selected") ||
++          rendererRuntime.programmaticPlotlyRelayout.get(record.plot) > 0) return;
+       const ranges = {};
+       for (const axis of ["xaxis", "xaxis2", "yaxis", "yaxis2"]) {
+         if (all || Object.keys(event).some(key => key === axis + ".autorange" || key === axis + ".range" || key.startsWith(axis + ".range["))) {
+@@ -473,84 +429,37 @@ function presentSuppliedGraph(record, slot, selected, generation, scale, fronten
+     };
+     record.plot.on?.("plotly_relayout", event => report(event));
+     record.plot.on?.("plotly_doubleclick", () => setTimeout(() => report({}, true), 0));
+-    requestAnimationFrame(() => { if (current()) { try { Plotly.Plots.resize(record.plot); } catch {} } });
+   }).catch(error => {
+     if (!current()) return;
+     try { status(`그래프 렌더링 오류: ${error?.message || error}`); } catch {}
+     throw error;
+   });
++  trackSlotPending(slotId, record.pending);
++}
++
++function trackSlotPending(slotId, pending) {
++  rendererRuntime.slotPending.set(slotId, pending);
++  pending.finally(() => {
++    if (rendererRuntime.slotPending.get(slotId) === pending) rendererRuntime.slotPending.delete(slotId);
++  }).catch(() => {});
+ }
+ 
+ // Post-reconciliation presentation effect; result facts and domain values are supplied.
+-export function applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection, frontendActions = {}) {
+-  if (mutationResult.projectionEffect?.pathOnly && !mutationResult.projectionEffect?.referencesRemoved)
+-    return "NONE";
+-  const slots = projectProjection.visibleSlots, dashboard = $("dashboard"),
+-    hosts = [...dashboard.querySelectorAll(":scope > .slot")],
+-    sameHosts = hosts.length === slots.length && slots.every(slot => {
+-      const host = hosts.find(host => host.dataset.slot === String(slot.id));
+-      if (!host) return false;
+-      if (slot.content.contentType !== "image" && slot.figure) {
+-        const record = rendererRuntime.graphInstances.get(slot.id);
+-        return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
+-      }
+-      if (slot.imageView) {
+-        const surface = rendererRuntime.imageSurfaces.get(slot.id);
+-        return surface?.host === host && hasLiveImageSurface(surface) && surface.imageInput.src === slot.imageView.src;
+-      }
+-      return host.classList.contains("empty");
+-    }),
+-    narrow = ["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED",
+-      "LABEL_SETTINGS_CHANGED", "LABEL_POSITION_CHANGED", "SLOT_IMAGE_SETTINGS_CHANGED", "APPEARANCE_CHANGED"].includes(event);
+-  if (mutationResult.projectionEffect?.referencesRemoved || !narrow || !sameHosts) {
+-    renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+-    return "FULL_DASHBOARD";
++export function applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projection, frontendActions = {}) {
++  cleanupSurfaceOwners(projection.visibleSlots);
++  if (projection.operation === "workspace-structure") {
++    applyWorkspaceTransform(projection, interfaceState); return "STRUCTURE";
+   }
+-  const scale = projectProjection.geometry.scale;
+-  if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event)) {
+-    syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
+-    syncDashboardCaptionWidth();
+-  } else if (event === "APPEARANCE_CHANGED") {
+-    applyUiPaletteProjection(projectProjection.appearance.uiPalette);
+-    for (const slot of slots) {
+-      const record = rendererRuntime.graphInstances.get(slot.id);
+-      if (record) presentSuppliedGraph(record, slot, slot.id === interfaceState.selectedSlotId,
+-        rendererRuntime.dashboardRenderGeneration, scale, frontendActions);
+-    }
+-    // Passive observation does not convert the original per-host rejection to success.
+-    Promise.all([...rendererRuntime.graphInstances.values()].map(record => record.pending)).catch(() => {});
+-  } else if (event === "SLOT_IMAGE_SETTINGS_CHANGED") {
+-    for (const slot of slots) {
+-      if (!slot.imageView) continue;
+-      const element = rendererRuntime.imageSurfaces.get(slot.id).element, settings = slot.imageView.settings;
+-      element.classList.toggle("manual", settings.fit === "manual");
+-      element.style.width = settings.fit === "manual" ? `${settings.scale}%` : "";
+-      element.style.left = settings.fit === "manual" ? `${settings.x}%` : "";
+-      element.style.top = settings.fit === "manual" ? `${settings.y}%` : "";
+-      element.style.objectFit = settings.fit === "manual" ? "" : settings.fit;
+-    }
+-  } else {
+-    const labels = new Map(projectProjection.orderedSlotLabels.map(label => [label.slotId, label.displayLabel])),
+-      settings = projectProjection.annotations.labels.settings;
+-    for (const slot of slots) {
+-      const host = hosts.find(host => host.dataset.slot === String(slot.id));
+-      host.querySelectorAll(":scope > .slot-decoration > .slot-label").forEach(label => label.remove());
+-      if (!projectProjection.annotations.labels.enabled || !labels.has(slot.id)) continue;
+-      const label = document.createElement("span");
+-      label.className = "slot-label"; label.textContent = labels.get(slot.id);
+-      label.setAttribute("aria-label", "슬롯 식별자");
+-      label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
+-      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`;
+-      host.querySelector(":scope > .slot-decoration").append(label);
+-    }
+-  }
+-  return "TARGETED_PROJECTION";
++  if (mutationResult.projectionEffect?.pathOnly && !mutationResult.projectionEffect?.referencesRemoved) return "NONE";
++  if (interfaceState.selectedSlotId === null || projection.targetSlot?.id !== interfaceState.selectedSlotId) return "NONE";
++  renderDashboardProjection(projection, interfaceState, frontendActions);
++  return "SELECTED_SLOT";
+ }
+ 
+ // One-call resolved relation, never a retained editing pointer or Backend lookup.
+-export function resolveSelectedChart(projectProjection, interfaceState) {
+-  const slot = projectProjection.visibleSlots.find(slot => slot.id === interfaceState.selectedSlotId);
+-  return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
++export function resolveSelectedChart(projection, interfaceState) {
++  const slot = projection.targetSlot;
++  return slot?.id === interfaceState.selectedSlotId && slot.content.contentType !== "image" ? slot.chart || null : null;
+ }
+ 
+ function presentSlotSelection(host, selected, empty) {
+@@ -565,171 +474,211 @@ function presentSlotSelection(host, selected, empty) {
+   if (tab) { tab.setAttribute("aria-pressed", String(selected)); tab.style.zIndex = "3"; }
+ }
+ 
+-// Selection/workspace presentation owns existing surfaces, not domain selection.
+-// React workspace controls subscribe to the final FSM state and use public reads;
+-// no chart/image snapshot is published as another editor store here.
+-export function updateGraphViewProjection(projectProjection, interfaceState, frontendActions = {}) {
+-  const dashboard = $("dashboard"), slots = projectProjection.visibleSlots,
+-    hosts = new Map([...dashboard.children].filter(host => host.classList.contains("slot"))
+-      .map(host => [host.dataset.slot, host])), generation = rendererRuntime.dashboardRenderGeneration;
+-  // Association/host checks are presentation-lifetime guards, not project reads.
+-  // A structural/content replacement must use the normal owner cleanup path.
+-  if (hosts.size !== slots.length || slots.some(slot => {
+-    const host = hosts.get(String(slot.id)), record = rendererRuntime.graphInstances.get(slot.id),
+-      surface = rendererRuntime.imageSurfaces.get(slot.id);
+-    if (!host?.isConnected) return true;
+-    if (slot.content.contentType !== "image" && slot.figure)
+-      return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
+-    if (record) return true;
+-    return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
+-  })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+-  const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
+-  for (const slot of slots) {
+-    const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
+-    const host = hosts.get(String(slot.id));
+-    host.classList.toggle("selected", selected);
+-    presentSlotSelection(host, selected, !slot.figure && !slot.imageView);
+-    if (record) presentSuppliedGraph(record, slot, selected && slot.chart === chart, generation, scale, frontendActions);
+-  }
+-  const completion = Promise.all([
+-    ...[...rendererRuntime.graphInstances.values()].map(record => record.pending),
+-    ...[...rendererRuntime.imageSurfaces.values()].map(surface => surface.pending),
+-  ]);
+-  completion.catch(() => {});
+-  return { generation, completion };
+-}
+-
+-// Source startupCoreRuntime: one supplied initial read, in the declared order.
+-// Lifecycle ready and Backend acquisition belong to the Application boundary.
+-export function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
+-  applyDashboardZoomProjection(projectProjection, interfaceState);
+-  const clickController = installSlotClickControllerProjection(frontendActions),
+-    dropController = installDashboardFileDropControllerProjection(),
+-    presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
+-  applySlotStyleProjection(projectProjection);
+-  auditSuppliedRendererContracts(projectProjection, interfaceState);
+-  return { clickController, dropController, presentation };
++function discardGraph(record) {
++  if (rendererRuntime.graphInstances.get(record.slotId) === record)
++    rendererRuntime.graphInstances.delete(record.slotId);
++  record.card.remove();
++  try { Plotly.purge(record.plot); } catch {}
++  record.pending?.finally(() => { try { Plotly.purge(record.plot); } catch {} }).catch(() => {});
+ }
+ 
+-// Low-level realization of startup's supplied project/reference/runtime audit.
+-// This checks the boundary input; it does not resolve Backend state or repair it.
+-function auditSuppliedRendererContracts(projectProjection, interfaceState) {
+-  const slots = new Map();
+-  for (const slot of projectProjection.visibleSlots) {
+-    if (slots.has(slot.id) || slot.hidden ||
+-        (slot.content.chart != null && slot.chart?.id !== slot.content.chart) ||
+-        (slot.imageView && slot.imageView.slotId !== slot.id))
+-      throw Error("renderer input의 visible slot reference가 유효하지 않습니다.");
+-    slots.set(slot.id, slot);
+-  }
+-  for (const label of projectProjection.orderedSlotLabels)
+-    if (!slots.has(label.slotId)) throw Error("renderer input의 label reference가 유효하지 않습니다.");
+-  if (interfaceState.selectedSlotId != null && !slots.has(interfaceState.selectedSlotId))
+-    throw Error("renderer input의 selected slot reference가 유효하지 않습니다.");
+-}
+-
+-// Physical renderer entry for Source renderDashboard(projectProjection, interfaceState).
+-// All domain content is supplied by Application; associations below own only DOM lifetimes.
+-export function renderDashboardProjection(projectProjection, interfaceState, frontendActions = {}) {
+-  const generation = ++rendererRuntime.dashboardRenderGeneration,
+-    dashboard = $("dashboard"), geometry = projectProjection.geometry, scale = geometry.scale,
+-    slots = projectProjection.visibleSlots,
+-    labels = new Map(projectProjection.orderedSlotLabels.map(label => [label.slotId, label.displayLabel]));
+-  applyUiPaletteProjection(projectProjection.appearance.uiPalette);
+-  const discard = record => {
+-    rendererRuntime.graphInstances.delete(record.slotId);
+-    record.host.remove();
+-    record.plot.remove();
+-    try { Plotly.purge(record.plot); } catch {}
+-    // A pending Plotly operation may finish after detach; it must never revive a live view.
+-    record.pending?.finally(() => { try { Plotly.purge(record.plot); } catch {} }).catch(() => {});
+-  };
++function cleanupSurfaceOwners(slots) {
++  const byId = new Map(slots.map(slot => [slot.id, slot]));
+   for (const record of rendererRuntime.graphInstances.values()) {
+-    const slot = slots.find(slot => slot.id === record.slotId);
+-    if (!slot || slot.content.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId ||
+-        !hasLiveGraphSurface(record)) discard(record);
++    const slot = byId.get(record.slotId);
++    if (!slot || slot.contentType !== "graph" || slot.chartId !== record.chartId || !hasLiveGraphSurface(record))
++      discardGraph(record);
++  }
++  for (const surface of rendererRuntime.imageSurfaces.values()) {
++    const slot = byId.get(surface.slotId);
++    if (!slot || slot.contentType !== "image" || slot.imageId !== surface.imageId || !hasLiveImageSurface(surface))
++      releaseImageSurface(surface);
+   }
+-  // Image elements are surface-owned decode handles, never shared asset handles.
+-  // Detach before dropping src; an obsolete decode may reject but is no longer current.
++}
++
++function canReuseGrid(projection) {
++  const host = $("dashboard"), frames = [...host.children].filter(child => child.classList.contains("slot"));
++  return Number(host.style.getPropertyValue("--grid-cols")) === projection.layout.gridCols &&
++    Number(host.style.getPropertyValue("--grid-rows")) === projection.layout.gridRows &&
++    frames.length === projection.visibleSlots.length && projection.visibleSlots.every(slot => {
++      const frame = frames.find(frame => Number(frame.dataset.slot) === slot.id);
++      return frame && Number(frame.style.gridRowStart) === slot.row && Number(frame.style.gridColumnStart) === slot.col &&
++        frame.style.gridRowEnd === `span ${slot.rowSpan}` && frame.style.gridColumnEnd === `span ${slot.colSpan}`;
++    });
++}
++
++function hasContentFrames() {
++  return rendererRuntime.graphInstances.size > 0 || rendererRuntime.imageSurfaces.size > 0;
++}
++
++function wholeRenderingRequired() {
++  status("레이아웃이 변경되었습니다. 렌더 버튼으로 전체 작업영역을 갱신해 주세요.");
++  return { outcome: "whole-rendering-required" };
++}
++
++function scaleSurface(surface) {
++  if (!(surface.baseWidth > 0 && surface.baseHeight > 0)) return;
++  const content = surface.host.querySelector(":scope > .slot-content"), pixels = surface.card || surface.frame,
++    sx = content.clientWidth / surface.baseWidth, sy = content.clientHeight / surface.baseHeight;
++  if (!(sx > 0 && sy > 0)) return;
++  Object.assign(pixels.style, { width: `${surface.baseWidth}px`, height: `${surface.baseHeight}px`,
++    transformOrigin: "0 0", transform: `translate(0px, 0px) scale(${sx}, ${sy})` });
++  // Native transformed DOM hit testing and Plotly's bounding-client-rect input
++  // conversion use the inverse of this same CSS transform; never mutate events.
++}
++
++export function updateSelectionDecoration(interfaceState) {
++  for (const host of $("dashboard").querySelectorAll(":scope > .slot")) {
++    const selected = Number(host.dataset.slot) === interfaceState.selectedSlotId;
++    host.classList.toggle("selected", selected);
++    presentSlotSelection(host, selected, host.classList.contains("empty"));
++    const record = rendererRuntime.graphInstances.get(Number(host.dataset.slot));
++    if (record) record.plot.style.pointerEvents = selected ? "auto" : "none";
++  }
++}
++
++export function applyWorkspaceTransform(projection, interfaceState) {
++  cleanupSurfaceOwners(projection.visibleSlots);
++  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
++  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
++  for (const surface of [...rendererRuntime.graphInstances.values(), ...rendererRuntime.imageSurfaces.values()])
++    scaleSurface(surface);
++  updateSelectionDecoration(interfaceState);
++  syncDashboardCaptionWidth();
++  return $("dashboard");
++}
++
++export function clearWorkspacePresentation() {
++  rendererRuntime.workspaceLifetime++;
++  for (const record of rendererRuntime.graphInstances.values()) discardGraph(record);
+   for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
+-  const frameView = renderDashboardFrame(dashboard, projectProjection.layout, slots, geometry);
+-  $("dashboardCaption")?.style.setProperty("--slot-border-color",
+-    projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent");
+-  for (const slot of slots) {
+-    const graph = slot.content.contentType !== "image" && slot.figure,
+-      image = !graph && slot.imageView,
+-      selected = slot.id === interfaceState.selectedSlotId;
+-    let record = rendererRuntime.graphInstances.get(slot.id);
+-    const { frame: host, content, decoration } = frameView.slots.get(slot.id);
+-    host.className = "slot" + (!graph && !image ? " empty" : "") + (selected ? " selected" : "");
+-    if (graph && !record) {
++  rendererRuntime.slotOperations.clear();
++  rendererRuntime.slotPending.clear();
++  $("dashboard").replaceChildren();
++  $("dashboardCaption")?.classList.add("hidden");
++}
++
++function presentSlotLabels(slot, projection) {
++  const host = $("dashboard").querySelector(`:scope > .slot[data-slot="${slot.id}"]`),
++    decoration = host.querySelector(":scope > .slot-decoration");
++  decoration.querySelectorAll(":scope > .slot-label, :scope > .slot-caption-view").forEach(label => label.remove());
++  if (projection.annotations.captions.enabled && slot.caption !== null && slot.caption !== "") {
++    const caption = document.createElement("span"), settings = projection.annotations.captions.settings;
++    caption.className = "slot-caption-view"; caption.textContent = slot.caption;
++    Object.assign(caption.style, { position: "absolute", bottom: "0", left: "0", right: "0",
++      fontFamily: settings.fontFamily, fontSize: `${settings.fontSize * projection.geometry.scale}px`,
++      lineHeight: String(settings.lineHeight), whiteSpace: "pre-wrap" });
++    decoration.append(caption);
++  }
++  const entry = projection.orderedSlotLabels?.find(label => label.slotId === slot.id),
++    settings = projection.annotations?.labels.settings, scale = projection.geometry.scale;
++  if (!projection.annotations?.labels.enabled || !entry) return;
++  const label = document.createElement("span");
++  label.className = "slot-label"; label.textContent = entry.displayLabel;
++  label.setAttribute("aria-label", "슬롯 식별자");
++  Object.assign(label.style, { left: `${settings.x * scale}px`, top: `${settings.y * scale}px`,
++    fontFamily: settings.fontFamily, fontSize: `${settings.fontSize * scale}px` });
++  decoration.append(label);
++}
++
++function presentSlotContent(slot, interfaceState, geometry, frontendActions) {
++  const host = $("dashboard").querySelector(`:scope > .slot[data-slot="${slot.id}"]`);
++  if (!host) return Promise.resolve();
++  const content = host.querySelector(":scope > .slot-content"), decoration = host.querySelector(":scope > .slot-decoration"),
++    graph = slot.content.contentType === "graph" && slot.figure, image = !graph && slot.imageView,
++    lifetime = rendererRuntime.workspaceLifetime,
++    operation = (rendererRuntime.slotOperations.get(slot.id) || 0) + 1;
++  rendererRuntime.slotOperations.set(slot.id, operation);
++  let record = rendererRuntime.graphInstances.get(slot.id), surface = rendererRuntime.imageSurfaces.get(slot.id);
++  if (record && (!graph || record.chartId !== slot.content.chart)) { discardGraph(record); record = null; }
++  if (surface) { releaseImageSurface(surface); surface = null; }
++  host.classList.toggle("empty", !graph && !image);
++  if (graph) {
++    if (!record) {
+       content.replaceChildren();
+       const card = document.createElement("div"), plot = document.createElement("div");
+       card.className = "chart-card"; plot.className = "plot-item"; plot.id = `plot-${slot.id}`;
+       card.append(plot); content.append(card);
+-      record = { host, plot, slotId: slot.id, chartId: slot.content.chart, generation, pending: Promise.resolve() };
++      record = { host, card, plot, slotId: slot.id, chartId: slot.content.chart, pending: Promise.resolve() };
+       rendererRuntime.graphInstances.set(slot.id, record);
+-    } else if (!graph) {
+-      // Copied pure URLs avoid shared revocation. Each native decode still belongs
+-      // to this surface/generation and must settle without reviving replaced DOM.
+-      content.replaceChildren();
+-      if (image) {
+-        const frame = document.createElement("div"), element = document.createElement("img"),
+-          settings = image.settings;
+-        frame.className = "slot-image-frame"; element.className = "slot-image";
+-        element.alt = image.name || "슬롯 이미지"; element.src = image.src;
+-        if (settings.fit === "manual") {
+-          element.classList.add("manual");
+-          element.style.width = `${settings.scale}%`; element.style.left = `${settings.x}%`; element.style.top = `${settings.y}%`;
+-        } else element.style.objectFit = settings.fit;
+-        frame.append(element); content.append(frame);
+-        const surface = { host, element, slotId: slot.id, imageInput: image, generation, pending: null };
+-        rendererRuntime.imageSurfaces.set(slot.id, surface);
+-        const current = () => generation === rendererRuntime.dashboardRenderGeneration &&
+-          rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image &&
+-          hasLiveImageSurface(surface) && element.parentElement === frame;
+-        surface.pending = Promise.resolve().then(async () => {
+-          if (!current()) { releaseImageSurface(surface); return; }
+-          try {
+-            await element.decode();
+-            if (!current()) releaseImageSurface(surface);
+-          } catch (error) {
+-            const wasCurrent = current();
+-            // Release only this decode's surface, including stale work whose
+-            // frame was removed without a newer dashboard render.
+-            releaseImageSurface(surface);
+-            if (wasCurrent) throw error;
+-          }
+-        });
+-      }
+-    }
+-    decoration.replaceChildren();
+-    if (graph || image) {
+-      const tab = document.createElement("button"); tab.className = "slot-tab"; tab.type = "button"; tab.draggable = true;
+-      tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.style.pointerEvents = "auto";
+-      tab.innerHTML = '<span class="slot-tab-shape"></span>'; decoration.append(tab);
+     }
+-    if (projectProjection.annotations.labels.enabled && labels.has(slot.id)) {
+-      const label = document.createElement("span"), settings = projectProjection.annotations.labels.settings;
+-      label.className = "slot-label"; label.textContent = labels.get(slot.id); label.setAttribute("aria-label", "슬롯 식별자");
+-      label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
+-      label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; decoration.append(label);
++    presentSuppliedGraph(record, slot, slot.id === interfaceState.selectedSlotId,
++      lifetime, operation, geometry.scale, frontendActions);
++  } else {
++    content.replaceChildren();
++    if (image) {
++      const frame = document.createElement("div"), element = document.createElement("img"), settings = image.settings;
++      frame.className = "slot-image-frame"; element.className = "slot-image";
++      element.alt = image.name || "슬롯 이미지";
++      if (settings.fit === "manual") {
++        element.classList.add("manual"); Object.assign(element.style, {
++          width: `${settings.scale}%`, left: `${settings.x}%`, top: `${settings.y}%` });
++      } else element.style.objectFit = settings.fit;
++      frame.append(element); content.append(frame);
++      surface = { host, frame, element, slotId: slot.id, imageId: slot.content.imageId,
++        imageInput: image, lifetime, operation, baseWidth: content.clientWidth, baseHeight: content.clientHeight };
++      rendererRuntime.imageSurfaces.set(slot.id, surface);
++      const current = () => lifetime === rendererRuntime.workspaceLifetime &&
++        rendererRuntime.slotOperations.get(slot.id) === operation &&
++        rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image && hasLiveImageSurface(surface);
++      surface.pending = (rendererRuntime.slotPending.get(slot.id) || Promise.resolve()).catch(() => {}).then(async () => {
++        if (!current()) { releaseImageSurface(surface); return; }
++        element.src = image.src;
++        try { await element.decode(); if (current()) scaleSurface(surface); else releaseImageSurface(surface); }
++        catch (error) { const live = current(); releaseImageSurface(surface); if (live) throw error; }
++      });
++      trackSlotPending(slot.id, surface.pending);
+     }
+-    presentSlotSelection(host, selected, !graph && !image);
+-    dashboard.append(host);
+-    if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
+   }
+-  syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
++  let tab = decoration.querySelector(":scope > .slot-tab");
++  if ((graph || image) && !tab) {
++    tab = document.createElement("button"); tab.className = "slot-tab"; tab.type = "button"; tab.draggable = true;
++    tab.setAttribute("aria-label", "슬롯 이동 및 선택"); tab.style.pointerEvents = "auto";
++    tab.innerHTML = '<span class="slot-tab-shape"></span>'; decoration.append(tab);
++  } else if (!graph && !image) tab?.remove();
++  presentSlotSelection(host, slot.id === interfaceState.selectedSlotId, !graph && !image);
++  const pending = record?.pending || surface?.pending || Promise.resolve();
++  pending.catch(() => {});
++  return pending;
++}
++
++export function renderDashboardProjection(projection, interfaceState, frontendActions = {}) {
++  cleanupSurfaceOwners(projection.visibleSlots);
++  updateSelectionDecoration(interfaceState);
++  const slot = projection.targetSlot;
++  if (interfaceState.selectedSlotId === null || !slot || slot.id !== interfaceState.selectedSlotId) return null;
++  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
++  if (!hasContentFrames()) renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
++  const completion = presentSlotContent(slot, interfaceState, projection.geometry, frontendActions);
++  presentSlotLabels(slot, projection);
++  return { completion };
++}
++
++export function renderWholeWorkspaceProjection(projection, interfaceState, frontendActions = {}) {
++  if (projection.operation !== "whole-workspace") throw Error("전체 렌더링에는 명시적 whole-workspace 조회가 필요합니다.");
++  cleanupSurfaceOwners(projection.visibleSlots);
++  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
++  const completions = projection.contentSlots.map(slot => {
++    const completion = presentSlotContent(slot, interfaceState, projection.geometry, frontendActions);
++    presentSlotLabels(slot, projection); return completion;
++  });
++  applyUiPaletteProjection(projection.appearance.uiPalette);
++  syncDashboardCaptionProjection(projection.annotations.captions, projection.geometry.scale);
+   syncDashboardCaptionWidth();
++  const completion = Promise.all(completions); completion.catch(() => {});
++  return { completion };
++}
++
++export function updateGraphViewProjection(projection, interfaceState, frontendActions = {}) {
++  return renderDashboardProjection(projection, interfaceState, frontendActions);
++}
++
++export function startupCoreRuntimeProjection(projection, interfaceState, frontendActions) {
++  const clickController = installSlotClickControllerProjection(frontendActions),
++    dropController = installDashboardFileDropControllerProjection(),
++    presentation = applyWorkspaceTransform(projection, interfaceState);
+   installResizeObserver(frontendActions);
+-  const completion = Promise.all([
+-    ...[...rendererRuntime.graphInstances.values()].map(record => record.pending),
+-    ...[...rendererRuntime.imageSurfaces.values()].map(surface => surface.pending),
+-  ]);
+-  // Presentation callers may await the original rejection. The passive observer
+-  // prevents an unhandled-rejection side effect when UI event callers ignore it.
+-  completion.catch(() => {});
+-  return { generation, completion };
++  return { clickController, dropController, presentation };
+ }
+ 
+ export function plotlyConfig(chart, extra = {}) {
+@@ -1462,10 +1411,8 @@ export async function downloadExportPayload(payload) {
+   }
+ }
+ 
+-export function applyDashboardZoomProjection(projection, interfaceState, resize = true) {
+-  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+-  syncDashboardCaptionWidth();
+-  if (resize) schedulePlotResize();
++export function applyDashboardZoomProjection(projection, interfaceState) {
++  return applyWorkspaceTransform(projection, interfaceState);
+ }
+ 
+ export function readDashboardRenderedWidth() {
+@@ -1492,13 +1439,12 @@ export function applyUiPaletteProjection(palette) {
+ export const rendererRuntime = {
+   graphInstances: new Map(),
+   imageSurfaces: new Map(),
+-  dashboardObserver: null,
+   graphAreaObserver: null,
+-  resizePending: false,
+-  resizeRequests: [],
+   resizeObserverInstalled: false,
+   programmaticPlotlyRelayout: new WeakMap(),
+-  dashboardRenderGeneration: 0,
++  workspaceLifetime: 0,
++  slotOperations: new Map(),
++  slotPending: new Map(),
+   slotDragSourceId: null,
+   slotDragSuppressClick: false
+ };
+diff --git a/agent_space/reviews/review-20261118-009-plan044-source-code.md b/agent_space/reviews/review-20261118-009-plan044-source-code.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff948310a5ac29fb4a646ae20fb1447df56e6798
+--- /dev/null
++++ b/agent_space/reviews/review-20261118-009-plan044-source-code.md
+@@ -0,0 +1,36 @@
++# Plan044 source code 번역 검토
++
++## 기준
++
++- Source Script 56과 pseudocode 33, 실제 변경 범위는 `20261118-005.patch`에서 확인했다.
++- 시작 상태: `396a33271ae7bbcc7a06a1b524ecab0d0de6c58b`. source code 161에서 162로 갱신했다.
++- 앞선 문서와 Source Script·pseudocode·Backend 설정·dist는 유지했다.
++
++## 대응과 수정
++
++| pseudocode의 계약 | source code 반영 |
++| --- | --- |
++| Backend 범위 결정 뒤 내용 계산 | `backend/project_state.js`의 renderer 조회를 `workspace-structure`, `selected-slot`, `whole-workspace`로 분리. 구조 조회는 배치·소유 ID만, 선택 조회는 해당 슬롯 한 개의 figure/CSV/이미지만 계산한다. 0과 선택 없음은 구별한다. |
++| Application의 현재 선택·한 번의 처리 | `application/adapter.js`가 현재 선택을 읽고 명령→참조 보정→구조 또는 선택 조회→표시를 담당한다. 조건부 종류 변경의 결과를 재사용하고 선택 해제는 내용 표시를 생략한다. |
++| 기존 wrapper 반환·알림 유지 | `application/public_api/assets.js`, `graphs.js`, `layout_annotations.js`에서 중앙 처리 뒤의 중복 렌더링·resize·전역 캡션 표시를 제거했다. 기존 명령·결과·공식 읽기·알림은 유지한다. |
++| 명시적 전체 표시 | `application/public_api/index.js`의 `workspace.render`만 전체 조회를 요청한다. `frontend/mantine_ui.js`에 기존 공통 Button으로 프린트 바로 왼쪽의 렌더 버튼을 연결했다. 전체 완료 Promise를 UiCommand에 반환한다. |
++| 선택 내용만 자동 갱신 | `frontend/renderer.js`는 `targetSlot`만 표시하고 해당 슬롯의 라벨·캡션·선택 장식을 갱신한다. 다른 슬롯 내용과 전역 캡션은 전체 버튼에서 갱신한다. |
++| 이동·크기 변경은 기존 내용 재사용 | 같은 틀에서 소유한 최초 표시 치수와 현재 content 치수로 CSS translate/scale을 적용한다. Shell·ResizeObserver·zoom은 구조 조회와 CSS 경로만 호출한다. Plotly resize 호출은 제거했다. |
++| 비호환 배치 | 기존 내용이 있는 틀의 grid/span/배치가 호환되지 않으면 유효 내용을 유지하고 전체 렌더링 필요를 알린다. 자동 전체 전환은 없다. |
++| 자원·비동기 수명 | 슬롯별 작업 순번·pending, 작업영역 수명, 현재 host/chart/image 연결을 검사한다. 같은 슬롯의 Plotly/이미지 작업은 순서를 지키고 다른 슬롯은 취소하지 않는다. 프로젝트 교체는 기존 자원을 정리한다. |
++| 초기화·내보내기 | 기존 system의 Application startup을 통해 빈 틀과 controller만 준비한다. 출력용 전체 조회와 독립 raster/Plotly 출력 host는 유지했다. system 파일을 추가로 수정할 필요는 없다. |
++
++## 논리·목적·비중복
++
++- 선택 범위를 Backend의 비싼 계산 전에 결정하며, 다른 슬롯의 figure를 만든 뒤 버리는 경로를 사용하지 않는다.
++- 단순 크기 변경 경로에는 Plotly react/newPlot/resize와 이미지 decode가 없다. 본문 갱신은 선택 경로 또는 명시적 전체 경로에 한정한다.
++- Renderer의 치수·pending·DOM 참조는 자신의 표시 자원 수명에 사용한다. Project 상태·선택·변경 대상을 저장하는 새 조회 주체는 추가하지 않았다.
++- 공통 UI CSS는 기존 palette 부분 조회로 유지한다. Plotly가 제공하는 변환 역행렬 입력 처리를 재사용하며 이벤트 좌표를 덮어쓰지 않는다.
++- 기존 공통 틀, 단일 Frontend 선택, EFSM 명령·참조 보정, 출력 계산을 재사용했다.
++
++## 확인과 한계
++
++- 8개 변경 JS의 `node --check`, 호출·범위 검색, 전체 실제 변경문과 마지막 추가 변경문을 정적으로 확인했다.
++- native patch 역적용 확인·공백·실제 세 계층 fingerprint·메타데이터 변경 범위·보호 경로·index·HEAD를 확인했다.
++- 테스트·브라우저·앱·빌드·checker main·TLC는 실행하지 않았다. CSS 변환 후 pointer/drag 및 실제 표시·비동기 경합·성능은 런타임 검증이 남아 있다.
++- 상태는 `stale`로 유지한다. 계층 전체 완료나 런타임 정상 판정을 뜻하지 않는다.
+diff --git a/agent_space/patches/20261118-006.md b/agent_space/patches/20261118-006.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..eb111b358891bca368cf6a826d888b0db8df3f01
+--- /dev/null
++++ b/agent_space/patches/20261118-006.md
+@@ -0,0 +1,12 @@
++# Plan044 source code 업데이트
++
++- 기준: Source Script 56 → pseudocode 33의 `20261118-005.patch`와 현재 호출부.
++- 시작 commit: `396a33271ae7bbcc7a06a1b524ecab0d0de6c58b`.
++- 목적: 자동 내용 계산·표시를 선택 슬롯 하나로 제한하고 전체 작업영역은 명시적 렌더 버튼에서 갱신한다. 단순 위치·크기 변화는 기존 표시의 CSS 이동·확대를 사용한다.
++- Backend에서 범위를 먼저 결정하도록 바꿨다. 전체 figure 계산 뒤 필터링하는 방법은 다른 슬롯의 계산을 남기므로 사용하지 않았다.
++- 기존 공통 틀·UiCommand·Button·Frontend 선택·EFSM·출력 계산을 유지했다. wrapper의 중복 표시를 제거하고 Application 한 곳에서 처리한다.
++- 슬롯별 pending/작업 순번과 작업영역 수명으로 자원을 검증한다. 전역 렌더 순번으로 다른 슬롯을 취소하지 않는다.
++- native Git diff: 변경 JS 8개·메타데이터·신규 검토 문서·이 설명. 기존 계획·문서와 Source Script·pseudocode·dist는 포함하지 않는다.
++- source code 162: `sha256:476accb6be4f04817e8b1ad50375f0fb8ae21966493449abf8e3e8e8d7895d00`.
++- 검토: `../reviews/review-20261118-009-plan044-source-code.md`.
++- 정적 구문·호출·hash·범위·native 역적용 확인만 수행했다. 테스트·앱·브라우저·빌드·checker main·TLC·commit/push는 실행하지 않았다.

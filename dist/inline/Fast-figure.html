@@ -10688,17 +10688,43 @@ function readBackendProjection(kind, request = {}) {
   if (kind === "project-api" && request.operation === "images.readEditor" || kind === "renderer" && request.operation === "slot-image") {
     return immutableProjectCopy(buildBackendImageRead(activeProject._state, request.slotId));
   }
-  if (kind === "renderer" || kind === "export" && ["print.save", "print.capture"].includes(request.operation)) {
+  if (kind === "renderer") {
+    const source = activeProject._state, operation = request.operation ?? "selected-slot";
+    if (!["workspace-structure", "selected-slot", "whole-workspace"].includes(operation))
+      throw Error("알 수 없는 workspace 조회 범위입니다.");
+    if (!Number.isFinite(request.width) || request.width <= 0)
+      throw Error("renderer 너비는 유한한 양수여야 합니다.");
+    const output = {
+      operation,
+      layout: structuredClone(source.layout),
+      geometry: dashboardGeometryInProject(source, request.width),
+      visibleSlots: source.slots.filter((slot2) => !slot2.hidden).map((slot2) => ({
+        id: slot2.id,
+        row: slot2.row,
+        col: slot2.col,
+        rowSpan: slot2.rowSpan,
+        colSpan: slot2.colSpan,
+        contentType: slot2.content.contentType,
+        chartId: slot2.content.chart,
+        imageId: slot2.content.imageId
+      }))
+    };
+    if (operation === "workspace-structure") return immutableProjectCopy(output);
+    const target = operation === "selected-slot" ? source.slots.find((slot2) => slot2.id === request.slotId && !slot2.hidden) : null;
+    if (operation === "selected-slot" && !target)
+      return immutableProjectCopy({ ...output, targetSlot: null });
+    output.appearance = structuredClone(source.appearance);
+    output.annotations = structuredClone(source.annotations);
+    output.orderedSlotLabels = orderedSlotLabels(source).filter((label) => operation === "whole-workspace" || label.slotId === target.id);
+    output.captionReferenceStyle = structuredClone(BackendSettings.defaults.captionReferenceStyle);
+    if (operation === "selected-slot") output.targetSlot = buildSlotContentRead(source, target);
+    else output.contentSlots = source.slots.filter((slot2) => !slot2.hidden).map((slot2) => buildSlotContentRead(source, slot2));
+    return immutableProjectCopy(output);
+  }
+  if (kind === "export" && ["print.save", "print.capture"].includes(request.operation)) {
     const source = activeProject._state, output = buildBackendSurfaceRead(source);
-    if (kind === "renderer") {
-      if (!Number.isFinite(request.width) || request.width <= 0)
-        throw Error("renderer 너비는 유한한 양수여야 합니다.");
-      output.geometry = dashboardGeometryInProject(source, request.width);
-    }
-    if (kind === "export") {
-      output.export = structuredClone(source.export);
-      output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
-    }
+    output.export = structuredClone(source.export);
+    output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
     return immutableProjectCopy(output);
   }
   if (kind === "export" && request.operation == null) {
@@ -10773,33 +10799,31 @@ function buildBackendImageRead(source, slotId) {
     settings: structuredClone(slot.content.imageSettings)
   };
 }
+function buildSlotContentRead(source, original) {
+  const slot = structuredClone(original), chart = source.charts.find((item) => item.id === original.content.chart);
+  if (chart) {
+    slot.chart = structuredClone(chart);
+    slot.figure = chartFigure(structuredClone(chart), source);
+    slot.csvViews = [];
+    if (!chartUsesConversionView(chart)) {
+      for (const object of chart.editor.objects) {
+        const csv = source.assets.csvFiles.find((item) => item.id === object.csvId);
+        if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
+      }
+    }
+  }
+  if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
+  return slot;
+}
 function buildBackendSurfaceRead(source) {
-  const output = {
+  return {
     layout: structuredClone(source.layout),
     appearance: structuredClone(source.appearance),
     annotations: structuredClone(source.annotations),
-    visibleSlots: [],
+    visibleSlots: source.slots.filter((slot) => !slot.hidden).map((slot) => buildSlotContentRead(source, slot)),
     orderedSlotLabels: orderedSlotLabels(source),
     captionReferenceStyle: structuredClone(BackendSettings.defaults.captionReferenceStyle)
   };
-  for (const original of source.slots) {
-    if (original.hidden) continue;
-    const slot = structuredClone(original), chart = source.charts.find((item) => item.id === original.content.chart);
-    if (chart) {
-      slot.chart = structuredClone(chart);
-      slot.figure = chartFigure(structuredClone(chart), source);
-      slot.csvViews = [];
-      if (!chartUsesConversionView(chart)) {
-        for (const object of chart.editor.objects) {
-          const csv = source.assets.csvFiles.find((item) => item.id === object.csvId);
-          if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
-        }
-      }
-    }
-    if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
-    output.visibleSlots.push(slot);
-  }
-  return output;
 }
 function validateFrontendIntent(event, payload = {}) {
   let input = { event, accepted: true, reference: null, workspaceHint: null, selectionHint: null };
@@ -14629,6 +14653,11 @@ function renderDashboardFrame(host, layout2, visibleSlots, geometry) {
       zIndex: "0"
     });
     Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit", zIndex: "2" });
+    if (Object.hasOwn(slot, "contentType")) {
+      const empty = slot.chartId == null && slot.imageId == null;
+      frame.classList.toggle("empty", empty);
+      if (empty) decoration.querySelector(":scope > .slot-tab")?.remove();
+    }
     host.append(frame);
     slots.set(slot.id, { frame, content, decoration });
     existing.delete(slot.id);
@@ -14636,14 +14665,8 @@ function renderDashboardFrame(host, layout2, visibleSlots, geometry) {
   for (const frame of existing.values()) frame.remove();
   return { grid: host, slots };
 }
-function applySlotStyleProjection(projection) {
-  const view = renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
-  $("dashboardCaption")?.style.setProperty(
-    "--slot-border-color",
-    projection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent"
-  );
-  syncDashboardCaptionWidth();
-  return view;
+function applySlotStyleProjection(projection, interfaceState) {
+  return applyWorkspaceTransform(projection, interfaceState);
 }
 var projectImageDisplayUrls = /* @__PURE__ */ new Map();
 function projectImageDisplayUrl(image) {
@@ -14682,72 +14705,22 @@ function hasLiveImageSurface(surface) {
 function releaseImageSurface(surface) {
   if (rendererRuntime.imageSurfaces.get(surface.slotId) === surface)
     rendererRuntime.imageSurfaces.delete(surface.slotId);
+  surface.frame?.remove();
   surface.element.remove();
   surface.element.removeAttribute("src");
 }
-function currentResizeRequests() {
-  return [...rendererRuntime.graphInstances.values()].map((record) => ({
-    record,
-    generation: record.generation,
-    operation: record.operation,
-    slotId: record.slotId,
-    chartId: record.chartId,
-    host: record.host,
-    plot: record.plot
-  }));
-}
-function resizePlots(requests = currentResizeRequests()) {
-  for (const { record, generation, operation, slotId, chartId, host, plot } of requests) {
-    if (generation !== rendererRuntime.dashboardRenderGeneration || record.generation !== generation || record.operation !== operation || record.slotId !== slotId || record.chartId !== chartId || record.host !== host || record.plot !== plot || rendererRuntime.graphInstances.get(slotId) !== record || !hasLiveGraphSurface(record)) continue;
-    try {
-      Plotly.Plots.resize(plot);
-    } catch (_) {
-    }
-  }
-}
-function schedulePlotResize() {
-  rendererRuntime.resizeRequests = currentResizeRequests();
-  if (rendererRuntime.resizePending) return;
-  rendererRuntime.resizePending = true;
-  requestAnimationFrame(() => {
-    const requests = rendererRuntime.resizeRequests;
-    rendererRuntime.resizeRequests = [];
-    rendererRuntime.resizePending = false;
-    resizePlots(requests);
-  });
-}
 function installResizeObserver(frontendActions = {}) {
   if (rendererRuntime.resizeObserverInstalled) return;
-  const target = $("dashboard"), area = $("graphArea"), handleResize = () => {
-    if (frontendActions.refreshDashboard) {
-      frontendActions.refreshDashboard();
-      return;
-    }
-    schedulePlotResize();
-  };
+  const handleResize = () => frontendActions.transformWorkspace?.();
   if (window.ResizeObserver) {
-    let dashboardObserver, graphAreaObserver;
+    const observer = new ResizeObserver(handleResize);
     try {
-      dashboardObserver = new ResizeObserver(() => {
-        syncDashboardCaptionWidth();
-        schedulePlotResize();
-      });
-      dashboardObserver.observe(target);
-      graphAreaObserver = new ResizeObserver(handleResize);
-      if (area) graphAreaObserver.observe(area);
+      if ($("graphArea")) observer.observe($("graphArea"));
     } catch (error) {
-      try {
-        dashboardObserver?.disconnect();
-      } catch {
-      }
-      try {
-        graphAreaObserver?.disconnect();
-      } catch {
-      }
+      observer.disconnect();
       throw error;
     }
-    rendererRuntime.dashboardObserver = dashboardObserver;
-    rendererRuntime.graphAreaObserver = graphAreaObserver;
+    rendererRuntime.graphAreaObserver = observer;
   } else window.addEventListener("resize", handleResize);
   rendererRuntime.resizeObserverInstalled = true;
 }
@@ -14909,26 +14882,31 @@ function syncDashboardCaptionProjection(view, scale = 1) {
   box.style.fontSize = `${view.settings.fontSize * scale}px`;
   box.style.lineHeight = view.settings.lineHeight;
 }
-function presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions) {
-  record.generation = generation;
-  const operation = {}, slotId = slot.id, chartId = slot.content.chart;
+function presentSuppliedGraph(record, slot, selected, lifetime, operation, scale, frontendActions) {
+  record.lifetime = lifetime;
   record.operation = operation;
-  const current = () => generation === rendererRuntime.dashboardRenderGeneration && record.generation === generation && record.operation === operation && record.slotId === slotId && record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
-  record.pending = record.pending.catch(() => {
+  const slotId = slot.id, chartId = slot.content.chart, current = () => lifetime === rendererRuntime.workspaceLifetime && record.lifetime === lifetime && record.operation === operation && rendererRuntime.slotOperations.get(slotId) === operation && record.chartId === chartId && rendererRuntime.graphInstances.get(slotId) === record && hasLiveGraphSurface(record);
+  record.pending = (rendererRuntime.slotPending.get(slotId) || record.pending).catch(() => {
   }).then(async () => {
     if (!current()) return;
-    const figure = scalePlotlyFigure(slot.figure, scale);
+    const content = record.host.querySelector(":scope > .slot-content"), baseWidth = content.clientWidth, baseHeight = content.clientHeight, figure = scalePlotlyFigure(slot.figure, scale);
+    if (!(baseWidth > 0 && baseHeight > 0)) return;
+    Object.assign(record.card.style, { width: `${baseWidth}px`, height: `${baseHeight}px`, transform: "none" });
+    Object.assign(record.plot.style, { width: "100%", height: "100%" });
     await Plotly.react(
       record.plot,
       figure.data,
       figure.layout,
-      { ...figure.config, staticPlot: !selected, responsive: true, displaylogo: false, doubleClick: "reset" }
+      { ...figure.config, staticPlot: !selected, responsive: false, displaylogo: false, doubleClick: "reset" }
     );
     if (!current()) return;
+    record.baseWidth = baseWidth;
+    record.baseHeight = baseHeight;
+    scaleSurface(record);
     record.plot.removeAllListeners?.("plotly_relayout");
     record.plot.removeAllListeners?.("plotly_doubleclick");
     const report = (event = {}, all = false) => {
-      if (!current() || rendererRuntime.programmaticPlotlyRelayout.get(record.plot) > 0) return;
+      if (!current() || !record.host.classList.contains("selected") || rendererRuntime.programmaticPlotlyRelayout.get(record.plot) > 0) return;
       const ranges = {};
       for (const axis of ["xaxis", "xaxis2", "yaxis", "yaxis2"]) {
         if (all || Object.keys(event).some((key) => key === axis + ".autorange" || key === axis + ".range" || key.startsWith(axis + ".range["))) {
@@ -14940,14 +14918,6 @@ function presentSuppliedGraph(record, slot, selected, generation, scale, fronten
     };
     record.plot.on?.("plotly_relayout", (event) => report(event));
     record.plot.on?.("plotly_doubleclick", () => setTimeout(() => report({}, true), 0));
-    requestAnimationFrame(() => {
-      if (current()) {
-        try {
-          Plotly.Plots.resize(record.plot);
-        } catch {
-        }
-      }
-    });
   }).catch((error) => {
     if (!current()) return;
     try {
@@ -14956,86 +14926,29 @@ function presentSuppliedGraph(record, slot, selected, generation, scale, fronten
     }
     throw error;
   });
+  trackSlotPending(slotId, record.pending);
 }
-function applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection, frontendActions = {}) {
-  if (mutationResult.projectionEffect?.pathOnly && !mutationResult.projectionEffect?.referencesRemoved)
-    return "NONE";
-  const slots = projectProjection.visibleSlots, dashboard = $("dashboard"), hosts = [...dashboard.querySelectorAll(":scope > .slot")], sameHosts = hosts.length === slots.length && slots.every((slot) => {
-    const host = hosts.find((host2) => host2.dataset.slot === String(slot.id));
-    if (!host) return false;
-    if (slot.content.contentType !== "image" && slot.figure) {
-      const record = rendererRuntime.graphInstances.get(slot.id);
-      return record?.host === host && record.chartId === slot.content.chart && hasLiveGraphSurface(record);
-    }
-    if (slot.imageView) {
-      const surface = rendererRuntime.imageSurfaces.get(slot.id);
-      return surface?.host === host && hasLiveImageSurface(surface) && surface.imageInput.src === slot.imageView.src;
-    }
-    return host.classList.contains("empty");
-  }), narrow = [
-    "CAPTION_TEXT_INPUT",
-    "SLOT_CAPTIONS_INSERTED",
-    "CAPTION_SETTINGS_CHANGED",
-    "LABEL_SETTINGS_CHANGED",
-    "LABEL_POSITION_CHANGED",
-    "SLOT_IMAGE_SETTINGS_CHANGED",
-    "APPEARANCE_CHANGED"
-  ].includes(event);
-  if (mutationResult.projectionEffect?.referencesRemoved || !narrow || !sameHosts) {
-    renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-    return "FULL_DASHBOARD";
-  }
-  const scale = projectProjection.geometry.scale;
-  if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event)) {
-    syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
-    syncDashboardCaptionWidth();
-  } else if (event === "APPEARANCE_CHANGED") {
-    applyUiPaletteProjection(projectProjection.appearance.uiPalette);
-    for (const slot of slots) {
-      const record = rendererRuntime.graphInstances.get(slot.id);
-      if (record) presentSuppliedGraph(
-        record,
-        slot,
-        slot.id === interfaceState.selectedSlotId,
-        rendererRuntime.dashboardRenderGeneration,
-        scale,
-        frontendActions
-      );
-    }
-    Promise.all([...rendererRuntime.graphInstances.values()].map((record) => record.pending)).catch(() => {
-    });
-  } else if (event === "SLOT_IMAGE_SETTINGS_CHANGED") {
-    for (const slot of slots) {
-      if (!slot.imageView) continue;
-      const element = rendererRuntime.imageSurfaces.get(slot.id).element, settings = slot.imageView.settings;
-      element.classList.toggle("manual", settings.fit === "manual");
-      element.style.width = settings.fit === "manual" ? `${settings.scale}%` : "";
-      element.style.left = settings.fit === "manual" ? `${settings.x}%` : "";
-      element.style.top = settings.fit === "manual" ? `${settings.y}%` : "";
-      element.style.objectFit = settings.fit === "manual" ? "" : settings.fit;
-    }
-  } else {
-    const labels = new Map(projectProjection.orderedSlotLabels.map((label) => [label.slotId, label.displayLabel])), settings = projectProjection.annotations.labels.settings;
-    for (const slot of slots) {
-      const host = hosts.find((host2) => host2.dataset.slot === String(slot.id));
-      host.querySelectorAll(":scope > .slot-decoration > .slot-label").forEach((label2) => label2.remove());
-      if (!projectProjection.annotations.labels.enabled || !labels.has(slot.id)) continue;
-      const label = document.createElement("span");
-      label.className = "slot-label";
-      label.textContent = labels.get(slot.id);
-      label.setAttribute("aria-label", "슬롯 식별자");
-      label.style.left = `${settings.x * scale}px`;
-      label.style.top = `${settings.y * scale}px`;
-      label.style.fontFamily = settings.fontFamily;
-      label.style.fontSize = `${settings.fontSize * scale}px`;
-      host.querySelector(":scope > .slot-decoration").append(label);
-    }
-  }
-  return "TARGETED_PROJECTION";
+function trackSlotPending(slotId, pending) {
+  rendererRuntime.slotPending.set(slotId, pending);
+  pending.finally(() => {
+    if (rendererRuntime.slotPending.get(slotId) === pending) rendererRuntime.slotPending.delete(slotId);
+  }).catch(() => {
+  });
 }
-function resolveSelectedChart(projectProjection, interfaceState) {
-  const slot = projectProjection.visibleSlots.find((slot2) => slot2.id === interfaceState.selectedSlotId);
-  return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
+function applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projection, frontendActions = {}) {
+  cleanupSurfaceOwners(projection.visibleSlots);
+  if (projection.operation === "workspace-structure") {
+    applyWorkspaceTransform(projection, interfaceState);
+    return "STRUCTURE";
+  }
+  if (mutationResult.projectionEffect?.pathOnly && !mutationResult.projectionEffect?.referencesRemoved) return "NONE";
+  if (interfaceState.selectedSlotId === null || projection.targetSlot?.id !== interfaceState.selectedSlotId) return "NONE";
+  renderDashboardProjection(projection, interfaceState, frontendActions);
+  return "SELECTED_SLOT";
+}
+function resolveSelectedChart(projection, interfaceState) {
+  const slot = projection.targetSlot;
+  return slot?.id === interfaceState.selectedSlotId && slot.content.contentType !== "image" ? slot.chart || null : null;
 }
 function presentSlotSelection(host, selected, empty) {
   const decoration = host.querySelector(":scope > .slot-decoration");
@@ -15061,86 +14974,138 @@ function presentSlotSelection(host, selected, empty) {
     tab.style.zIndex = "3";
   }
 }
-function updateGraphViewProjection(projectProjection, interfaceState, frontendActions = {}) {
-  const dashboard = $("dashboard"), slots = projectProjection.visibleSlots, hosts = new Map([...dashboard.children].filter((host) => host.classList.contains("slot")).map((host) => [host.dataset.slot, host])), generation = rendererRuntime.dashboardRenderGeneration;
-  if (hosts.size !== slots.length || slots.some((slot) => {
-    const host = hosts.get(String(slot.id)), record = rendererRuntime.graphInstances.get(slot.id), surface = rendererRuntime.imageSurfaces.get(slot.id);
-    if (!host?.isConnected) return true;
-    if (slot.content.contentType !== "image" && slot.figure)
-      return !record || record.host !== host || !hasLiveGraphSurface(record) || record.chartId !== slot.content.chart;
-    if (record) return true;
-    return slot.imageView ? !surface || surface.host !== host || !hasLiveImageSurface(surface) || surface.imageInput.src !== slot.imageView.src : !!surface;
-  })) return renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
-  for (const slot of slots) {
-    const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
-    const host = hosts.get(String(slot.id));
-    host.classList.toggle("selected", selected);
-    presentSlotSelection(host, selected, !slot.figure && !slot.imageView);
-    if (record) presentSuppliedGraph(record, slot, selected && slot.chart === chart, generation, scale, frontendActions);
-  }
-  const completion = Promise.all([
-    ...[...rendererRuntime.graphInstances.values()].map((record) => record.pending),
-    ...[...rendererRuntime.imageSurfaces.values()].map((surface) => surface.pending)
-  ]);
-  completion.catch(() => {
-  });
-  return { generation, completion };
-}
-function startupCoreRuntimeProjection(projectProjection, interfaceState, frontendActions) {
-  applyDashboardZoomProjection(projectProjection, interfaceState);
-  const clickController = installSlotClickControllerProjection(frontendActions), dropController = installDashboardFileDropControllerProjection(), presentation = renderDashboardProjection(projectProjection, interfaceState, frontendActions);
-  applySlotStyleProjection(projectProjection);
-  auditSuppliedRendererContracts(projectProjection, interfaceState);
-  return { clickController, dropController, presentation };
-}
-function auditSuppliedRendererContracts(projectProjection, interfaceState) {
-  const slots = /* @__PURE__ */ new Map();
-  for (const slot of projectProjection.visibleSlots) {
-    if (slots.has(slot.id) || slot.hidden || slot.content.chart != null && slot.chart?.id !== slot.content.chart || slot.imageView && slot.imageView.slotId !== slot.id)
-      throw Error("renderer input의 visible slot reference가 유효하지 않습니다.");
-    slots.set(slot.id, slot);
-  }
-  for (const label of projectProjection.orderedSlotLabels)
-    if (!slots.has(label.slotId)) throw Error("renderer input의 label reference가 유효하지 않습니다.");
-  if (interfaceState.selectedSlotId != null && !slots.has(interfaceState.selectedSlotId))
-    throw Error("renderer input의 selected slot reference가 유효하지 않습니다.");
-}
-function renderDashboardProjection(projectProjection, interfaceState, frontendActions = {}) {
-  const generation = ++rendererRuntime.dashboardRenderGeneration, dashboard = $("dashboard"), geometry = projectProjection.geometry, scale = geometry.scale, slots = projectProjection.visibleSlots, labels = new Map(projectProjection.orderedSlotLabels.map((label) => [label.slotId, label.displayLabel]));
-  applyUiPaletteProjection(projectProjection.appearance.uiPalette);
-  const discard = (record) => {
+function discardGraph(record) {
+  if (rendererRuntime.graphInstances.get(record.slotId) === record)
     rendererRuntime.graphInstances.delete(record.slotId);
-    record.host.remove();
-    record.plot.remove();
+  record.card.remove();
+  try {
+    Plotly.purge(record.plot);
+  } catch {
+  }
+  record.pending?.finally(() => {
     try {
       Plotly.purge(record.plot);
     } catch {
     }
-    record.pending?.finally(() => {
-      try {
-        Plotly.purge(record.plot);
-      } catch {
-      }
-    }).catch(() => {
-    });
-  };
+  }).catch(() => {
+  });
+}
+function cleanupSurfaceOwners(slots) {
+  const byId = new Map(slots.map((slot) => [slot.id, slot]));
   for (const record of rendererRuntime.graphInstances.values()) {
-    const slot = slots.find((slot2) => slot2.id === record.slotId);
-    if (!slot || slot.content.contentType === "image" || !slot.figure || slot.content.chart !== record.chartId || !hasLiveGraphSurface(record)) discard(record);
+    const slot = byId.get(record.slotId);
+    if (!slot || slot.contentType !== "graph" || slot.chartId !== record.chartId || !hasLiveGraphSurface(record))
+      discardGraph(record);
   }
+  for (const surface of rendererRuntime.imageSurfaces.values()) {
+    const slot = byId.get(surface.slotId);
+    if (!slot || slot.contentType !== "image" || slot.imageId !== surface.imageId || !hasLiveImageSurface(surface))
+      releaseImageSurface(surface);
+  }
+}
+function canReuseGrid(projection) {
+  const host = $("dashboard"), frames = [...host.children].filter((child) => child.classList.contains("slot"));
+  return Number(host.style.getPropertyValue("--grid-cols")) === projection.layout.gridCols && Number(host.style.getPropertyValue("--grid-rows")) === projection.layout.gridRows && frames.length === projection.visibleSlots.length && projection.visibleSlots.every((slot) => {
+    const frame = frames.find((frame2) => Number(frame2.dataset.slot) === slot.id);
+    return frame && Number(frame.style.gridRowStart) === slot.row && Number(frame.style.gridColumnStart) === slot.col && frame.style.gridRowEnd === `span ${slot.rowSpan}` && frame.style.gridColumnEnd === `span ${slot.colSpan}`;
+  });
+}
+function hasContentFrames() {
+  return rendererRuntime.graphInstances.size > 0 || rendererRuntime.imageSurfaces.size > 0;
+}
+function wholeRenderingRequired() {
+  status("레이아웃이 변경되었습니다. 렌더 버튼으로 전체 작업영역을 갱신해 주세요.");
+  return { outcome: "whole-rendering-required" };
+}
+function scaleSurface(surface) {
+  if (!(surface.baseWidth > 0 && surface.baseHeight > 0)) return;
+  const content = surface.host.querySelector(":scope > .slot-content"), pixels = surface.card || surface.frame, sx = content.clientWidth / surface.baseWidth, sy = content.clientHeight / surface.baseHeight;
+  if (!(sx > 0 && sy > 0)) return;
+  Object.assign(pixels.style, {
+    width: `${surface.baseWidth}px`,
+    height: `${surface.baseHeight}px`,
+    transformOrigin: "0 0",
+    transform: `translate(0px, 0px) scale(${sx}, ${sy})`
+  });
+}
+function updateSelectionDecoration(interfaceState) {
+  for (const host of $("dashboard").querySelectorAll(":scope > .slot")) {
+    const selected = Number(host.dataset.slot) === interfaceState.selectedSlotId;
+    host.classList.toggle("selected", selected);
+    presentSlotSelection(host, selected, host.classList.contains("empty"));
+    const record = rendererRuntime.graphInstances.get(Number(host.dataset.slot));
+    if (record) record.plot.style.pointerEvents = selected ? "auto" : "none";
+  }
+}
+function applyWorkspaceTransform(projection, interfaceState) {
+  cleanupSurfaceOwners(projection.visibleSlots);
+  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
+  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  for (const surface of [...rendererRuntime.graphInstances.values(), ...rendererRuntime.imageSurfaces.values()])
+    scaleSurface(surface);
+  updateSelectionDecoration(interfaceState);
+  syncDashboardCaptionWidth();
+  return $("dashboard");
+}
+function clearWorkspacePresentation() {
+  rendererRuntime.workspaceLifetime++;
+  for (const record of rendererRuntime.graphInstances.values()) discardGraph(record);
   for (const surface of rendererRuntime.imageSurfaces.values()) releaseImageSurface(surface);
-  const frameView = renderDashboardFrame(dashboard, projectProjection.layout, slots, geometry);
-  $("dashboardCaption")?.style.setProperty(
-    "--slot-border-color",
-    projectProjection.layout.slotStyle.showBorders ? "var(--ui-color)" : "transparent"
-  );
-  for (const slot of slots) {
-    const graph = slot.content.contentType !== "image" && slot.figure, image = !graph && slot.imageView, selected = slot.id === interfaceState.selectedSlotId;
-    let record = rendererRuntime.graphInstances.get(slot.id);
-    const { frame: host, content, decoration } = frameView.slots.get(slot.id);
-    host.className = "slot" + (!graph && !image ? " empty" : "") + (selected ? " selected" : "");
-    if (graph && !record) {
+  rendererRuntime.slotOperations.clear();
+  rendererRuntime.slotPending.clear();
+  $("dashboard").replaceChildren();
+  $("dashboardCaption")?.classList.add("hidden");
+}
+function presentSlotLabels(slot, projection) {
+  const host = $("dashboard").querySelector(`:scope > .slot[data-slot="${slot.id}"]`), decoration = host.querySelector(":scope > .slot-decoration");
+  decoration.querySelectorAll(":scope > .slot-label, :scope > .slot-caption-view").forEach((label2) => label2.remove());
+  if (projection.annotations.captions.enabled && slot.caption !== null && slot.caption !== "") {
+    const caption = document.createElement("span"), settings2 = projection.annotations.captions.settings;
+    caption.className = "slot-caption-view";
+    caption.textContent = slot.caption;
+    Object.assign(caption.style, {
+      position: "absolute",
+      bottom: "0",
+      left: "0",
+      right: "0",
+      fontFamily: settings2.fontFamily,
+      fontSize: `${settings2.fontSize * projection.geometry.scale}px`,
+      lineHeight: String(settings2.lineHeight),
+      whiteSpace: "pre-wrap"
+    });
+    decoration.append(caption);
+  }
+  const entry = projection.orderedSlotLabels?.find((label2) => label2.slotId === slot.id), settings = projection.annotations?.labels.settings, scale = projection.geometry.scale;
+  if (!projection.annotations?.labels.enabled || !entry) return;
+  const label = document.createElement("span");
+  label.className = "slot-label";
+  label.textContent = entry.displayLabel;
+  label.setAttribute("aria-label", "슬롯 식별자");
+  Object.assign(label.style, {
+    left: `${settings.x * scale}px`,
+    top: `${settings.y * scale}px`,
+    fontFamily: settings.fontFamily,
+    fontSize: `${settings.fontSize * scale}px`
+  });
+  decoration.append(label);
+}
+function presentSlotContent(slot, interfaceState, geometry, frontendActions) {
+  const host = $("dashboard").querySelector(`:scope > .slot[data-slot="${slot.id}"]`);
+  if (!host) return Promise.resolve();
+  const content = host.querySelector(":scope > .slot-content"), decoration = host.querySelector(":scope > .slot-decoration"), graph = slot.content.contentType === "graph" && slot.figure, image = !graph && slot.imageView, lifetime = rendererRuntime.workspaceLifetime, operation = (rendererRuntime.slotOperations.get(slot.id) || 0) + 1;
+  rendererRuntime.slotOperations.set(slot.id, operation);
+  let record = rendererRuntime.graphInstances.get(slot.id), surface = rendererRuntime.imageSurfaces.get(slot.id);
+  if (record && (!graph || record.chartId !== slot.content.chart)) {
+    discardGraph(record);
+    record = null;
+  }
+  if (surface) {
+    releaseImageSurface(surface);
+    surface = null;
+  }
+  host.classList.toggle("empty", !graph && !image);
+  if (graph) {
+    if (!record) {
       content.replaceChildren();
       const card = document.createElement("div"), plot = document.createElement("div");
       card.className = "chart-card";
@@ -15148,79 +15113,121 @@ function renderDashboardProjection(projectProjection, interfaceState, frontendAc
       plot.id = `plot-${slot.id}`;
       card.append(plot);
       content.append(card);
-      record = { host, plot, slotId: slot.id, chartId: slot.content.chart, generation, pending: Promise.resolve() };
+      record = { host, card, plot, slotId: slot.id, chartId: slot.content.chart, pending: Promise.resolve() };
       rendererRuntime.graphInstances.set(slot.id, record);
-    } else if (!graph) {
-      content.replaceChildren();
-      if (image) {
-        const frame = document.createElement("div"), element = document.createElement("img"), settings = image.settings;
-        frame.className = "slot-image-frame";
-        element.className = "slot-image";
-        element.alt = image.name || "슬롯 이미지";
-        element.src = image.src;
-        if (settings.fit === "manual") {
-          element.classList.add("manual");
-          element.style.width = `${settings.scale}%`;
-          element.style.left = `${settings.x}%`;
-          element.style.top = `${settings.y}%`;
-        } else element.style.objectFit = settings.fit;
-        frame.append(element);
-        content.append(frame);
-        const surface = { host, element, slotId: slot.id, imageInput: image, generation, pending: null };
-        rendererRuntime.imageSurfaces.set(slot.id, surface);
-        const current = () => generation === rendererRuntime.dashboardRenderGeneration && rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image && hasLiveImageSurface(surface) && element.parentElement === frame;
-        surface.pending = Promise.resolve().then(async () => {
-          if (!current()) {
-            releaseImageSurface(surface);
-            return;
-          }
-          try {
-            await element.decode();
-            if (!current()) releaseImageSurface(surface);
-          } catch (error) {
-            const wasCurrent = current();
-            releaseImageSurface(surface);
-            if (wasCurrent) throw error;
-          }
+    }
+    presentSuppliedGraph(
+      record,
+      slot,
+      slot.id === interfaceState.selectedSlotId,
+      lifetime,
+      operation,
+      geometry.scale,
+      frontendActions
+    );
+  } else {
+    content.replaceChildren();
+    if (image) {
+      const frame = document.createElement("div"), element = document.createElement("img"), settings = image.settings;
+      frame.className = "slot-image-frame";
+      element.className = "slot-image";
+      element.alt = image.name || "슬롯 이미지";
+      if (settings.fit === "manual") {
+        element.classList.add("manual");
+        Object.assign(element.style, {
+          width: `${settings.scale}%`,
+          left: `${settings.x}%`,
+          top: `${settings.y}%`
         });
-      }
+      } else element.style.objectFit = settings.fit;
+      frame.append(element);
+      content.append(frame);
+      surface = {
+        host,
+        frame,
+        element,
+        slotId: slot.id,
+        imageId: slot.content.imageId,
+        imageInput: image,
+        lifetime,
+        operation,
+        baseWidth: content.clientWidth,
+        baseHeight: content.clientHeight
+      };
+      rendererRuntime.imageSurfaces.set(slot.id, surface);
+      const current = () => lifetime === rendererRuntime.workspaceLifetime && rendererRuntime.slotOperations.get(slot.id) === operation && rendererRuntime.imageSurfaces.get(slot.id) === surface && surface.imageInput === image && hasLiveImageSurface(surface);
+      surface.pending = (rendererRuntime.slotPending.get(slot.id) || Promise.resolve()).catch(() => {
+      }).then(async () => {
+        if (!current()) {
+          releaseImageSurface(surface);
+          return;
+        }
+        element.src = image.src;
+        try {
+          await element.decode();
+          if (current()) scaleSurface(surface);
+          else releaseImageSurface(surface);
+        } catch (error) {
+          const live = current();
+          releaseImageSurface(surface);
+          if (live) throw error;
+        }
+      });
+      trackSlotPending(slot.id, surface.pending);
     }
-    decoration.replaceChildren();
-    if (graph || image) {
-      const tab = document.createElement("button");
-      tab.className = "slot-tab";
-      tab.type = "button";
-      tab.draggable = true;
-      tab.setAttribute("aria-label", "슬롯 이동 및 선택");
-      tab.style.pointerEvents = "auto";
-      tab.innerHTML = '<span class="slot-tab-shape"></span>';
-      decoration.append(tab);
-    }
-    if (projectProjection.annotations.labels.enabled && labels.has(slot.id)) {
-      const label = document.createElement("span"), settings = projectProjection.annotations.labels.settings;
-      label.className = "slot-label";
-      label.textContent = labels.get(slot.id);
-      label.setAttribute("aria-label", "슬롯 식별자");
-      label.style.left = `${settings.x * scale}px`;
-      label.style.top = `${settings.y * scale}px`;
-      label.style.fontFamily = settings.fontFamily;
-      label.style.fontSize = `${settings.fontSize * scale}px`;
-      decoration.append(label);
-    }
-    presentSlotSelection(host, selected, !graph && !image);
-    dashboard.append(host);
-    if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
   }
-  syncDashboardCaptionProjection(projectProjection.annotations.captions, scale);
+  let tab = decoration.querySelector(":scope > .slot-tab");
+  if ((graph || image) && !tab) {
+    tab = document.createElement("button");
+    tab.className = "slot-tab";
+    tab.type = "button";
+    tab.draggable = true;
+    tab.setAttribute("aria-label", "슬롯 이동 및 선택");
+    tab.style.pointerEvents = "auto";
+    tab.innerHTML = '<span class="slot-tab-shape"></span>';
+    decoration.append(tab);
+  } else if (!graph && !image) tab?.remove();
+  presentSlotSelection(host, slot.id === interfaceState.selectedSlotId, !graph && !image);
+  const pending = record?.pending || surface?.pending || Promise.resolve();
+  pending.catch(() => {
+  });
+  return pending;
+}
+function renderDashboardProjection(projection, interfaceState, frontendActions = {}) {
+  cleanupSurfaceOwners(projection.visibleSlots);
+  updateSelectionDecoration(interfaceState);
+  const slot = projection.targetSlot;
+  if (interfaceState.selectedSlotId === null || !slot || slot.id !== interfaceState.selectedSlotId) return null;
+  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
+  if (!hasContentFrames()) renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  const completion = presentSlotContent(slot, interfaceState, projection.geometry, frontendActions);
+  presentSlotLabels(slot, projection);
+  return { completion };
+}
+function renderWholeWorkspaceProjection(projection, interfaceState, frontendActions = {}) {
+  if (projection.operation !== "whole-workspace") throw Error("전체 렌더링에는 명시적 whole-workspace 조회가 필요합니다.");
+  cleanupSurfaceOwners(projection.visibleSlots);
+  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
+  const completions = projection.contentSlots.map((slot) => {
+    const completion2 = presentSlotContent(slot, interfaceState, projection.geometry, frontendActions);
+    presentSlotLabels(slot, projection);
+    return completion2;
+  });
+  applyUiPaletteProjection(projection.appearance.uiPalette);
+  syncDashboardCaptionProjection(projection.annotations.captions, projection.geometry.scale);
   syncDashboardCaptionWidth();
-  installResizeObserver(frontendActions);
-  const completion = Promise.all([
-    ...[...rendererRuntime.graphInstances.values()].map((record) => record.pending),
-    ...[...rendererRuntime.imageSurfaces.values()].map((surface) => surface.pending)
-  ]);
+  const completion = Promise.all(completions);
   completion.catch(() => {
   });
-  return { generation, completion };
+  return { completion };
+}
+function updateGraphViewProjection(projection, interfaceState, frontendActions = {}) {
+  return renderDashboardProjection(projection, interfaceState, frontendActions);
+}
+function startupCoreRuntimeProjection(projection, interfaceState, frontendActions) {
+  const clickController = installSlotClickControllerProjection(frontendActions), dropController = installDashboardFileDropControllerProjection(), presentation = applyWorkspaceTransform(projection, interfaceState);
+  installResizeObserver(frontendActions);
+  return { clickController, dropController, presentation };
 }
 function plotlyConfig(chart, extra = {}) {
   return {
@@ -15911,10 +15918,8 @@ async function downloadExportPayload(payload) {
     }
   }
 }
-function applyDashboardZoomProjection(projection, interfaceState, resize = true) {
-  renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
-  syncDashboardCaptionWidth();
-  if (resize) schedulePlotResize();
+function applyDashboardZoomProjection(projection, interfaceState) {
+  return applyWorkspaceTransform(projection, interfaceState);
 }
 function readDashboardRenderedWidth() {
   const width = $("dashboard")?.getBoundingClientRect().width;
@@ -15940,13 +15945,12 @@ function applyUiPaletteProjection(palette) {
 var rendererRuntime = {
   graphInstances: /* @__PURE__ */ new Map(),
   imageSurfaces: /* @__PURE__ */ new Map(),
-  dashboardObserver: null,
   graphAreaObserver: null,
-  resizePending: false,
-  resizeRequests: [],
   resizeObserverInstalled: false,
   programmaticPlotlyRelayout: /* @__PURE__ */ new WeakMap(),
-  dashboardRenderGeneration: 0,
+  workspaceLifetime: 0,
+  slotOperations: /* @__PURE__ */ new Map(),
+  slotPending: /* @__PURE__ */ new Map(),
   slotDragSourceId: null,
   slotDragSuppressClick: false
 };
@@ -16359,26 +16363,20 @@ var interfaceRuntime = {
 // sourcecode/application/public_api/layout_annotations.js
 function swapSlots(sourceSlotId, targetSlotId) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
-  if (result.committed) renderDashboard(projection, frontendState);
   return result.committed;
 }
 function setSelectedSlot(slotId, direction = "ui-to-fsm", pendingContentType = null) {
-  const [state, , projection] = dispatchSlotSelection(slotId, pendingContentType, direction);
-  if (projection === null) return state;
-  updateGraphView(projection, state);
-  schedulePlotResize();
+  const [state] = dispatchSlotSelection(slotId, pendingContentType, direction);
   return state;
 }
 function mergeSlots(slotIds = []) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_MERGED", { slotIds });
   if (!result.committed) return false;
-  renderDashboard(projection, frontendState);
   return readLayoutApiState();
 }
 function splitSlots(slotIds = []) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SPLIT", { slotIds });
   if (!result.committed) return false;
-  renderDashboard(projection, frontendState);
   return readLayoutApiState();
 }
 function insertEmptyImageIntoSelectedSlot() {
@@ -16391,19 +16389,16 @@ function insertEmptyImageIntoSelectedSlot() {
   }, [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_IMPORTED", { slotId, operation: "images.insertEmpty", imageInput });
   if (!result.committed) return null;
   const path = result.changed.assets.find((asset) => asset.role === "created" && asset.kind === "image").path, target = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path }).target;
-  renderDashboard(projection, frontendState);
   return target;
 }
 function setSlotContentType(slotId, contentType) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOT_TYPE_CHANGED", { slotId, contentType });
-  if (result.committed) renderDashboard(projection, frontendState);
   return null;
 }
 function applyImageSettingsFromValues(slotId, values = {}) {
   if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("SLOT_IMAGE_SETTINGS_CHANGED", result, frontendState, projection);
   appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
   return appFSM.query("project-api", { operation: "images.readEditor", slotId });
 }
@@ -16415,7 +16410,6 @@ function readSelectedSlotApi() {
 }
 function resetSlotApi(slotId) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_RESET", { slotIds: [slotId] });
-  if (result.committed) renderDashboard(projection, frontendState);
   return null;
 }
 function prepareDashboardFileDrop(slotId) {
@@ -16424,7 +16418,6 @@ function prepareDashboardFileDrop(slotId) {
   if (interfaceFSM.readState().selectedSlotId === slotId) return true;
   const [state, , projection] = dispatchSlotSelection(slotId, null, "model-to-fsm");
   if (projection === null || state.selectedSlotId !== slotId) return false;
-  updateGraphView(projection, state);
   return true;
 }
 function finishDashboardFileDrop() {
@@ -16442,7 +16435,6 @@ function setAnnotationEnabled(kind, enabled) {
     appFSM.send("LABEL_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
   else
     appFSM.send("CAPTION_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
-  renderDashboard();
   debugLog(`annotation:${kind}`, { enabled });
   appFSM.notify(
     kind === "label" ? "labels" : "captions",
@@ -16450,7 +16442,6 @@ function setAnnotationEnabled(kind, enabled) {
   );
 }
 function applyCaptionSettings(notify = true) {
-  syncDashboardCaption();
   debugLog("annotation:caption-settings", {
     name: activeProject.captionName,
     bold: activeProject.captionNameBold,
@@ -16468,7 +16459,6 @@ function setCaptionsApiEnabled(enabled) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { enabled });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  applyCommittedDashboardProjection("CAPTION_SETTINGS_CHANGED", result, frontendState, projection);
   debugLog("annotation:caption", { enabled: state.enabled });
   appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
   return state;
@@ -16480,7 +16470,6 @@ function setGlobalCaptionText(text) {
   });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
   return state;
 }
 function setSlotCaptionText(slotId, text) {
@@ -16494,14 +16483,12 @@ function insertCaptionsApiSlotCaptions(slotIds = null) {
   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_CAPTIONS_INSERTED", { slotIds });
   if (!result.committed) return false;
   let state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
   return state;
 }
 function setCaptionsApiName(name) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
   appFSM.notify("captions", "CAPTION_NAME_CHANGED");
   return state;
 }
@@ -16509,7 +16496,6 @@ function setCaptionsApiNameBold(bold) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
   appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
   return state;
 }
@@ -16517,7 +16503,6 @@ function setCaptionsApiSettings(patch = {}) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  syncDashboardCaption(state, projection, frontendState);
   appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
   return state;
 }
@@ -16549,7 +16534,6 @@ function readLabelsApiState() {
 function setLabelsApiEnabled(enabled) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
   debugLog("annotation:label", { enabled });
   appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
   return readLabelsApiState();
@@ -16557,7 +16541,6 @@ function setLabelsApiEnabled(enabled) {
 function setLabelsApiSettings(patch = {}) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_SETTINGS_CHANGED", result, frontendState, projection);
   debugLog("mantine:label-settings", { ...patch });
   appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
   return readLabelsApiState();
@@ -16565,7 +16548,6 @@ function setLabelsApiSettings(patch = {}) {
 function updateLabelsApiPosition(x, y, eventName = null) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { x, y });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
   if (eventName) {
     debugLog("mantine:label-settings", { x, y });
     appFSM.notify("labels", eventName);
@@ -16583,7 +16565,6 @@ function finishLabelsApiPositionInteraction() {
 function resetLabelsApiPosition() {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LABEL_POSITION_CHANGED", result, frontendState, projection);
   appFSM.notify("labels", "LABEL_POSITION_RESET");
   return readLabelsApiState();
 }
@@ -16603,21 +16584,19 @@ function readLayoutApiState(previewWidth = null) {
 function setLayoutApiStyle(patch = {}) {
   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("LAYOUT_STYLE_CHANGED", result, frontendState, projection);
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiState();
 }
 function setLayoutApiGrid(rows, cols) {
   const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("GRID_LAYOUT_CHANGED", result, frontendState, projection);
   appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiState();
 }
 function setLayoutApiZoom(value2) {
   const session = interfaceFSM.readState();
   const state = appFSM.send("SET_DASHBOARD_ZOOM", { value: value2 });
-  if (state.revision !== session.revision) renderDashboard();
+  if (state.revision !== session.revision) transformWorkspace();
   return readLayoutApiState();
 }
 function commitLayoutApiZoom() {
@@ -16627,7 +16606,7 @@ function commitLayoutApiZoom() {
 function resetLayoutApiZoom() {
   const session = interfaceFSM.readState();
   const state = appFSM.send("RESET_DASHBOARD_ZOOM");
-  if (state.revision !== session.revision) renderDashboard();
+  if (state.revision !== session.revision) transformWorkspace();
   return readLayoutApiState();
 }
 
@@ -16643,7 +16622,7 @@ function renderDashboard(projection = dispatchProjectQuery("renderer"), state = 
   return renderDashboardProjection(projection, state, dashboardFrontendActions());
 }
 function startupCoreRuntime() {
-  const projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState(), actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } }, runtime = startupCoreRuntimeProjection(projection, state, actions);
+  const projection = dispatchProjectQuery("renderer", { operation: "workspace-structure" }), state = interfaceFSM.readState(), actions = { ...dashboardFrontendActions(), slots: { select: setSelectedSlot, swap: swapSlots } }, runtime = startupCoreRuntimeProjection(projection, state, actions);
   return runtime;
 }
 function applyCommittedDashboardProjection(event, result, state, projection) {
@@ -16652,7 +16631,7 @@ function applyCommittedDashboardProjection(event, result, state, projection) {
 }
 function dashboardFrontendActions() {
   return {
-    refreshDashboard: renderDashboard,
+    transformWorkspace,
     graphRangesChanged(slotId, chartId, ranges) {
       const current = readBackendProjection("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
       if (!current || current.chartId !== chartId || !current.editable) return false;
@@ -16679,13 +16658,22 @@ function syncDashboardCaption(view, projection = dispatchProjectQuery("renderer"
 function applyReferenceGeometry(element) {
   return applyReferenceGeometryProjection(element, dispatchProjectQuery("renderer").geometry);
 }
+function transformWorkspace() {
+  const projection = dispatchProjectQuery("renderer", { operation: "workspace-structure" });
+  return applyWorkspaceTransform(projection, interfaceFSM.readState());
+}
+function renderWholeWorkspace() {
+  if (interfaceFSM.readState().lifecycle !== "ready") return null;
+  const projection = dispatchProjectQuery("renderer", { operation: "whole-workspace" });
+  return renderWholeWorkspaceProjection(projection, interfaceFSM.readState(), dashboardFrontendActions()).completion;
+}
 function applySlotStyle(_fromControls = false, notify = true) {
-  const result = applySlotStyleProjection(dispatchProjectQuery("renderer"));
+  const result = transformWorkspace();
   if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return result;
 }
-function applyDashboardZoom(resize = true) {
-  return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
+function applyDashboardZoom() {
+  return transformWorkspace();
 }
 function syncDashboardZoomDisplay() {
   return Math.round(interfaceFSM.readState().dashboardZoomIntent);
@@ -16698,17 +16686,24 @@ function updateFileAvailability() {
 function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
-  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), projectResult = null;
+  let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), commandTuple = null;
   if (state.selectedSlotId !== null && pendingContentType !== null) {
     const context = readBackendProjection("slot-selection-context", { slotId: state.selectedSlotId });
-    if (context?.empty && context.contentType !== pendingContentType) {
-      [projectResult, state] = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
+    if (context?.empty && context.contentType !== pendingContentType)
+      commandTuple = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
         slotId: state.selectedSlotId,
         contentType: pendingContentType
       });
-    }
   }
-  return [state, projectResult, dispatchProjectQuery("renderer", { frontendState: state })];
+  state = interfaceFSM.readState();
+  updateSelectionDecoration(state);
+  if (state.selectedSlotId === null)
+    return [state, commandTuple?.[0] ?? null, dispatchProjectQuery("renderer", { operation: "workspace-structure" })];
+  if (commandTuple && commandTuple[1].selectedSlotId === state.selectedSlotId)
+    return [state, commandTuple[0], commandTuple[2]];
+  const projection = dispatchProjectQuery("renderer", { operation: "selected-slot" });
+  updateGraphView(projection, state);
+  return [state, commandTuple?.[0] ?? null, projection];
 }
 function updateGraphView(projection = dispatchProjectQuery("renderer"), state = interfaceFSM.readState()) {
   debugLog("updateGraphView", { selectedSlotId: state.selectedSlotId });
@@ -16724,19 +16719,17 @@ function applyUiPalette(palette, notify = true) {
 }
 function applyCurrentUiPalette(notify = true) {
   applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
-  return renderDashboard();
+  return null;
 }
 function applyUiPaletteValues(values, notify = true) {
   const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
   if (!result.committed) return false;
-  applyCommittedDashboardProjection("APPEARANCE_CHANGED", result, state, projection);
   if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
   return readAppearanceApiPalette();
 }
 function renderProjectObject(projection, state) {
-  const presentation = renderDashboard(projection, state);
   updateFileAvailability();
-  return presentation;
+  return projection;
 }
 var BACKEND_REFERENCE_EVENTS = /* @__PURE__ */ new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
 var PROJECT_COMMANDS = new Set(Object.keys(PROJECT_COMMAND_ACTIONS));
@@ -16744,6 +16737,8 @@ function dispatchProjectQuery(query, payload = {}) {
   const request = { ...payload };
   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
     const state = interfaceFSM.readState(), layout2 = readBackendProjection("project-api", { operation: "layout.readState" });
+    request.operation ??= "selected-slot";
+    if (request.operation === "selected-slot") request.slotId = state.selectedSlotId;
     request.frontendState = state;
     request.width = layout2.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
   }
@@ -16783,7 +16778,22 @@ function dispatchProjectCommand(event, payload = {}) {
   if (!PROJECT_COMMANDS.has(event)) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
   const result = projectEFSM.send(event, payload), frontendBefore = interfaceFSM.readState();
   if (!result.committed) return [result, frontendBefore, null];
-  const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore), state = interfaceFSM.reconcileProjectResult(event, reconciliationInput), projection = dispatchProjectQuery("renderer", { frontendState: state, mutationResult: result });
+  const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore), state = interfaceFSM.reconcileProjectResult(event, reconciliationInput), effect = reconciliationInput.projectionEffect ?? result.projectionEffect ?? {};
+  if (event === "PROJECT_LOADED") clearWorkspacePresentation();
+  if (event === "PROJECT_LOADED" || event === "APPEARANCE_CHANGED")
+    applyUiPaletteProjection(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
+  const structural = [
+    "PROJECT_LOADED",
+    "GRID_LAYOUT_CHANGED",
+    "SLOTS_MERGED",
+    "SLOTS_SPLIT",
+    "SLOTS_SWAPPED",
+    "LAYOUT_STYLE_CHANGED"
+  ].includes(event), skipContent = structural || effect.pathOnly && !effect.referencesRemoved || event === "EXPORT_SETTINGS_CHANGED", projection = dispatchProjectQuery("renderer", {
+    operation: skipContent || state.selectedSlotId === null ? "workspace-structure" : "selected-slot"
+  });
+  if (structural) applyWorkspaceTransform(projection, state);
+  else if (!skipContent) applyCommittedDashboardProjection(event, result, state, projection);
   return [result, state, projection];
 }
 var appFSM = Object.freeze({
@@ -16823,7 +16833,7 @@ function dashboardProjectionEffect(event, payload = {}) {
   return "NONE";
 }
 function dispatchDashboardAffectingEvent(event, payload = {}) {
-  const [result, state, projection] = dispatchProjectCommand(event, payload), projectionEffect = applyCommittedDashboardProjection(event, result, state, projection);
+  const [result, state, projection] = dispatchProjectCommand(event, payload), projectionEffect = result.committed ? projection.operation : "NONE";
   return { state, payload, projectionEffect };
 }
 function activateChartModel(id) {
@@ -16867,7 +16877,6 @@ function graphEditorObjectValues(chartId, index, values = {}) {
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
   return chart;
 }
 function setGraphObjectValuesApi(index, values = {}) {
@@ -16883,7 +16892,6 @@ function graphEditorAdd(slotId, csvId) {
   const event = slot.content.chart == null ? "SLOT_DATA_CONNECTED" : "GRAPH_OBJECTS_REPLACED", [result, state, projection] = dispatchProjectCommand(event, { slotId, csvId, operation: "graphs.addObject" });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", frontendState: { selectedSlotId: slotId } }).chart;
-  renderDashboard(projection, state);
   return chart;
 }
 function addGraphObjectApi(csvId) {
@@ -16905,7 +16913,6 @@ function graphEditorMove(chartId, from, to) {
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
   return chart;
 }
 function graphEditorDelete(chartId, index) {
@@ -16916,7 +16923,6 @@ function graphEditorDelete(chartId, index) {
   });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
   return chart;
 }
 function moveGraphObjectApi(from, to) {
@@ -16937,14 +16943,12 @@ function graphEditorHeaderLines(csvId, value2) {
   const [result, state, projection] = dispatchProjectCommand("DATA_OBJECT_REPLACED", { csvId, headerLines: value2 });
   if (!result.committed) return result;
   const updated = result.changed.assets.find((asset) => asset.kind === "csv" && asset.role === "updated"), read = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: updated.path });
-  renderDashboard(projection, state);
   return read.target.headerLines;
 }
 function graphEditorSetEditable(slotId, chartId, editable) {
   const [result, state, projection] = dispatchProjectCommand("CHART_MODEL_REPLACED", { slotId, chartId, editable });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
   return chart.editor.editable;
 }
 function setGraphEditableApi(editable = null) {
@@ -16978,7 +16982,6 @@ async function importSelectedGraphFile(file, slotId) {
     operation: "graphs.readData",
     frontendState: { selectedSlotId: slotId }
   }).chart;
-  renderDashboard(projection, state);
   updateFileAvailability();
   status(`${file.name}을 슬롯에 불러왔습니다.`);
   return chart;
@@ -16987,7 +16990,6 @@ function graphEditorUpdateLayout(slotId, chartId, values) {
   const [result, state, projection] = dispatchProjectCommand("CHART_LAYOUT_CHANGED", { slotId, chartId, settings: values });
   if (!result.committed) return result;
   const output = appFSM.query("project-api", { operation: "graphs.readLayout", selectedSlotId: slotId });
-  renderDashboard(projection, state);
   return output;
 }
 function updateGraphLayoutApi(values = {}) {
@@ -16998,7 +17000,6 @@ function graphEditorApplyPalette(chartId, colors) {
   const [result, state, projection] = dispatchProjectCommand("GRAPH_OBJECTS_REPLACED", { chartId, operation: "graphs.applyPalette", colors });
   if (!result.committed) return result;
   const chart = appFSM.query("project-api", { operation: "graphs.readData", chartId }).chart;
-  renderDashboard(projection, state);
   return chart;
 }
 function applyGraphPaletteApi(colors) {
@@ -17078,7 +17079,6 @@ async function importProjectFilesToDirectory(files, directory, planImport) {
   if (!result.committed) return result;
   const imported = readImportedAssets(result);
   updateFileAvailability();
-  renderDashboard(projection, state);
   status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
   return imported;
 }
@@ -17135,7 +17135,6 @@ function deleteProjectAsset(target) {
   });
   if (!result.committed) return null;
   const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
-  if (count) renderDashboard(projection, state);
   status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
   return null;
 }
@@ -17154,7 +17153,6 @@ function moveProjectNode(plan, useUniqueName = false) {
   });
   if (!result.committed) return null;
   const path = result.changed.movedPathTo, trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
-  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result, state, projection);
   status(trashed ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.` : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
   return immutableProjectCopy({ path, trashed });
 }
@@ -17168,7 +17166,6 @@ function createProjectDirectory(parent, name) {
 function emptyProjectTrash() {
   const [result, state, projection] = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
   if (!result.committed) return null;
-  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result, state, projection);
   updateFileAvailability();
   status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
   return null;
@@ -17190,7 +17187,6 @@ async function importProjectFileToSlot(file, slotId, choosePlan) {
   const files = await prepareCopiedImportFiles([file]), [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
   if (!result.committed) return result;
   const imported = readImportedAssets(result)[0];
-  renderDashboard(projection, state);
   updateFileAvailability();
   return imported;
 }
@@ -17252,6 +17248,7 @@ function setProjectName(value2, trim = false) {
 }
 function createPublicApi() {
   return Object.freeze({
+    workspace: Object.freeze({ render: renderWholeWorkspace }),
     project: Object.freeze({
       readName: () => appFSM.query("project-api", { operation: "project.readName" }),
       setName: setProjectName,
@@ -18034,6 +18031,7 @@ function mountMantineUi() {
         },
         selectedTargetText(state)
       ),
+      React.createElement(Button, { disabled: state.lifecycle !== "ready", "aria-label": "작업영역 전체 렌더링", onClick: () => window.FastFigureApi.workspace.render() }, "렌더"),
       React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트")
     );
   }
@@ -20566,7 +20564,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         "--ff-renderer-navbar-width",
         navbarCollapsed ? "0px" : `${navbarWidth}px`
       );
-      requestAnimationFrame(() => schedulePlotResize());
+      requestAnimationFrame(() => transformWorkspace());
     }, [navbarWidth, navbarCollapsed]);
     const toggleNavbar = () => {
       setNavbarCollapsed((collapsed) => !collapsed);

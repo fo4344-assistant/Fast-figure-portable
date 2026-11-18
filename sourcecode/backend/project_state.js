@@ -473,18 +473,38 @@ export function readBackendProjection(kind, request = {}) {
       (kind === "renderer" && request.operation === "slot-image")) {
     return immutableProjectCopy(buildBackendImageRead(activeProject._state, request.slotId));
   }
-  if (kind === "renderer" ||
-      (kind === "export" && ["print.save", "print.capture"].includes(request.operation))) {
+  if (kind === "renderer") {
+    const source = activeProject._state, operation = request.operation ?? "selected-slot";
+    if (!["workspace-structure", "selected-slot", "whole-workspace"].includes(operation))
+      throw Error("알 수 없는 workspace 조회 범위입니다.");
+    if (!Number.isFinite(request.width) || request.width <= 0)
+      throw Error("renderer 너비는 유한한 양수여야 합니다.");
+    const output = {
+      operation, layout: structuredClone(source.layout),
+      geometry: dashboardGeometryInProject(source, request.width),
+      visibleSlots: source.slots.filter(slot => !slot.hidden).map(slot => ({
+        id: slot.id, row: slot.row, col: slot.col, rowSpan: slot.rowSpan, colSpan: slot.colSpan,
+        contentType: slot.content.contentType, chartId: slot.content.chart, imageId: slot.content.imageId,
+      })),
+    };
+    if (operation === "workspace-structure") return immutableProjectCopy(output);
+    const target = operation === "selected-slot"
+      ? source.slots.find(slot => slot.id === request.slotId && !slot.hidden) : null;
+    if (operation === "selected-slot" && !target)
+      return immutableProjectCopy({ ...output, targetSlot: null });
+    output.appearance = structuredClone(source.appearance);
+    output.annotations = structuredClone(source.annotations);
+    output.orderedSlotLabels = orderedSlotLabels(source).filter(label =>
+      operation === "whole-workspace" || label.slotId === target.id);
+    output.captionReferenceStyle = structuredClone(BackendSettings.defaults.captionReferenceStyle);
+    if (operation === "selected-slot") output.targetSlot = buildSlotContentRead(source, target);
+    else output.contentSlots = source.slots.filter(slot => !slot.hidden).map(slot => buildSlotContentRead(source, slot));
+    return immutableProjectCopy(output);
+  }
+  if (kind === "export" && ["print.save", "print.capture"].includes(request.operation)) {
     const source = activeProject._state, output = buildBackendSurfaceRead(source);
-    if (kind === "renderer") {
-      if (!Number.isFinite(request.width) || request.width <= 0)
-        throw Error("renderer 너비는 유한한 양수여야 합니다.");
-      output.geometry = dashboardGeometryInProject(source, request.width);
-    }
-    if (kind === "export") {
-      output.export = structuredClone(source.export);
-      output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
-    }
+    output.export = structuredClone(source.export);
+    output.rasterLimits = structuredClone(BackendSettings.defaults.limits.export);
     return immutableProjectCopy(output);
   }
   if (kind === "export" && request.operation == null) {
@@ -555,31 +575,31 @@ export function buildBackendImageRead(source, slotId) {
   };
 }
 
+function buildSlotContentRead(source, original) {
+  const slot = structuredClone(original), chart = source.charts.find(item => item.id === original.content.chart);
+  if (chart) {
+    slot.chart = structuredClone(chart);
+    slot.figure = chartFigure(structuredClone(chart), source);
+    slot.csvViews = [];
+    if (!chartUsesConversionView(chart)) {
+      for (const object of chart.editor.objects) {
+        const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
+        if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
+      }
+    }
+  }
+  if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
+  return slot;
+}
+
 export function buildBackendSurfaceRead(source) {
-  const output = {
+  return {
     layout: structuredClone(source.layout), appearance: structuredClone(source.appearance),
-    annotations: structuredClone(source.annotations), visibleSlots: [],
+    annotations: structuredClone(source.annotations),
+    visibleSlots: source.slots.filter(slot => !slot.hidden).map(slot => buildSlotContentRead(source, slot)),
     orderedSlotLabels: orderedSlotLabels(source),
     captionReferenceStyle: structuredClone(BackendSettings.defaults.captionReferenceStyle),
   };
-  for (const original of source.slots) {
-    if (original.hidden) continue;
-    const slot = structuredClone(original), chart = source.charts.find(item => item.id === original.content.chart);
-    if (chart) {
-      slot.chart = structuredClone(chart);
-      slot.figure = chartFigure(structuredClone(chart), source);
-      slot.csvViews = [];
-      if (!chartUsesConversionView(chart)) {
-        for (const object of chart.editor.objects) {
-          const csv = source.assets.csvFiles.find(item => item.id === object.csvId);
-          if (csv) slot.csvViews.push({ csv: structuredClone(csv), columns: columnDefinitions(csv.rows, csv.headerLines) });
-        }
-      }
-    }
-    if (original.content.imageId !== null) slot.imageView = buildBackendImageRead(source, original.id);
-    output.visibleSlots.push(slot);
-  }
-  return output;
 }
 
 export function validateFrontendIntent(event, payload = {}) {

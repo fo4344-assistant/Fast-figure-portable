@@ -1,7 +1,7 @@
 // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
-import { appFSM } from '../application/adapter.js';
+import { transformWorkspace, appFSM } from '../application/adapter.js';
 import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
-import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, schedulePlotResize, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
 
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
@@ -584,6 +584,7 @@ React.createElement(
   },
   selectedTargetText(state),
 ),
+React.createElement(Button, { disabled: state.lifecycle !== "ready", "aria-label": "작업영역 전체 렌더링", onClick: () => window.FastFigureApi.workspace.render() }, "렌더"),
 React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트"),
     );
   }
@@ -3249,7 +3250,7 @@ app.style.setProperty(
   "--ff-renderer-navbar-width",
   navbarCollapsed ? "0px" : `${navbarWidth}px`,
 );
-requestAnimationFrame(() => schedulePlotResize());
+requestAnimationFrame(() => transformWorkspace());
     }, [navbarWidth, navbarCollapsed]);
     const toggleNavbar = () => {
 setNavbarCollapsed((collapsed) => !collapsed);

@@ -1,5 +1,5 @@
 // Source: sourcescript/application/public_api/assets.py (same logical owner); pseudocode/application/public_api/assets.pcal.
-import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, runLifecycleTask, renderDashboard, updateFileAvailability } from '../adapter.js';
+import { appFSM, dispatchProjectCommand, runLifecycleTask, updateFileAvailability } from '../adapter.js';
 import { importSelectedGraphFile } from './graphs.js';
 import { setSelectedSlot } from './layout_annotations.js';
 import { PROJECT_ASSET_DIRECTORIES, projectParentPath, projectPathName } from '../../backend/assets_files.js';
@@ -57,7 +57,7 @@ export async function importProjectFilesToDirectory(files, directory, planImport
     [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files: copied, directory, choices });
   if (!result.committed) return result;
   const imported = readImportedAssets(result);
-  updateFileAvailability(); renderDashboard(projection, state); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
+  updateFileAvailability(); status(`${imported.length}개 자산을 프로젝트에 추가했습니다.`);
   return imported;
 }
 
@@ -119,7 +119,7 @@ export function deleteProjectAsset(target) {
   });
   if (!result.committed) return null;
   const removed = result.changed.assets[0], count = result.changed.removedGraphReferenceCount + result.changed.resetImageSlotCount;
-  if (count) renderDashboard(projection, state);
+
   status(`${removed.name}을 프로젝트에서 삭제했습니다.`);
   return null;
 }
@@ -140,7 +140,7 @@ export function moveProjectNode(plan, useUniqueName = false) {
   if (!result.committed) return null;
   const path = result.changed.movedPathTo,
     trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
-  applyCommittedDashboardProjection("PROJECT_NODE_MOVED", result, state, projection);
+
   status(trashed
     ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.`
     : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
@@ -158,7 +158,7 @@ export function createProjectDirectory(parent, name) {
 export function emptyProjectTrash() {
   const [result, state, projection] = dispatchProjectCommand("PROJECT_TRASH_EMPTIED", {});
   if (!result.committed) return null;
-  applyCommittedDashboardProjection("PROJECT_TRASH_EMPTIED", result, state, projection);
+
   updateFileAvailability();
   status(`휴지통을 비웠습니다. 폴더 ${result.changed.directoryCount}개, CSV ${result.changed.csvCount}개, 이미지 ${result.changed.imageCount}개를 삭제했습니다.`);
   return null;
@@ -185,7 +185,7 @@ export async function importProjectFileToSlot(file, slotId, choosePlan) {
     [result, state, projection] = dispatchProjectCommand("ASSETS_IMPORTED", { files, directory, choices, targetSlotId: slotId });
   if (!result.committed) return result;
   const imported = readImportedAssets(result)[0];
-  renderDashboard(projection, state); updateFileAvailability();
+  updateFileAvailability();
   return imported;
 }
 
