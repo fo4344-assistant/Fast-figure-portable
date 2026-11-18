@@ -104,7 +104,6 @@ PUBLIC_API_METHODS == [
  "layout.setGrid" |-> <<"wrapper","setLayoutApiGrid">>,
  "layout.setZoom" |-> <<"wrapper","setLayoutApiZoom">>,
  "layout.commitZoom" |-> <<"wrapper","commitLayoutApiZoom">>,
- "layout.setZoomLocked" |-> <<"wrapper","setLayoutApiZoomLocked">>,
  "layout.resetZoom" |-> <<"wrapper","resetLayoutApiZoom">>,
  "layout.mergeSlots" |-> <<"wrapper","mergeSlots">>,
  "layout.splitSlots" |-> <<"wrapper","splitSlots">>]
@@ -299,8 +298,6 @@ BindExactSourceInputs:
     call setLayoutApiZoom(args.value);
   elsif method = "layout.commitZoom" then
     call commitLayoutApiZoom();
-  elsif method = "layout.setZoomLocked" then
-    call setLayoutApiZoomLocked(args.locked);
   elsif method = "layout.resetZoom" then
     call resetLayoutApiZoom();
   elsif method = "layout.mergeSlots" then

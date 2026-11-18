@@ -1,0 +1,784 @@
+diff --git a/development-versions.json b/development-versions.json
+index 807e05428f2da9ff1a6a268a7b3a57c7e543857e..f844e31e05abfcd6c1ebcc247a6bf01bb7a05428 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -64,14 +64,14 @@
+       "translation_review": "agent_space/reviews/review-20261117-008-plan039-contracts.md"
+     },
+     "pseudocode": {
+-      "revision": 31,
++      "revision": 32,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:f8a8bd6e0424fec8b87f7b3a2fe6378bed29ff83dd7fa9d3bf5e3ca40cf1e005",
++      "fingerprint": "sha256:b7b82a6a200d26568648282767a2ab01ec56d1cfd6101a6d2e286f7b39734566",
+       "derived_from": {
+-        "source-script": "sha256:a5e9dcb5d07b44ca7a8b91153e3361876b51951e74f476b746f6abbb7c4e6007"
++        "source-script": "sha256:3f2615ec38ee772db09faa669568bf393df8f85bd9c3e0609375145352306913"
+       },
+-      "translation_review": "agent_space/reviews/review-20261117-008-plan039-contracts.md"
++      "translation_review": "agent_space/reviews/review-20261118-004-plan042-pseudocode.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/adapter.pcal b/pseudocode/application/adapter.pcal
+index 8bf61bda562d429e1602cdfe83c7f39a3f2cf93d..a290814e1c6429e4ebed0c95d7b16ff1c255ac29 100644
+--- a/pseudocode/application/adapter.pcal
++++ b/pseudocode/application/adapter.pcal
+@@ -44,11 +44,9 @@ CurrentWholeRendererInputs:
+   if query = "renderer" /\ FieldOrNoValue(request,"operation") \notin {"slot-image","ui-palette"} then
+     call InterfaceStateMachine_readState(); frontendState := result;
+     call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
+-    width := IF frontendState.dashboardZoomLocked THEN frontendState.dashboardZoomLockedWidth
+-             ELSE layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
++    width := layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
+     request.frontendState := frontendState; request.width := width;
+     \* These current reads and the final query are synchronous, with no callback or command.
+-    \* The lock anchor stays unchanged across reference-width/host changes.
+   end if;
+ ReadThroughBackend:
+   call readBackendProjection(query, request);
+diff --git a/pseudocode/application/public_api/contract.pcal b/pseudocode/application/public_api/contract.pcal
+index 074883726dbbd97d0cc631f465654839e14a1d27..8d44efeead9ec7da365a55e60fb23272c0e402d3 100644
+--- a/pseudocode/application/public_api/contract.pcal
++++ b/pseudocode/application/public_api/contract.pcal
+@@ -104,7 +104,6 @@ PUBLIC_API_METHODS == [
+  "layout.setGrid" |-> <<"wrapper","setLayoutApiGrid">>,
+  "layout.setZoom" |-> <<"wrapper","setLayoutApiZoom">>,
+  "layout.commitZoom" |-> <<"wrapper","commitLayoutApiZoom">>,
+- "layout.setZoomLocked" |-> <<"wrapper","setLayoutApiZoomLocked">>,
+  "layout.resetZoom" |-> <<"wrapper","resetLayoutApiZoom">>,
+  "layout.mergeSlots" |-> <<"wrapper","mergeSlots">>,
+  "layout.splitSlots" |-> <<"wrapper","splitSlots">>]
+@@ -299,8 +298,6 @@ BindExactSourceInputs:
+     call setLayoutApiZoom(args.value);
+   elsif method = "layout.commitZoom" then
+     call commitLayoutApiZoom();
+-  elsif method = "layout.setZoomLocked" then
+-    call setLayoutApiZoomLocked(args.locked);
+   elsif method = "layout.resetZoom" then
+     call resetLayoutApiZoom();
+   elsif method = "layout.mergeSlots" then
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index 178ad0a260bd6cac6f7fe5a0775f0a85a968096c..a77bbc232a6381c4af6f3b02dbae7ac1b23cc173 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -86,7 +86,7 @@ begin
+ BackendNormalizesPreviewOnly:
+   call dispatchProjectQuery("project-api",[operation |-> "layout.readState",renderedWidth |-> previewWidth]); layout := result;
+   call InterfaceStateMachine_readState(); session := result;
+-  result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent,zoomLocked |-> session.dashboardZoomLocked]);
++  result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent]);
+   \* visibleSlots retains Backend same-source contentType/chart/imageId/assetDisplay.
+   \* No re-resolve into a chart manager/tree bundle, saved preview or Application default copy.
+   return;
+@@ -108,20 +108,6 @@ CompletionNotSecondCommit:
+   return;
+ end procedure;
+ 
+-procedure setLayoutApiZoomLocked(locked)
+-variables session = NoValue, width = NoValue;
+-begin
+-ReadOnlyFirstLockMeasures:
+-  call InterfaceStateMachine_readState(); session := result;
+-  if locked = TRUE /\ ~session.dashboardZoomLocked then
+-    call readDashboardRenderedWidth(); width := result;
+-    if ~PositiveFinite(width) then result := FALSE; return; end if;
+-  end if;
+-  call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM_LOCK",[locked |-> locked = TRUE,renderedWidth |-> width]);
+-  call readLayoutApiState(NoValue);
+-  return;
+-end procedure;
+-
+ procedure resetLayoutApiZoom()
+ begin
+ OneResetTransition:
+diff --git a/pseudocode/frontend/interface_fsm.pcal b/pseudocode/frontend/interface_fsm.pcal
+index e9b655a2f537a39740efca21c6288c00547401cc..d8223694e001b23441460bae65e55f91081c4ba1 100644
+--- a/pseudocode/frontend/interface_fsm.pcal
++++ b/pseudocode/frontend/interface_fsm.pcal
+@@ -4,7 +4,7 @@ EXTENDS Naturals, Reals, Sequences
+ \* Active direct Source r38 translation; see the translation review for scope/evidence.
+ \* Only this module owns selectedSlotId/interfaceState. No Backend import/call.
+ \* InterfaceStateMachine_create initializes the Source-owned runtime fields.
+-\* Explicit Source initial zoom=100, locked=FALSE, lockedWidth=NoValue.
++\* Explicit Source initial zoom=100.
+ \* Qualified method names are mechanically flattened with '_' for call notation.
+ \* Source singleton interfaceFSM_* calls bind to InterfaceStateMachine_* below.
+ \* Local payload.overlay denotes the named overlay intent; it does not add a
+@@ -14,7 +14,7 @@ CONSTANT NoValue
+ INTERFACE_REGION_ORDER == <<"lifecycle", "workspace", "overlay", "assetSelection", "graphObject">>
+ INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
+   "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT", "TOGGLE_OVERLAY", "CLOSE_OVERLAY",
+-  "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM", "SET_DASHBOARD_ZOOM_LOCK",
++  "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM",
+   "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"}
+ 
+ (* --algorithm FrontendInterfaceFSM
+@@ -29,7 +29,7 @@ InitializeOwnedFrontendState:
+   interfaceState := [lifecycle |-> "booting",workspace |-> "project",overlay |-> NoValue,
+     assetSelection |-> NoValue,assetPath |-> NoValue,graphObject |-> NoValue,
+     graphObjectIndex |-> NoValue,direction |-> "model-to-ui",revision |-> 0,error |-> NoValue,
+-    dashboardZoomIntent |-> 100,dashboardZoomLocked |-> FALSE,dashboardZoomLockedWidth |-> NoValue];
++    dashboardZoomIntent |-> 100];
+   return;
+ end procedure;
+ 
+@@ -156,7 +156,6 @@ LocalRuntimeEvent:
+     interfaceState.overlay := NoValue;
+     goto PublishAndReturn;
+   elsif event = "SET_DASHBOARD_ZOOM" then goto ZoomIntent;
+-  elsif event = "SET_DASHBOARD_ZOOM_LOCK" then goto ZoomLock;
+   elsif event = "RESET_DASHBOARD_ZOOM" then goto ZoomReset;
+   elsif event = "LIFECYCLE_START" then
+     interfaceState.lifecycle := payload.lifecycle;
+@@ -178,10 +177,6 @@ LocalRuntimeEvent:
+   \* All declared events are exhausted above. No unknown-event result is invented.
+   assert FALSE;
+ ZoomIntent:
+-  if interfaceState.dashboardZoomLocked then
+-    call InterfaceStateMachine_readState();
+-    return;
+-  end if;
+   if IsFiniteNumericInput(payload.value) then value := Clamp(NumericValue(payload.value), 50, 200);
+   else value := 100; end if;
+   if value = interfaceState.dashboardZoomIntent then
+@@ -190,28 +185,11 @@ ZoomIntent:
+   end if;
+   interfaceState.dashboardZoomIntent := value;
+   goto PublishAndReturn;
+-ZoomLock:
+-  if payload.locked = TRUE then
+-    if interfaceState.dashboardZoomLocked then
+-      call InterfaceStateMachine_readState();
+-      return;
+-    end if;
+-    if ~IsFinitePositiveScalar(payload.renderedWidth) then
+-      call InterfaceStateMachine_readState();
+-      return;
+-    end if;
+-    interfaceState.dashboardZoomLocked := TRUE;
+-    interfaceState.dashboardZoomLockedWidth := payload.renderedWidth;
+-    goto PublishAndReturn;
+-  end if;
+ ZoomReset:
+-  if ~interfaceState.dashboardZoomLocked /\ interfaceState.dashboardZoomLockedWidth = NoValue
+-     /\ interfaceState.dashboardZoomIntent = 100 then
++  if interfaceState.dashboardZoomIntent = 100 then
+     call InterfaceStateMachine_readState();
+     return;
+   end if;
+-  interfaceState.dashboardZoomLocked := FALSE;
+-  interfaceState.dashboardZoomLockedWidth := NoValue;
+   interfaceState.dashboardZoomIntent := 100;
+ PublishAndReturn:
+   call publishRuntime();
+diff --git a/pseudocode/frontend/mantine_ui.pcal b/pseudocode/frontend/mantine_ui.pcal
+index a33770727d273f459fecdb2cbd34df18c900948e..1d6ce5b6ea7264cfdc1fb2194c7999a8a8ed4715 100644
+--- a/pseudocode/frontend/mantine_ui.pcal
++++ b/pseudocode/frontend/mantine_ui.pcal
+@@ -39,7 +39,7 @@ ComponentOwners == [
+ variables result = NoValue,
+   collisionModel = NoValue, collisionResolver = NoValue,
+   layoutSelectedSlotIds = {}, settingsOverlayHeight = NoValue,
+-  folding = [], layoutDimensionEdit = [],
++  folding = [],
+   sidebarGeometry = InitialSessionSidebarGeometry(),
+   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
+ 
+@@ -70,57 +70,187 @@ OfficialReferenceCountNotSlotDisplayDeduplication:
+   return;
+ end procedure;
+ 
+-procedure changeLayoutGridDimension(dimension,value,editingFinished)
+-variables current = NoValue, number = NoValue, rows = NoValue, cols = NoValue;
+-begin
+-EmptyEditingAndCurrentValueRestoration:
+-  Require(dimension \in {"rows","cols"});
+-  layoutDimensionEdit[dimension] := value;
+-  if value = NoValue \/ value = "" then
+-    layoutDimensionEdit[dimension] := "";
+-    if ~editingFinished then result := NoValue; return; end if;
+-    current := InvokePublicApi("layout.readState",[]);
+-    DisplayLayoutDimension(dimension,IF dimension = "rows" THEN current.gridRows ELSE current.gridCols);
+-    RemoveField(layoutDimensionEdit,dimension);
+-    result := current; return;
+-    \* No setGrid, selection clearing or resize in this branch.
++\* UiCommand instances are component-owned references. Callback invocation/await
++\* captures {threw,failure,value}; it calls once synchronously before awaiting.
++\* BoundProcedure captures only declared arguments; it is function binding.
++procedure UiCommand_create(readTarget,readValue,prepare,invoke,stepSize)
++variables command = NoValue;
++begin
++CreateOwnedControl:
++  command := NewUiCommandInstance();
++  command.readTarget := readTarget; command.readValue := readValue;
++  command.prepare := prepare; command.invoke := invoke; command.stepSize := stepSize;
++  command.text := ""; command.editTarget := NoValue;
++  command.editing := FALSE; command.composing := FALSE;
++  command.running := FALSE; command.active := TRUE;
++  result := command; return;
++end procedure;
++
++procedure UiCommand_input(command,text,composing)
++variables target = NoValue;
++begin
++RetainLexicalInput:
++  if ~command.active \/ command.running then result := command.text; return; end if;
++  target := InvokeCallback(command.readTarget,<<>>);
++  if target = NoValue then call UiCommand_cancel(command); result := command.text; return; end if;
++  if command.editing /\ command.editTarget # target then call UiCommand_cancel(command); end if;
++  if ~command.editing then command.editTarget := target; command.editing := TRUE; end if;
++  command.text := text; command.composing := composing;
++  PreserveWidgetCursorSelectionAndRawText(command,text);
++  result := command.text; return;
++end procedure;
++
++procedure UiCommand_refresh(command,target)
++variables current = NoValue;
++begin
++RefreshOnlySameLiveTarget:
++  if command.active /\ command.readValue # NoValue
++     /\ InvokeCallback(command.readTarget,<<>>) = target then
++    current := InvokeCallback(command.readValue,<<target>>);
++    command.text := DisplayTextForOfficialValue(current);
++    DisplayOfficialControlValue(command,current);
+   end if;
+-CurrentAuthorityThenSynchronousCommand:
+-  current := InvokePublicApi("layout.readState",[]);
+-  rows := current.gridRows; cols := current.gridCols;
+-  number := TryNonemptyFiniteInputNumber(value);
+-  if number.valid then
+-    if dimension = "rows" then rows := Maximum(current.gridLimits.gridRows[1],Minimum(current.gridLimits.gridRows[2],number.value));
+-    else cols := Maximum(current.gridLimits.gridCols[1],Minimum(current.gridLimits.gridCols[2],number.value)); end if;
++  result := current; return;
++end procedure;
++
++procedure UiCommand_cancel(command)
++variables target = NoValue, current = "";
++begin
++CancelPendingEdit:
++  command.editing := FALSE; command.composing := FALSE;
++  command.editTarget := NoValue; command.text := "";
++  if command.active then
++    target := InvokeCallback(command.readTarget,<<>>);
++    if target # NoValue /\ command.readValue # NoValue then
++      current := InvokeCallback(command.readValue,<<target>>);
++    end if;
++    command.text := DisplayTextForOfficialValue(current);
++    if command.readValue # NoValue then DisplayOfficialControlValue(command,current); end if;
+   end if;
+-  result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
+-  \* Invalid nonempty input keeps the current dimension; companion is also current.
+-  \* This entire read/compose/dispatch is synchronous: no await/external callback/other command.
+-  \* Existing Backend integer/candidate/whole-validation/current-source retry/one commit remains.
+-  \* False and original failure are not converted to success. No second resize/commit.
++  \* In-flight invocation and its running flag are settled by that invocation.
++  result := current; return;
++end procedure;
++
++procedure UiCommand_send(command,value,target)
++variables state = NoValue, currentTarget = NoValue, completion = NoValue, refresh = NoValue;
++begin
++CurrentReadyTarget:
++  if ~command.active \/ command.running then result := NoValue; return; end if;
++  call ApplicationInterface_readState(); state := result;
++  if state.lifecycle # "ready" then result := NoValue; return; end if;
++  currentTarget := InvokeCallback(command.readTarget,<<>>);
++  if currentTarget = NoValue \/ (target # NoValue /\ currentTarget # target) then
++    result := NoValue; return;
++  end if;
++  if command.readValue # NoValue then
++    if InvokeCallback(command.readValue,<<currentTarget>>) = value then
++      call UiCommand_refresh(command,currentTarget); result := NoValue; return;
++    end if;
++  end if;
++OneInvocationAndEveryExitCleanup:
++  command.running := TRUE;
++  completion := InvokeAndAwaitCallbackOnceCaptured(command.invoke,<<currentTarget,value>>);
++  command.running := FALSE;
++  \* Invocation enters the existing API synchronously; its lifecycle remains API-owned.
++  refresh := CaptureOriginalFailureOfProcedure(UiCommand_refresh,<<command,currentTarget>>);
++  if completion.threw then PropagateOriginalFailure(completion.failure); end if;
++  if refresh.threw then PropagateOriginalFailure(refresh.failure); end if;
++  result := completion.value; return;
++end procedure;
++
++procedure UiCommand_commit(command)
++variables state = NoValue, target = NoValue, current = NoValue, prepared = NoValue;
++begin
++OneCompletedEdit:
++  if ~command.active \/ ~command.editing \/ command.running \/ command.composing then
++    result := NoValue; return;
++  end if;
++  call ApplicationInterface_readState(); state := result;
++  target := command.editTarget;
++  if state.lifecycle # "ready" \/ target = NoValue
++     \/ InvokeCallback(command.readTarget,<<>>) # target then
++    call UiCommand_cancel(command); result := NoValue; return;
++  end if;
++  current := InvokeCallback(command.readValue,<<target>>);
++  prepared := InvokeCallback(command.prepare,<<command.text,current>>);
++  if ~prepared[1] then
++    call UiCommand_cancel(command); ShowInvalidNumericInputNotice(command);
++    result := NoValue; return;
++  end if;
++  command.editing := FALSE; command.composing := FALSE;
++  \* Enter clears editing before send; subsequent blur cannot send this edit again.
++  call UiCommand_send(command,prepared[2],target);
++  \* Same-target official refresh is performed by send; retain the API result/failure.
++  ReportRequestedAndAppliedValueWhenCorrected(command,target,prepared[2]);
+   return;
+ end procedure;
+ 
+-\* Private expansion of FastFigureApp's input bindings.
+-procedure LayoutDimensionChanged(dimension,value)
++procedure UiCommand_step(command,direction)
++variables target = NoValue, current = NoValue, parsed = NoValue, value = NoValue;
+ begin
+-InputChange:
+-  call changeLayoutGridDimension(dimension,value,FALSE);
++OneWidgetIncrement:
++  if ~command.active \/ command.running \/ command.composing \/ command.stepSize = NoValue then
++    result := NoValue; return;
++  end if;
++  target := InvokeCallback(command.readTarget,<<>>);
++  if target = NoValue then call UiCommand_cancel(command); result := NoValue; return; end if;
++  if command.editing /\ command.editTarget # target then call UiCommand_cancel(command); end if;
++  current := InvokeCallback(command.readValue,<<target>>);
++  if command.editing then
++    call prepareNumericInput(command.text,current,FALSE,NoValue); parsed := result;
++    if parsed[1] then current := parsed[2]; end if;
++  end if;
++  if ~IsFiniteNumber(current) then current := 0; end if;
++  value := IF direction = "increase" THEN current + command.stepSize ELSE current - command.stepSize;
++  call UiCommand_input(command,CompleteDecimalText(value),FALSE);
++  call UiCommand_commit(command);
++  \* Widget onChange is suppressed for this same step; each real repeat is a new step.
+   return;
+ end procedure;
+ 
+-procedure LayoutDimensionBlur(dimension,value)
+-variables current = NoValue;
++procedure UiCommand_dispose(command)
+ begin
+-FinishOnlyThisInput:
+-  if value = NoValue \/ value = "" then
+-    call changeLayoutGridDimension(dimension,value,TRUE);
+-  else
+-    current := InvokePublicApi("layout.readState",[]);
+-    DisplayLayoutDimension(dimension,IF dimension = "rows" THEN current.gridRows ELSE current.gridCols);
+-    RemoveField(layoutDimensionEdit,dimension);
+-    result := current;
++EndThisControlLifetime:
++  call UiCommand_cancel(command);
++  command.active := FALSE;
++  RemoveOnlyThisControlEventsAndSubscriptions(command);
++  result := NoValue; return;
++end procedure;
++
++procedure prepareNumericInput(text,current,allowEmpty,emptyValue)
++variables trimmed = TrimWhitespace(text), value = NoValue;
++begin
++EmptyAndCompleteDecimal:
++  if trimmed = "" then
++    result := IF allowEmpty THEN <<TRUE,emptyValue>> ELSE <<FALSE,current>>; return;
++  end if;
++  \* Full-string lexical match: optional sign; digits with at most one dot and at
++  \* least one digit; optional e/E plus optional sign plus one or more digits.
++  if ~FullStringMatches(trimmed,"[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?") then
++    result := <<FALSE,current>>; return;
++  end if;
++  value := ParseCompleteDecimal(trimmed);
++  result := IF IsFiniteNumber(value) THEN <<TRUE,value>> ELSE <<FALSE,current>>;
++  \* Field-specific range/integer rules stay in the existing API/Backend owner.
++  return;
++end procedure;
++
++procedure changeLayoutGridDimension(dimension,value)
++variables current = NoValue, rows = NoValue, cols = NoValue, range = NoValue;
++begin
++ConfirmedFiniteValueAndCurrentCompanion:
++  Require(dimension \in {"rows","cols"} /\ IsFiniteNumber(value));
++  current := InvokePublicApi("layout.readState",[]);
++  rows := current.gridRows; cols := current.gridCols;
++  range := IF dimension = "rows" THEN current.gridLimits.gridRows ELSE current.gridLimits.gridCols;
++  value := Maximum(range[1],Minimum(range[2],value));
++  if dimension = "rows" then rows := value; else cols := value; end if;
++  result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
++  if result # FALSE then
++    layoutSelectedSlotIds := {}; DisplayOfficialLayout(result);
+   end if;
++  \* Synchronous read/dispatch, unchanged Backend integer/validation/commit.
++  \* Rejection/exception preserves the previous value and local selection.
+   return;
+ end procedure;
+ 
+@@ -294,6 +424,195 @@ OneGroupOnly:
+   result := folding[key]; return;
+ end procedure;
+ 
++\* Component-local expansions of Source FastFigureApp 14-16.
++procedure ReadNumericControl(group,field,axis)
++variables state = NoValue, view = NoValue, target = NoValue, value = NoValue;
++begin
++ReadOfficialCurrentField:
++  call ApplicationInterface_readState(); state := result;
++  if group = "image" then
++    view := InvokePublicApi("images.readEditor",[]);
++    if state.selectedSlotId # NoValue /\ view # NoValue then
++      target := <<group,state.selectedSlotId,view.imageId,field>>; value := view.settings[field];
++    end if;
++  elsif group \in {"csv","object"} then
++    view := InvokePublicApi("graphs.readData",[]);
++    if group = "csv" /\ view.currentCsv # NoValue then
++      target := <<group,view.currentCsv.id,field>>; value := view.currentCsv.headerLines;
++    elsif group = "object" /\ view.chart # NoValue /\ view.selectedIndex # NoValue then
++      if view.chart.editor.editable then
++        target := <<group,state.selectedSlotId,view.chart.id,view.selectedIndex,field>>;
++        value := view.objects[view.selectedIndex+1][field];
++      end if;
++    end if;
++  elsif group \in {"axis","global"} then
++    view := InvokePublicApi("graphs.readLayout",[]);
++    if state.selectedSlotId # NoValue /\ view # NoValue then
++      target := <<group,state.selectedSlotId,view.chartId,axis,field>>;
++      value := IF group = "axis" THEN view.axes[axis][field] ELSE view.globalSettings[field];
++    end if;
++  elsif group = "labels" then
++    view := InvokePublicApi("labels.readState",[]);
++    target := <<group,field>>; value := view.settings[field];
++  elsif group = "captions" then
++    view := InvokePublicApi("captions.readGlobal",[]);
++    target := <<group,"global",field>>; value := view.settings[field];
++  elsif group = "print" then
++    view := InvokePublicApi("print.readSettings",[]);
++    target := <<group,field>>; value := view[field];
++  elsif group = "layout" then
++    view := InvokePublicApi("layout.readState",[]); target := <<group,field>>;
++    if field = "rows" then value := view.gridRows;
++    elsif field = "cols" then value := view.gridCols;
++    elsif field = "zoom" then value := view.zoom;
++    else value := view.slotStyle[field]; end if;
++  end if;
++  result := [target |-> target,value |-> value]; return;
++end procedure;
++
++procedure NumericControlTarget(group,field,axis)
++begin
++CurrentIdentityTuple:
++  call ReadNumericControl(group,field,axis); result := result.target; return;
++end procedure;
++
++procedure NumericControlValue(group,field,axis,target)
++variables current = NoValue;
++begin
++SameFieldCurrentValue:
++  call ReadNumericControl(group,field,axis); current := result;
++  result := IF current.target = target THEN current.value ELSE NoValue; return;
++end procedure;
++
++procedure PrepareControlNumeric(group,field,text,current)
++variables allowEmpty = FALSE, emptyValue = "";
++begin
++ExistingEmptyMeaning:
++  allowEmpty := (group = "axis" /\ field \in {"min","max","tick"})
++             \/ (group = "global" /\ field \in {"titleFontSize","legendFontSize"})
++             \/ (group = "print" /\ field = "height");
++  if group = "print" /\ field = "height" then emptyValue := NoValue; end if;
++  call prepareNumericInput(text,current,allowEmpty,emptyValue); return;
++end procedure;
++
++procedure InvokeNumericControl(group,field,axis,target,value)
++variables patch = [], current = NoValue, axes = [];
++begin
++OnlyNewFieldAndExplicitIdentity:
++  patch[field] := value;
++  if group = "image" then
++    result := InvokePublicApi("images.setSettings",[slotId |-> target[2],values |-> patch]);
++  elsif group = "csv" then
++    result := InvokePublicApi("graphs.setHeaderLines",[csvId |-> target[2],headerLines |-> value]);
++  elsif group = "object" then
++    result := InvokePublicApi("graphs.setObjectValues",[chartId |-> target[3],index |-> target[4],values |-> patch]);
++  elsif group = "axis" then
++    axes[axis] := patch; call updateSelectedGraphLayout([globalSettings |-> [axes |-> axes]]);
++  elsif group = "global" then call updateSelectedGraphLayout([globalSettings |-> patch]);
++  elsif group = "labels" then
++    if field = "fontSize" then result := InvokePublicApi("labels.setSettings",[values |-> patch]);
++    else
++      current := InvokePublicApi("labels.readState",[]);
++      result := InvokePublicApi("labels.setPosition",[x |-> IF field = "x" THEN value ELSE current.settings.x,
++        y |-> IF field = "y" THEN value ELSE current.settings.y]);
++    end if;
++  elsif group = "captions" then result := InvokePublicApi("captions.setSettings",[values |-> patch]);
++  elsif group = "print" then
++    if field = "height" then
++      patch := [height |-> value,heightMode |-> IF value = NoValue THEN "auto" ELSE "explicit"];
++    end if;
++    result := InvokePublicApi("print.setSettings",[values |-> patch]);
++  elsif group = "layout" then
++    if field \in {"rows","cols"} then call changeLayoutGridDimension(field,value);
++    elsif field = "zoom" then result := InvokePublicApi("layout.setZoom",[value |-> value]);
++    else result := InvokePublicApi("layout.setStyle",[values |-> patch]); end if;
++  end if;
++  \* Preserve existing owner rules: imageSettings limits; normalizeCsvHeaderLines;
++  \* GRAPH_STYLE_LIMITS; normalizeAxisSettings/divide=0 -> 1; normalizeGlobalSettings;
++  \* labels/captions/export/layout limits and integerization; FSM zoom 50..200.
++  return;
++end procedure;
++
++procedure BindNumericField(group,field,axis)
++variables command = NoValue, control = NoValue;
++begin
++OneInstancePerMountedField:
++  control := CurrentComponentNumericControl(group,field,axis);
++  if control = NoValue then result := NoValue; return; end if;
++  command := ExistingUiCommandOfControlOrNone(control);
++  if command = NoValue then
++    call UiCommand_create(BoundProcedure(NumericControlTarget,<<group,field,axis>>),
++      BoundProcedure(NumericControlValue,<<group,field,axis>>),
++      BoundProcedure(PrepareControlNumeric,<<group,field>>),
++      BoundProcedure(InvokeNumericControl,<<group,field,axis>>),ExistingWidgetStep(control));
++    command := result; AttachUiCommandToControl(control,command);
++  end if;
++  BindRawInputAndCompositionTo(control,command,UiCommand_input);
++  BindEnterAndBlurTo(control,command,UiCommand_commit);
++  BindEscapeTo(control,command,UiCommand_cancel);
++  BindIncrementDecrementAndArrowTo(control,command,UiCommand_step);
++  DisableWidgetBlurClampLeadingZeroRewriteAndDuplicateChange(control);
++  KeepEditingTextCursorSelectionAndFocusOnOrdinaryRender(control,command);
++  BindTargetChangeLifecycleNotReadyAndOverlayCloseTo(control,command,UiCommand_cancel);
++  BindUnmountTo(control,command,UiCommand_dispose);
++  \* Composition Enter stays with IME; later confirmation commits. Label pointer
++  \* positioning retains the existing direct interaction path.
++  result := command; return;
++end procedure;
++
++procedure BindAllNumericFields()
++variables groups = <<"image","csv","object","axis","global","labels","captions","print","layout">>,
++  fields = <<>>, axes = <<>>, gi = 1, fi = 1, ai = 1, group = "";
++begin
++ComponentLocalBindings:
++  while gi <= Len(groups) do
++    group := groups[gi]; axes := <<NoValue>>;
++    if group = "image" then fields := <<"scale","x","y">>;
++    elsif group = "csv" then fields := <<"headerLines">>;
++    elsif group = "object" then fields := <<"lineWidth","markerSize","barOpacity","barLineWidth">>;
++    elsif group = "axis" then
++      fields := <<"min","max","tick","divide","titleSize","fontSize","lineWidth">>;
++      axes := <<"xBottom","xTop","yLeft","yRight">>;
++    elsif group = "global" then fields := <<"titleFontSize","legendFontSize">>;
++    elsif group = "labels" then fields := <<"fontSize","x","y">>;
++    elsif group = "captions" then fields := <<"fontSize","lineHeight">>;
++    elsif group = "print" then fields := <<"dpi","width","height">>;
++    else fields := <<"rows","cols","referenceWidth","gap","outerMargin","radius","aspect","zoom">>; end if;
++    ai := 1;
++    while ai <= Len(axes) do
++      fi := 1;
++      while fi <= Len(fields) do
++        call BindNumericField(group,fields[fi],axes[ai]); fi := fi + 1;
++      end while;
++      ai := ai + 1;
++    end while;
++    gi := gi + 1;
++  end while;
++  \* Expansion of 54 Source controls at their component locations. The local
++  \* iteration is notation, with no persistent command/range registration.
++  result := NoValue; return;
++end procedure;
++
++procedure UiCommand_bindAction(control,readTarget,invoke)
++variables command = NoValue;
++begin
++ExistingActionCallbacks:
++  command := ExistingUiCommandOfControlOrNone(control);
++  if command = NoValue then
++    call UiCommand_create(readTarget,NoValue,NoValue,invoke,NoValue);
++    command := result; AttachUiCommandToControl(control,command);
++  end if;
++  command.readTarget := readTarget; command.invoke := invoke;
++  \* Re-render updates callbacks while retaining the same local command instance.
++  BindActionEventToSend(control,command,UiCommand_send);
++  BindTargetChangeLifecycleNotReadyAndOverlayCloseTo(control,command,UiCommand_cancel);
++  BindUnmountTo(control,command,UiCommand_dispose);
++  \* Source component 3-10 supplies its official current-target/enabled callback
++  \* and existing helper/API argument callback; this binding forwards them.
++  \* File receipt retains user activation and the existing target capture time.
++  result := command; return;
++end procedure;
++
+ procedure FastFigureApp()
+ variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
+           luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue,
+@@ -346,7 +665,10 @@ ThemeAndCssProjection:
+   ReplaceOnlyBlackAlphaThemeShadowColorsWithSameAlphaUiShadowMix(theme,palette.uiShadowColor);
+   \* Preserve shadow geometry. Graph paperColor != UI surface/background.
+ OneExistingRoot:
++  BindNumericFieldCreationAndRenderHook(BindAllNumericFields);
+   call FastFigureShell(); tree := result;
++  \* The hook runs at each component's control creation/render, preserving its
++  \* existing command instance; it is not a post-mount global control registry.
+   result := RenderMantineProviderToExistingReactRoot(theme,css,tree);
+   return;
+ end procedure;
+@@ -361,8 +683,6 @@ NoProjectStoreInShell:
+   BindComponentEvent("FastFigureGraphFileActions","editableChanged",setSelectedGraphEditable);
+   BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
+   BindComponentRenderReadFor("FastFigureGraphDataEditor","objectOptions",ReadGraphObjectOptions);
+-  BindComponentEvent("FastFigureLayoutOverlay","dimensionChanged",LayoutDimensionChanged);
+-  BindComponentEvent("FastFigureLayoutOverlay","dimensionBlur",LayoutDimensionBlur);
+   BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
+   BindComponentRenderRead(useAppState);
+   BindComponentRenderReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
+@@ -386,7 +706,11 @@ NoProjectStoreInShell:
+     "captions.setSlotText","captions.setName","captions.setNameBold","captions.setSettings","captions.setEnabled","captions.insertSlotCaptions">>);
+   BindComponentPublicMethods("FastFigurePrintOverlay",<<"print.readSettings","print.setSettings","print.save","print.capture">>);
+   BindComponentPublicMethods("FastFigureLayoutOverlay",<<"layout.readState","layout.setStyle","layout.setZoom",
+-    "layout.setZoomLocked","layout.resetZoom","layout.mergeSlots","layout.splitSlots">>);
++    "layout.resetZoom","layout.mergeSlots","layout.splitSlots">>);
++  \* Bind each declared command control through UiCommand after its existing
++  \* target/invoke callbacks above are supplied. Public reads remain direct;
++  \* folds, collision responses and Modal-local controls keep UI-only handlers.
++  BindDeclaredComponentActionControls(ComponentOwners,UiCommand_bindAction);
+   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
+   return;
+ end procedure;
+@@ -454,8 +778,14 @@ CurrentPreviewQuery:
+ LocalDecorationsAndInteraction:
+   while i <= Len(layoutRead.visibleSlots) do
+     slot := layoutRead.visibleSlots[i];
++    ClearPreviousPreviewDecorations(frameView.slots[slot.id].decoration);
++    if ~layoutRead.slotStyle.showBorders then
++      DrawInnerDashedBoundary(frameView.slots[slot.id].decoration,slot,layoutRead.previewGeometry.radius);
++    end if;
+     DrawCoordinatesSelectionAndFocusWithoutChangingGeometry(frameView.slots[slot.id].decoration,
+                                                            slot,slot.id \in layoutSelectedSlotIds);
++    \* Selection/focus are distinct inner emphasis; current spans/radius are used.
++    \* showBorders TRUE removes dashes without changing frame/content geometry.
+     BindPreviewSlotClick(frameView.slots[slot.id].frame,slot.id,LayoutSelectionInteraction);
+     i := i + 1;
+   end while;
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index de77848f3f050cb01bad7bec2aaa3d90248a8dcb..13a6ccf0c0e394450ef6b4b68782cb2902f5e7d6 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -151,7 +151,18 @@ VisibleHosts:
+       ApplyEmptySlotSurface(host,slot);
+     end if;
+     ApplySelectedInteractionClass(frame,slot.id = interfaceState.selectedSlotId);
++    ClearPreviousHostSelectionDecoration(frameView.slots[slot.id].decoration);
++    if slot.id = interfaceState.selectedSlotId /\ IsEmptySlot(slot) then
++      DrawInnerSelectionBoundary(frameView.slots[slot.id].decoration,4,"uiColor",geometry.radius);
++    end if;
++    if HasGraphContent(slot) \/ HasImageContent(slot) then
++      KeepBookmarkAboveContentWithClickAndKeyboardFocus(frameView.slots[slot.id].decoration,slot.id);
++      ApplyPersistentSelectedBookmarkEmphasis(frameView.slots[slot.id].decoration,
++                                             slot.id = interfaceState.selectedSlotId);
++      \* Pointer exit does not clear the current selected emphasis.
++    end if;
+     ApplySuppliedLabelAndCaption(frameView.slots[slot.id].decoration,slot,projectProjection.orderedSlotLabels);
++    \* Decoration cleanup/reuse affects this host only; content geometry/resources remain.
+     i := i + 1;
+   end while;
+ ResizeAfterContentStyleAndGeometry:
+@@ -355,7 +366,7 @@ end procedure;
+ procedure readDashboardRenderedWidth()
+ variables measured = MeasureCurrentDashboardBoundingWidthOrNone();
+ begin
+-OneShotLockScalar:
++OneShotCaptureScalar:
+   result := IF PositiveFinite(measured) THEN measured ELSE NoValue;
+   return;
+ end procedure;
+@@ -467,7 +478,9 @@ RejectBeforeDownload:
+     output := [outcome |-> "rejected",reason |-> "grid-geometry"]; goto TargetCleanup;
+   end if;
+ RenderSuppliedFiguresAndImagesAtTarget:
+-  completion := CaptureOriginalFailureOfCreatingTaskRenderHosts(Round(width),Round(totalHeight));
++  completion := CaptureOriginalFailureOfCreatingTaskRenderHosts(Round(width),Round(totalHeight),
++                  [includeEditorDecorations |-> FALSE]);
++  \* Only task hosts exclude selection/bookmark emphasis and preview dashes.
+   if completion.threw then goto TargetCleanup; end if;
+   owned := Append(owned,completion.value);
+   completion := CaptureOriginalFailureOfRenderingVisibleSuppliedSlotFiguresAndImages(snapshot,geometry,scale,owned,statusSink);
+@@ -498,7 +511,9 @@ OneShotCurrentSizeNotPersistentPreset:
+   if ~SuppliedRasterDimensionAndAreaLimitsAllow(snapshot.rasterLimits,viewport.width,viewport.height) then
+     result := [outcome |-> "rejected",reason |-> "raster-limit"]; return;
+   end if;
+-  completion := CaptureOriginalFailureOfCurrentSurfaceCapture(snapshot,viewport,statusSink,owned);
++  completion := CaptureOriginalFailureOfCurrentSurfaceCapture(snapshot,viewport,statusSink,owned,
++                  [includeEditorDecorations |-> FALSE]);
++  \* Capture-only exclusion preserves live selection and its decoration.
+   if ~completion.threw then
+     completion := CaptureOriginalFailureOfEncodingPngOrJpegWithDpiMetadata(completion.value,snapshot.export.format,snapshot.export.dpi);
+     if ~completion.threw then
+diff --git a/agent_space/reviews/review-20261118-004-plan042-pseudocode.md b/agent_space/reviews/review-20261118-004-plan042-pseudocode.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..582f7324d2d1d58f590d3fde5a04b5e8ac17c8be
+--- /dev/null
++++ b/agent_space/reviews/review-20261118-004-plan042-pseudocode.md
+@@ -0,0 +1,39 @@
++# Plan042 Source Script 55 → pseudocode 32 검토
++
++## 기준
++
++- 기준 commit: `c61f298`. Source Script 55의 실제 변경과 전체 UI 절차를 기준으로 번역했다.
++- Source Script: `sha256:3f2615ec38ee772db09faa669568bf393df8f85bd9c3e0609375145352306913`.
++- pseudocode: `sha256:b7b82a6a200d26568648282767a2ab01ec56d1cfd6101a6d2e286f7b39734566`.
++
++## 대응
++
++| Source Script 절차 | pseudocode 반영 |
++| --- | --- |
++| UiCommand 생성·input·commit·send·cancel·step·dispose | frontend/mantine_ui.pcal의 동명 private 확장. 원문·조합·현재 대상·ready·중복 방지·동기 진입·비동기 종료·실패 정리 명시 |
++| prepareNumericInput | 전체 문자열 십진 문법과 유한성, 지정한 자동 빈 값, 필수 빈 값 거부 |
++| FastFigureApp 숫자 연결 | 공식 read와 기존 API 인자로 54개 필드 연결. 컴포넌트 생성/render에서 같은 객체 재사용·현재 callback 적용 |
++| changeLayoutGridDimension | 확정 값과 현재 companion 크기·gridLimits, 동기 setGrid 한 번, 성공 시 로컬 선택 정리·공식 결과 표시 |
++| 버튼 | 기존 기능별 target/invoke callback을 UiCommand.send에 연결. UI-local 접기·collision·Modal 응답은 기존 처리 유지 |
++| 크기 잠금 제거 | FSM 필드·이벤트·분기, Application 너비 분기, 공개 API·read 반환·UI 연결 제거. 배율과 100% reset 유지 |
++| 미리보기 | 공통 frame의 decoration에만 OFF 점선. 매 갱신 이전 표시 정리 후 선택·포커스를 별도로 표시 |
++| 작업공간 | 빈 선택 슬롯 안쪽 4px 경계, graph/image bookmark의 클릭·포커스·선택 강조, host별 정리 |
++| raster | 작업 전용 호스트·캡처 입력에서 편집 장식 제외. live 선택과 content·자원 수명 유지 |
++
++## 논리·목적·중복 검토
++
++1. 편집 중에는 문자열만 보존한다. Enter/blur 확정 전에 현재 대상과 lifecycle을 확인하고 editing을 먼저 종료하여 같은 편집이 재전송되지 않게 한다.
++2. 전송은 현재 식별값·새 입력과 기존 API를 사용한다. API의 원래 반환·취소·예외, Backend 정규화·검증·한 번 반영을 유지한다.
++3. 비동기 종료 시 running을 정리하고 같은 active 대상에서만 공식 값을 다시 표시한다. 원래 명령 실패가 표시 갱신 실패보다 우선한다.
++4. 필드별 범위·정수화·자동 빈 값은 기존 소유자와 명시한 API에 연결했다. 새 Project 상태·범위 저장소·명령 등록부를 만들지 않았다.
++5. 54개 연결의 반복 표기는 Source Script의 컴포넌트별 연결을 펼친 것이다. callback/reference·컴포넌트 수명·위젯 이벤트는 플랫폼 표기이며 도메인 알고리즘은 절차에 명시했다.
++6. 공통 틀의 geometry·content와 Plotly·이미지 generation/해제·출력 한계는 보존했다. 점선·선택은 decoration 및 출력 작업의 표시 선택만 바꾼다.
++7. Backend·system의 Source Script 55 변경은 너비 설명 정리다. 기존 pseudocode의 현재 너비 전달이 이미 대응하므로 두 파일을 추가 수정하지 않았다.
++
++## 확인 범위
++
++- 변경 대상 pseudocode와 Source UI를 전체 읽었고, Source Script 55의 실제 native patch 및 관련 절차와 비교했다.
++- 전체 실제 diff, procedure 경계, 잠금·옛 입력 handler 참조 제거, 실제 layer fingerprint와 metadata 범위, native patch 역적용·공백을 정적으로 확인했다.
++- Source Script·source code·dist·settings·verification·기존 계획과 검토 문서는 유지했다. code 160의 종전 derived_from도 유지했다.
++- PlusCal 변환·TLC·테스트·앱·브라우저·빌드·checker main·commit/push는 실행하지 않았다.
++- 상태는 stale이며 정적 번역 검토다. source code 구현과 실제 입력·선택·출력 확인은 후속 단계다.
+diff --git a/agent_space/patches/20261118-002.md b/agent_space/patches/20261118-002.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..cc1421902b882180b329722ddb0cf1a13958341f
+--- /dev/null
++++ b/agent_space/patches/20261118-002.md
+@@ -0,0 +1,19 @@
++# Source Script 55의 pseudocode 번역
++
++## 목적과 선택
++
++- UiCommand와 54개 숫자 입력·명령 버튼 연결을 기존 공식 조회 및 API 경로로 번역했다.
++- 편집 문자열과 확정·전송·취소를 나누고 현재 대상·ready·같은 값·실행 중 중복·비동기 정리를 명시했다.
++- 크기 잠금을 제거하고 기존 배율·100% reset을 유지했다.
++- 점선·선택은 공통 frame의 decoration에서 표시하고 작업 전용 raster 입력에서 제외한다.
++- 기존 Backend 범위·명령·자원 수명을 재사용한다. 별도 API/Project/범위 등록부를 추가하지 않았다.
++
++## 기록
++
++- native 기준 commit: `c61f298`.
++- 실제 diff: pseudocode 6개·메타데이터·신규 검토 문서와 이 설명. 기존 문서는 보존한다.
++- Source Script 55: `sha256:3f2615ec38ee772db09faa669568bf393df8f85bd9c3e0609375145352306913`.
++- pseudocode 32: `sha256:b7b82a6a200d26568648282767a2ab01ec56d1cfd6101a6d2e286f7b39734566`.
++- 상세: `../reviews/review-20261118-004-plan042-pseudocode.md`.
++- 전체 실제 diff·procedure 경계·hash·변경 범위·역적용을 정적으로 확인했다.
++- 테스트·앱·브라우저·빌드·PlusCal 변환·TLC·checker main·commit/push는 실행하지 않았다.

@@ -86,7 +86,7 @@ begin
 BackendNormalizesPreviewOnly:
   call dispatchProjectQuery("project-api",[operation |-> "layout.readState",renderedWidth |-> previewWidth]); layout := result;
   call InterfaceStateMachine_readState(); session := result;
-  result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent,zoomLocked |-> session.dashboardZoomLocked]);
+  result := ImmutableRecordWith(layout,[zoom |-> session.dashboardZoomIntent]);
   \* visibleSlots retains Backend same-source contentType/chart/imageId/assetDisplay.
   \* No re-resolve into a chart manager/tree bundle, saved preview or Application default copy.
   return;
@@ -104,20 +104,6 @@ procedure commitLayoutApiZoom()
 begin
 CompletionNotSecondCommit:
   call InterfaceStateMachine_notify("layout","DASHBOARD_ZOOM_CHANGED",[]);
-  call readLayoutApiState(NoValue);
-  return;
-end procedure;
-
-procedure setLayoutApiZoomLocked(locked)
-variables session = NoValue, width = NoValue;
-begin
-ReadOnlyFirstLockMeasures:
-  call InterfaceStateMachine_readState(); session := result;
-  if locked = TRUE /\ ~session.dashboardZoomLocked then
-    call readDashboardRenderedWidth(); width := result;
-    if ~PositiveFinite(width) then result := FALSE; return; end if;
-  end if;
-  call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM_LOCK",[locked |-> locked = TRUE,renderedWidth |-> width]);
   call readLayoutApiState(NoValue);
   return;
 end procedure;

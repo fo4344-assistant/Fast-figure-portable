@@ -44,11 +44,9 @@ CurrentWholeRendererInputs:
   if query = "renderer" /\ FieldOrNoValue(request,"operation") \notin {"slot-image","ui-palette"} then
     call InterfaceStateMachine_readState(); frontendState := result;
     call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
-    width := IF frontendState.dashboardZoomLocked THEN frontendState.dashboardZoomLockedWidth
-             ELSE layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
+    width := layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
     request.frontendState := frontendState; request.width := width;
     \* These current reads and the final query are synchronous, with no callback or command.
-    \* The lock anchor stays unchanged across reference-width/host changes.
   end if;
 ReadThroughBackend:
   call readBackendProjection(query, request);

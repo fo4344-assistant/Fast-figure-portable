@@ -151,7 +151,18 @@ VisibleHosts:
       ApplyEmptySlotSurface(host,slot);
     end if;
     ApplySelectedInteractionClass(frame,slot.id = interfaceState.selectedSlotId);
+    ClearPreviousHostSelectionDecoration(frameView.slots[slot.id].decoration);
+    if slot.id = interfaceState.selectedSlotId /\ IsEmptySlot(slot) then
+      DrawInnerSelectionBoundary(frameView.slots[slot.id].decoration,4,"uiColor",geometry.radius);
+    end if;
+    if HasGraphContent(slot) \/ HasImageContent(slot) then
+      KeepBookmarkAboveContentWithClickAndKeyboardFocus(frameView.slots[slot.id].decoration,slot.id);
+      ApplyPersistentSelectedBookmarkEmphasis(frameView.slots[slot.id].decoration,
+                                             slot.id = interfaceState.selectedSlotId);
+      \* Pointer exit does not clear the current selected emphasis.
+    end if;
     ApplySuppliedLabelAndCaption(frameView.slots[slot.id].decoration,slot,projectProjection.orderedSlotLabels);
+    \* Decoration cleanup/reuse affects this host only; content geometry/resources remain.
     i := i + 1;
   end while;
 ResizeAfterContentStyleAndGeometry:
@@ -355,7 +366,7 @@ end procedure;
 procedure readDashboardRenderedWidth()
 variables measured = MeasureCurrentDashboardBoundingWidthOrNone();
 begin
-OneShotLockScalar:
+OneShotCaptureScalar:
   result := IF PositiveFinite(measured) THEN measured ELSE NoValue;
   return;
 end procedure;
@@ -467,7 +478,9 @@ RejectBeforeDownload:
     output := [outcome |-> "rejected",reason |-> "grid-geometry"]; goto TargetCleanup;
   end if;
 RenderSuppliedFiguresAndImagesAtTarget:
-  completion := CaptureOriginalFailureOfCreatingTaskRenderHosts(Round(width),Round(totalHeight));
+  completion := CaptureOriginalFailureOfCreatingTaskRenderHosts(Round(width),Round(totalHeight),
+                  [includeEditorDecorations |-> FALSE]);
+  \* Only task hosts exclude selection/bookmark emphasis and preview dashes.
   if completion.threw then goto TargetCleanup; end if;
   owned := Append(owned,completion.value);
   completion := CaptureOriginalFailureOfRenderingVisibleSuppliedSlotFiguresAndImages(snapshot,geometry,scale,owned,statusSink);
@@ -498,7 +511,9 @@ OneShotCurrentSizeNotPersistentPreset:
   if ~SuppliedRasterDimensionAndAreaLimitsAllow(snapshot.rasterLimits,viewport.width,viewport.height) then
     result := [outcome |-> "rejected",reason |-> "raster-limit"]; return;
   end if;
-  completion := CaptureOriginalFailureOfCurrentSurfaceCapture(snapshot,viewport,statusSink,owned);
+  completion := CaptureOriginalFailureOfCurrentSurfaceCapture(snapshot,viewport,statusSink,owned,
+                  [includeEditorDecorations |-> FALSE]);
+  \* Capture-only exclusion preserves live selection and its decoration.
   if ~completion.threw then
     completion := CaptureOriginalFailureOfEncodingPngOrJpegWithDpiMetadata(completion.value,snapshot.export.format,snapshot.export.dpi);
     if ~completion.threw then

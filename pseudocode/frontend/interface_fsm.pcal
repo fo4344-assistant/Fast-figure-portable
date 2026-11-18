@@ -4,7 +4,7 @@ EXTENDS Naturals, Reals, Sequences
 \* Active direct Source r38 translation; see the translation review for scope/evidence.
 \* Only this module owns selectedSlotId/interfaceState. No Backend import/call.
 \* InterfaceStateMachine_create initializes the Source-owned runtime fields.
-\* Explicit Source initial zoom=100, locked=FALSE, lockedWidth=NoValue.
+\* Explicit Source initial zoom=100.
 \* Qualified method names are mechanically flattened with '_' for call notation.
 \* Source singleton interfaceFSM_* calls bind to InterfaceStateMachine_* below.
 \* Local payload.overlay denotes the named overlay intent; it does not add a
@@ -14,7 +14,7 @@ CONSTANT NoValue
 INTERFACE_REGION_ORDER == <<"lifecycle", "workspace", "overlay", "assetSelection", "graphObject">>
 INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
   "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT", "TOGGLE_OVERLAY", "CLOSE_OVERLAY",
-  "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM", "SET_DASHBOARD_ZOOM_LOCK",
+  "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM",
   "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"}
 
 (* --algorithm FrontendInterfaceFSM
@@ -29,7 +29,7 @@ InitializeOwnedFrontendState:
   interfaceState := [lifecycle |-> "booting",workspace |-> "project",overlay |-> NoValue,
     assetSelection |-> NoValue,assetPath |-> NoValue,graphObject |-> NoValue,
     graphObjectIndex |-> NoValue,direction |-> "model-to-ui",revision |-> 0,error |-> NoValue,
-    dashboardZoomIntent |-> 100,dashboardZoomLocked |-> FALSE,dashboardZoomLockedWidth |-> NoValue];
+    dashboardZoomIntent |-> 100];
   return;
 end procedure;
 
@@ -156,7 +156,6 @@ LocalRuntimeEvent:
     interfaceState.overlay := NoValue;
     goto PublishAndReturn;
   elsif event = "SET_DASHBOARD_ZOOM" then goto ZoomIntent;
-  elsif event = "SET_DASHBOARD_ZOOM_LOCK" then goto ZoomLock;
   elsif event = "RESET_DASHBOARD_ZOOM" then goto ZoomReset;
   elsif event = "LIFECYCLE_START" then
     interfaceState.lifecycle := payload.lifecycle;
@@ -178,10 +177,6 @@ LocalRuntimeEvent:
   \* All declared events are exhausted above. No unknown-event result is invented.
   assert FALSE;
 ZoomIntent:
-  if interfaceState.dashboardZoomLocked then
-    call InterfaceStateMachine_readState();
-    return;
-  end if;
   if IsFiniteNumericInput(payload.value) then value := Clamp(NumericValue(payload.value), 50, 200);
   else value := 100; end if;
   if value = interfaceState.dashboardZoomIntent then
@@ -190,28 +185,11 @@ ZoomIntent:
   end if;
   interfaceState.dashboardZoomIntent := value;
   goto PublishAndReturn;
-ZoomLock:
-  if payload.locked = TRUE then
-    if interfaceState.dashboardZoomLocked then
-      call InterfaceStateMachine_readState();
-      return;
-    end if;
-    if ~IsFinitePositiveScalar(payload.renderedWidth) then
-      call InterfaceStateMachine_readState();
-      return;
-    end if;
-    interfaceState.dashboardZoomLocked := TRUE;
-    interfaceState.dashboardZoomLockedWidth := payload.renderedWidth;
-    goto PublishAndReturn;
-  end if;
 ZoomReset:
-  if ~interfaceState.dashboardZoomLocked /\ interfaceState.dashboardZoomLockedWidth = NoValue
-     /\ interfaceState.dashboardZoomIntent = 100 then
+  if interfaceState.dashboardZoomIntent = 100 then
     call InterfaceStateMachine_readState();
     return;
   end if;
-  interfaceState.dashboardZoomLocked := FALSE;
-  interfaceState.dashboardZoomLockedWidth := NoValue;
   interfaceState.dashboardZoomIntent := 100;
 PublishAndReturn:
   call publishRuntime();
