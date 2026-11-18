@@ -10,7 +10,7 @@ CONSTANT NoValue
 (* --algorithm FrontendRenderer
 variables result = NoValue,
   uiTelemetryState = InitialUiTelemetryProjection(), debugEnabled = FALSE,
-  dashboardGeneration = 0, graphInstances = [], imageSurfaces = [],
+  workspaceLifetime = 0, slotOperations = [], graphInstances = [], imageSurfaces = [],
   dragSource = NoValue, suppressBookmarkClick = FALSE;
 
 procedure syncDashboardCaption(captionState)
@@ -56,30 +56,22 @@ StatusNotTaskOutcome:
 end procedure;
 
 procedure applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,projectProjection)
-variables effect = "NONE", i = 1, slot = NoValue;
 begin
-ActualRemovedRenderedReferenceFirst:
-  if mutationResult.projectionEffect.referencesRemoved then effect := "FULL_DASHBOARD";
-  elsif mutationResult.projectionEffect.pathOnly then effect := "NONE";
-  elsif event \in {"CAPTION_TEXT_INPUT","SLOT_CAPTIONS_INSERTED","CAPTION_SETTINGS_CHANGED",
-                    "LABEL_SETTINGS_CHANGED","LABEL_POSITION_CHANGED","APPEARANCE_CHANGED","SLOT_IMAGE_SETTINGS_CHANGED"}
-        /\ ExistingHostIdentitiesMatchSuppliedSlots(projectProjection) then effect := "TARGETED_PROJECTION";
-  else effect := "FULL_DASHBOARD"; end if;
-  if effect = "FULL_DASHBOARD" then call renderDashboard(projectProjection,interfaceState);
-  elsif effect = "TARGETED_PROJECTION" then
-    if event = "APPEARANCE_CHANGED" then
-      call applyUiPalette(projectProjection.appearance.uiPalette,FALSE);
-      while i <= Len(projectProjection.visibleSlots) do
-        slot := projectProjection.visibleSlots[i];
-        if FieldOrNoValue(slot,"figure") # NoValue then
-          \* Existing Plotly presentation retains generation/host/chart checks and failure handling.
-          PresentSuppliedGraphFigureOnCurrentHost(slot,interfaceState,projectProjection.geometry.scale);
-        end if;
-        i := i + 1;
-      end while;
-    else ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
+ReleaseOnlyInvalidOwnedAssociations:
+  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
+  if projectProjection.operation = "workspace-structure" then
+    call applyWorkspaceTransform(projectProjection,interfaceState); result := "STRUCTURE"; return;
   end if;
-  result := effect;
+  if mutationResult.projectionEffect.pathOnly /\ ~mutationResult.projectionEffect.referencesRemoved then
+    result := "NONE"; return;
+  end if;
+  if interfaceState.selectedSlotId = NoValue \/ projectProjection.targetSlot = NoValue then
+    result := "NONE"; return;
+  end if;
+  if projectProjection.targetSlot.id # interfaceState.selectedSlotId then result := "NONE"; return; end if;
+  call renderDashboard(projectProjection,interfaceState); result := "SELECTED_SLOT";
+  \* Common UI CSS and official editor reads keep their existing paths.
+  \* Other slots and the global caption wait for the explicit whole-content action.
   return;
 end procedure;
 
@@ -110,108 +102,176 @@ HostScopedSlotFrames:
 end procedure;
 
 procedure renderDashboard(projectProjection,interfaceState)
-variables geometry = NoValue, slots = <<>>, i = 1, slot = NoValue, frameView = NoValue,
-          host = NoValue, frame = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
+variables slot = NoValue, frameView = NoValue;
 begin
-OneGeneration:
-  dashboardGeneration := dashboardGeneration + 1;
-  currentGeneration := dashboardGeneration;
-ReleaseObsoleteContentBeforeFrameChanges:
-  geometry := projectProjection.geometry; slots := projectProjection.visibleSlots;
-  PurgeGraphAssociationsForRemovedOrReplacedHosts(graphInstances,slots);
-  DetachAndReleaseObsoleteImageSurfaces(imageSurfaces,slots);
-SharedDashboardFrame:
-  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,slots,geometry);
+SelectedCurrentOwnerOnly:
+  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
+  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
+  if interfaceState.selectedSlotId = NoValue then result := NoValue; return; end if;
+  slot := projectProjection.targetSlot;
+  if slot = NoValue then result := NoValue; return; end if;
+  if slot.id # interfaceState.selectedSlotId then result := NoValue; return; end if;
+PrepareOrCheckSameGrid:
+  if WorkspaceHasNoContentFrame() then
+    call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
+                              projectProjection.visibleSlots,projectProjection.geometry);
+    frameView := result;
+  elsif ~CanReuseCurrentGridAndTargetPlacement(projectProjection,slot.id) then
+    ShowWholeRenderingRequiredWithoutChangingValidContent();
+    result := WholeRenderingRequired(); return;
+  end if;
+OneTargetPresentation:
+  call presentSlotContent(slot,interfaceState,projectProjection.geometry);
+  ApplyOnlyTargetLabelsCaptionAndDecoration(slot,projectProjection,interfaceState);
+  return;
+end procedure;
+
+procedure presentSlotContent(slot,interfaceState,geometry)
+variables host = NoValue, identity = NoValue, operation = 0, instance = NoValue,
+          completion = NoValue, baseSize = NoValue, lifetime = workspaceLifetime;
+begin
+CurrentSlotAssociation:
+  host := CurrentContentHostOfSlot(slot.id);
+  identity := [host |-> host,slotId |-> slot.id,contentType |-> slot.content.contentType,
+               chartId |-> slot.content.chart,imageId |-> slot.content.imageId];
+  ReleaseOnlyReplacedAssociationForSlot(graphInstances,imageSurfaces,identity);
+  operation := FieldOrDefault(slotOperations,slot.id,0) + 1;
+  slotOperations[slot.id] := operation;
+SameHostPendingAndExecutionCheck:
+  AwaitPreviousPendingOfThisHostWithoutChangingOtherHosts(host);
+  if lifetime # workspaceLifetime \/ slotOperations[slot.id] # operation
+     \/ ~CurrentHostAssociationMatches(identity) then result := NoValue; return; end if;
+  baseSize := CurrentContentWidthHeight(host);
+  if IsGraphSlotWithFigure(slot) then
+    instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
+    if instance = NoValue then instance := InstallGraphInstance(host,identity); end if;
+    graphInstances[host] := [identity |-> identity,instance |-> instance,lifetime |-> lifetime,operation |-> operation];
+    completion := StartGraphPresentationWithCompletion(slot.figure,instance,
+      [callback |-> "CompleteGraphRender",host |-> host,slotId |-> slot.id,
+       chartId |-> slot.content.chart,lifetime |-> lifetime,operation |-> operation,baseSize |-> baseSize]);
+  elsif IsImageSlotWithView(slot) then
+    completion := StartImageDecodeWithSurfaceOwnedCopiedBytesOrPureUrl(host,slot.imageView,slot.content.imageSettings,
+      [callback |-> "CompleteImageRender",host |-> host,slotId |-> slot.id,input |-> slot.imageView,
+       lifetime |-> lifetime,operation |-> operation,baseSize |-> baseSize]);
+  else
+    ReleaseOnlySlotContentResources(graphInstances,imageSurfaces,slot.id);
+    ApplyEmptySlotSurface(host,slot); completion := CompletedPresentation(host);
+  end if;
+  KeepThisHostPendingUntilItsCompletion(host,completion);
+  UpdateOnlyThisSlotSelectionBoundaryBookmarkAndFocus(slot,interfaceState,geometry.radius,4);
+  result := completion;
+  \* Base size is the owned render-resource size, not a Project read value.
+  \* No content render schedules a later Plotly resize.
+  return;
+end procedure;
+
+procedure Renderer_renderWholeWorkspace(projectProjection,interfaceState)
+variables frameView = NoValue, i = 1, completions = <<>>;
+begin
+OnlyExplicitWholeInput:
+  Require(projectProjection.operation = "whole-workspace");
+  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
+  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
+                            projectProjection.visibleSlots,projectProjection.geometry);
   frameView := result;
-VisibleHosts:
-  while i <= Len(slots) do
-    slot := slots[i]; host := frameView.slots[slot.id].content;
-    frame := frameView.slots[slot.id].frame;
-    if IsGraphSlotWithFigure(slot) then
-      identity := [host |-> host,slotId |-> slot.id,chartId |-> slot.content.chart];
-      instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
-      if instance = NoValue then
-        PurgePreviousGraphInstanceOfHost(graphInstances,host);
-        DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
-        instance := InstallGraphInstance(host,identity);
+  while i <= Len(projectProjection.contentSlots) do
+    call presentSlotContent(projectProjection.contentSlots[i],interfaceState,projectProjection.geometry);
+    completions := Append(completions,result); i := i + 1;
+  end while;
+  ApplySuppliedWholeLabelsAndSlotCaptions(frameView,projectProjection,interfaceState);
+  call syncDashboardCaption(projectProjection.annotations.captions);
+  result := AwaitOnlyThisActionCompletionsWithOriginalFailures(completions);
+  return;
+end procedure;
+
+procedure applyWorkspaceTransform(projectProjection,interfaceState)
+variables frameView = NoValue, i = 1, slot = NoValue, surface = NoValue,
+  size = NoValue, scaleX = 1, scaleY = 1;
+begin
+StructureAndOwnerCleanupOnly:
+  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
+  if WorkspaceHasNoContentFrame() then
+    call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
+                              projectProjection.visibleSlots,projectProjection.geometry);
+    UpdateSelectionDecorationAndInteractionOnly(interfaceState);
+    result := CurrentDashboardHost(); return;
+  end if;
+  if ~CanSafelyReuseExistingGridAndSpans(projectProjection) then
+    ShowWholeRenderingRequiredWithoutChangingValidContent();
+    result := WholeRenderingRequired(); return;
+  end if;
+  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
+                            projectProjection.visibleSlots,projectProjection.geometry);
+  frameView := result;
+TransformExistingPixels:
+  while i <= Len(projectProjection.visibleSlots) do
+    slot := projectProjection.visibleSlots[i];
+    surface := CurrentRenderedSurfaceOfSlotOrNone(slot.id);
+    if surface # NoValue then
+      size := CurrentContentWidthHeight(frameView.slots[slot.id].content);
+      if PositiveFinite(surface.baseWidth) /\ PositiveFinite(surface.baseHeight) then
+        scaleX := size.width / surface.baseWidth; scaleY := size.height / surface.baseHeight;
+        ApplyOwnedContentCssTranslationAndScale(surface,scaleX,scaleY,"top-left");
+        SetPointerInverseOfCurrentTranslationAndScale(surface,scaleX,scaleY);
       end if;
-      graphInstances[host] := [identity |-> identity,instance |-> instance,generation |-> currentGeneration];
-      StartGraphPresentationWithCompletion(slot.figure,instance,
-        [callback |-> "CompleteGraphRender",host |-> host,slotId |-> slot.id,
-         chartId |-> slot.content.chart,generation |-> currentGeneration]);
-      \* CSV/columns are editor reads, NEVER recomputed into a different figure here.
-    elsif IsImageSlotWithView(slot) then
-      PurgePreviousGraphInstanceOfHost(graphInstances,host);
-      DetachPreviousImageSurfaceBeforeReplacing(imageSurfaces,host);
-      StartImageDecodeWithSurfaceOwnedCopiedBytesOrPureUrl(host,slot.imageView,slot.content.imageSettings,
-        [callback |-> "CompleteImageRender",generation |-> currentGeneration,slotId |-> slot.id,input |-> slot.imageView]);
-    else
-      PurgePreviousGraphInstanceOfHost(graphInstances,host);
-      DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
-      ApplyEmptySlotSurface(host,slot);
     end if;
-    ApplySelectedInteractionClass(frame,slot.id = interfaceState.selectedSlotId);
-    ClearPreviousHostSelectionDecoration(frameView.slots[slot.id].decoration);
-    if slot.id = interfaceState.selectedSlotId /\ IsEmptySlot(slot) then
-      DrawInnerSelectionBoundary(frameView.slots[slot.id].decoration,4,"uiColor",geometry.radius);
-    end if;
-    if HasGraphContent(slot) \/ HasImageContent(slot) then
-      KeepBookmarkAboveContentWithClickAndKeyboardFocus(frameView.slots[slot.id].decoration,slot.id);
-      ApplyPersistentSelectedBookmarkEmphasis(frameView.slots[slot.id].decoration,
-                                             slot.id = interfaceState.selectedSlotId);
-      \* Pointer exit does not clear the current selected emphasis.
-    end if;
-    ApplySuppliedLabelAndCaption(frameView.slots[slot.id].decoration,slot,projectProjection.orderedSlotLabels);
-    \* Decoration cleanup/reuse affects this host only; content geometry/resources remain.
     i := i + 1;
   end while;
-ResizeAfterContentStyleAndGeometry:
-  RequestResizeOnlyForCurrentLiveGraphHosts(graphInstances,currentGeneration);
-  SynchronizeDashboardCaptionFromSuppliedProjection(projectProjection);
-  result := CurrentDashboardPresentation();
+  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
+  result := CurrentDashboardHost();
+  \* Reuses current graph/image pixels, fonts and strokes. No Plotly/decode/resize.
   return;
 end procedure;
 
-procedure CompleteGraphRender(host,slotId,chartId,generation,completion)
+procedure clearWorkspacePresentation()
 begin
-DiscardStaleCompletionWithoutResurrection:
-  if generation # dashboardGeneration \/ ~SameLiveGraphHostSlotChart(graphInstances,host,slotId,chartId,generation) then
-    ReleaseOnlyCompletionTemporaryResources(completion);
-    result := NoValue; return;
+WorkspaceReplacementLifetime:
+  workspaceLifetime := workspaceLifetime + 1;
+  ReleaseOnlyWorkspaceOwnedGraphsImagesHandlesAndListeners(graphInstances,imageSurfaces);
+  graphInstances := []; imageSurfaces := []; slotOperations := [];
+  ClearOnlyWorkspaceFramesAndSelectionDecoration();
+  result := NoValue;
+  \* Independent export task hosts and resources remain owned by those tasks.
+  return;
+end procedure;
+
+procedure CompleteGraphRender(host,slotId,chartId,lifetime,operation,baseSize,completion)
+begin
+OnlyCurrentSameSlotCompletion:
+  if lifetime # workspaceLifetime \/ FieldOrDefault(slotOperations,slotId,0) # operation
+     \/ ~SameLiveGraphHostSlotChartOperation(graphInstances,host,slotId,chartId,operation) then
+    ReleaseOnlyCompletionTemporaryResources(completion); result := NoValue; return;
   end if;
   if completion.threw then
-    ReleaseOnlyCompletionTemporaryResources(completion);
-    PropagateOriginalFailure(completion.failure);
+    ReleaseOnlyCompletionTemporaryResources(completion); PropagateOriginalFailure(completion.failure);
   end if;
   ApplyCompletedPresentationToCurrentHostOnly(host,completion);
-  RequestGenerationCheckedResize(host,slotId,chartId,generation);
-  result := NoValue;
-  return;
+  SetThisSurfaceBaseRenderSize(host,baseSize);
+  ApplyCssScaleToLatestHostSizeWithInversePointerCoordinates(host,baseSize);
+  result := NoValue; return;
 end procedure;
 
-procedure CompleteImageRender(host,slotId,imageInput,generation,completion)
+procedure CompleteImageRender(host,slotId,imageInput,lifetime,operation,baseSize,completion)
 begin
-SurfaceOwnsHandleNotSharedImageAsset:
-  if generation # dashboardGeneration \/ ~SameCurrentImageSurfaceInput(host,slotId,imageInput,generation) then
+OnlyCurrentSameImageInput:
+  if lifetime # workspaceLifetime \/ FieldOrDefault(slotOperations,slotId,0) # operation
+     \/ ~SameCurrentImageSurfaceInput(host,slotId,imageInput,operation) then
     ReleaseOnlyCompletionTemporaryResources(completion); result := NoValue; return;
   end if;
   if completion.threw then
     ReleaseOnlyCompletionTemporaryResources(completion); PropagateOriginalFailure(completion.failure);
   end if;
   InstallCompletedImageOnCurrentSurface(host,completion);
-  \* Removing this surface cannot revoke another live surface's handles/URLs.
-  result := NoValue;
-  return;
+  SetThisSurfaceBaseRenderSize(host,baseSize);
+  ApplyCssScaleToLatestHostSizeWithInversePointerCoordinates(host,baseSize);
+  result := NoValue; return;
 end procedure;
 
 procedure setSelectedSlot(slotId,direction,frontendActions)
-variables selection = NoValue;
 begin
-DoNotValidateOrRetoggleLocally:
-  selection := InvokeSuppliedAction(frontendActions.slots.select,[slotId |-> slotId,direction |-> direction]);
-  UpdateWorkspaceFromReturnedFinalStateAndProjection(selection);
-  RequestResizeOfCurrentWorkspaceHosts();
-  result := selection;
+SuppliedSelectionActionOnce:
+  result := InvokeSuppliedAction(frontendActions.slots.select,[slotId |-> slotId,direction |-> direction]);
+  \* Application already performs the selected-slot presentation after reconciliation.
   return;
 end procedure;
 
@@ -279,14 +339,10 @@ OneClickOrAfterItsOpportunity:
 end procedure;
 
 procedure swapSlotContents(source,target,frontendActions)
-variables returned = NoValue;
 begin
-OnlyIdsToPublicApi:
-  returned := InvokeSuppliedAction(frontendActions.slots.swap,[sourceSlotId |-> source.id,targetSlotId |-> target.id]);
-  \* Existing Application commit/reconcile/projection path renders success.
-  \* No second swap and no assumption public boolean is an adapter tuple.
-  ApplyAlreadyReturnedPostReconciliationProjectionIfPresent(returned);
-  result := returned;
+SwapOnlyExplicitIds:
+  result := InvokeSuppliedAction(frontendActions.slots.swap,[sourceSlotId |-> source.id,targetSlotId |-> target.id]);
+  \* Application owns the one structural CSS update; do not repeat it here.
   return;
 end procedure;
 
@@ -310,7 +366,7 @@ end procedure;
 procedure applyUiPalette(projectProjection,notify)
 variables palette = projectProjection;
 \* Application supplies the ui-palette query result or whole renderer result.appearance.uiPalette.
-\* Graph figures are applied by applyDashboardProjectionInvalidation.
+\* Workspace graph figures are applied only within the permitted selected or explicit whole scope.
 begin
 FiveLegacyCssVariables:
   SetCssVariables(["--ui-color" |-> palette.uiColor,"--paper" |-> palette.uiBackgroundColor,
@@ -320,17 +376,14 @@ FiveLegacyCssVariables:
   return;
 end procedure;
 
-procedure applySlotStyle(projectProjection,notify)
+procedure applySlotStyle(projectProjection,interfaceState,notify)
 variables styleView = NoValue;
 begin
-SharedStyleApplication:
-  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
-                           projectProjection.visibleSlots,projectProjection.geometry);
-  styleView := result;
+ReuseCurrentPixelsForStyleGeometry:
+  call applyWorkspaceTransform(projectProjection,interfaceState); styleView := result;
   ApplyDashboardCaptionCssFromSuppliedStyleAndGeometry(projectProjection.layout.slotStyle,projectProjection.geometry);
   if notify then ExistingLayoutModelToUiNotification(); end if;
-  result := styleView;
-  return;
+  result := styleView; return;
 end procedure;
 
 procedure resolveSelectedChart(projectProjection,interfaceState)
@@ -342,24 +395,21 @@ end procedure;
 
 procedure updateGraphView(projectProjection,interfaceState)
 begin
-NoDomOrBufferReadAsProjectSource:
-  result := RenderWorkspaceFromSuppliedSlotChartImageRelations(projectProjection,interfaceState);
-  return;
+SelectedContentWithCurrentInteraction:
+  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
+  call renderDashboard(projectProjection,interfaceState); return;
 end procedure;
 
 procedure startupCoreRuntime(projectProjection,interfaceState,frontendActions)
 variables clickController = NoValue, dropController = NoValue;
 begin
-InitialZoomAndControllers:
-  ApplyZoomProjectionFromSuppliedState(projectProjection,interfaceState);
+ControllersBeforeBlankStructure:
   call installSlotClickController(frontendActions); clickController := result;
   dropController := InstallExistingPublicDropController(frontendActions);
-ExistingSlotsOnly:
-  call renderDashboard(projectProjection,interfaceState);
-  call applySlotStyle(projectProjection,FALSE);
+  call applyWorkspaceTransform(projectProjection,interfaceState);
   AuditSuppliedProjectReferenceRuntimeProjectionContracts(projectProjection,interfaceState);
   result := RendererRuntimeWithOwnedControllers(clickController,dropController);
-  \* Application, not renderer, sends lifecycle-ready. No default CSV/grid recreation.
+  \* Initial startup prepares structure and interaction only.
   return;
 end procedure;
 

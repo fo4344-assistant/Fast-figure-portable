@@ -728,42 +728,46 @@ CanonicalPathAndCurrentNode:
   else FailQuery("unregistered VFS query"); end if;
 end procedure;
 
+procedure BuildSlotContentRead(source,sourceSlot)
+variables slot = DeepCopy(sourceSlot), chart = NoValue, csv = NoValue, j = 1, columns = <<>>;
+begin
+OnlyThisSlotExpensiveInputs:
+  chart := ChartById(source,slot.content.chart);
+  if chart # NoValue then
+    slot.chart := DeepCopy(chart);
+    call chartFigure(DeepCopy(chart),source); slot.figure := result;
+    slot.csvViews := <<>>;
+    if ~ConversionRepresentation(chart) then
+      while j <= Len(chart.editor.objects) do
+        csv := CsvById(source,chart.editor.objects[j].csvId);
+        if csv # NoValue then
+          call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+          slot.csvViews := Append(slot.csvViews,[csv |-> DeepCopy(csv),columns |-> columns]);
+        end if;
+        j := j + 1;
+      end while;
+    end if;
+  end if;
+  if slot.content.imageId # NoValue then
+    call BuildImageEditorRead(source,slot.id); slot.imageView := result;
+  end if;
+  result := slot; return;
+end procedure;
+
 procedure BuildSurfaceRead(source)
 variables output = [layout |-> DeepCopy(source.layout),appearance |-> DeepCopy(source.appearance),
-                    annotations |-> DeepCopy(source.annotations),visibleSlots |-> <<>>],
-          slot = NoValue, chart = NoValue, csv = NoValue, i = 1, j = 1, columns = <<>>;
+                    annotations |-> DeepCopy(source.annotations),visibleSlots |-> <<>>], i = 1;
 begin
-CurrentVisibleSlotLocalCopies:
+ExportSurfaceInputs:
   while i <= Len(source.slots) do
     if ~source.slots[i].hidden then
-      slot := DeepCopy(source.slots[i]); chart := ChartById(source,slot.content.chart);
-      if chart # NoValue then
-        slot.chart := DeepCopy(chart);
-        call chartFigure(DeepCopy(chart),source); slot.figure := result;
-        slot.csvViews := <<>>;
-        if ~ConversionRepresentation(chart) then
-          j := 1;
-          while j <= Len(chart.editor.objects) do
-            csv := CsvById(source,chart.editor.objects[j].csvId);
-            if csv # NoValue then
-              call columnDefinitions(csv.rows,csv.headerLines); columns := result;
-              slot.csvViews := Append(slot.csvViews,[csv |-> DeepCopy(csv),columns |-> columns]);
-            end if;
-            j := j + 1;
-          end while;
-        end if;
-      end if;
-      if slot.content.imageId # NoValue then call BuildImageEditorRead(source,slot.id); slot.imageView := result; end if;
-      output.visibleSlots := Append(output.visibleSlots,slot);
+      call BuildSlotContentRead(source,source.slots[i]); output.visibleSlots := Append(output.visibleSlots,result);
     end if;
     i := i + 1;
   end while;
-OneLabelOrderingForThisProjection:
   call orderedSlotLabels(source); output.orderedSlotLabels := result;
   output.captionReferenceStyle := DeepCopy(BackendSettings.defaults.captionReferenceStyle);
-  result := output;
-  \* All objects detached from SAME supplied source. No later live graph/CSV fallback.
-  return;
+  result := output; return;
 end procedure;
 
 procedure NormalizePreviewReadWidth(value)
@@ -844,12 +848,43 @@ PublicReadRegisteredOperation:
 RendererRead:
   if operation = "slot-image" then call BuildImageEditorRead(source,request.slotId); output := result; goto ImmutableReturn;
   elsif operation = "ui-palette" then output := DeepCopy(source.appearance.uiPalette); goto ImmutableReturn; end if;
-  width := FieldOrNoValue(request,"width");
-  Require(PositiveFinite(width));
+  if operation = NoValue then operation := "selected-slot"; end if;
+  Require(operation \in {"workspace-structure","selected-slot","whole-workspace"});
+  width := FieldOrNoValue(request,"width"); Require(PositiveFinite(width));
   call DashboardGeometryInProject(source,width,NoValue); geometry := result;
-  call BuildSurfaceRead(source); output := result;
-  output.geometry := geometry;
-  \* One synchronous source read; actual width is not preview-clamped.
+  output := [operation |-> operation,layout |-> DeepCopy(source.layout),geometry |-> geometry,visibleSlots |-> <<>>];
+  i := 1;
+  while i <= Len(source.slots) do
+    slot := source.slots[i];
+    if ~slot.hidden then
+      output.visibleSlots := Append(output.visibleSlots,[id |-> slot.id,row |-> slot.row,col |-> slot.col,
+        rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan,contentType |-> slot.content.contentType,
+        chartId |-> slot.content.chart,imageId |-> slot.content.imageId]);
+    end if;
+    i := i + 1;
+  end while;
+  if operation = "workspace-structure" then goto ImmutableReturn; end if;
+  if operation = "selected-slot" then
+    output.targetSlot := NoValue;
+    slot := VisibleSlot(source,FieldOrNoValue(request,"slotId"));
+    if slot = NoValue then goto ImmutableReturn; end if;
+    call BuildSlotContentRead(source,slot); output.targetSlot := result;
+    call orderedSlotLabels(source);
+    output.orderedSlotLabels := SelectSeq(result,LAMBDA label : label.slotId = slot.id);
+    output.appearance := DeepCopy(source.appearance);
+    output.annotations := [labels |-> DeepCopy(source.annotations.labels)];
+    goto ImmutableReturn;
+  end if;
+  output.contentSlots := <<>>; i := 1;
+  while i <= Len(source.slots) do
+    if ~source.slots[i].hidden then
+      call BuildSlotContentRead(source,source.slots[i]); output.contentSlots := Append(output.contentSlots,result);
+    end if;
+    i := i + 1;
+  end while;
+  output.appearance := DeepCopy(source.appearance); output.annotations := DeepCopy(source.annotations);
+  call orderedSlotLabels(source); output.orderedSlotLabels := result;
+  output.captionReferenceStyle := DeepCopy(BackendSettings.defaults.captionReferenceStyle);
   goto ImmutableReturn;
 ExportRead:
   if operation = NoValue then call BuildPlainProjectRead(source); output := result; goto ImmutableReturn;

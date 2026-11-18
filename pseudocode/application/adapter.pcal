@@ -36,21 +36,23 @@ FrontendPublicationSubscription:
   return;
 end procedure;
 
-procedure dispatchProjectQuery(query, payload)
+procedure dispatchProjectQuery(query,payload)
 variables request = [], frontendState = NoValue, layout = NoValue, width = NoValue;
 begin
-CurrentWholeRendererInputs:
+CurrentScopedRendererInputs:
   request := IF payload = NoValue THEN [] ELSE DeepCopy(payload);
-  if query = "renderer" /\ FieldOrNoValue(request,"operation") \notin {"slot-image","ui-palette"} then
+  if query = "renderer" /\ FieldOrNoValue(request,"operation")
+      \in {NoValue,"workspace-structure","selected-slot","whole-workspace"} then
     call InterfaceStateMachine_readState(); frontendState := result;
+    if FieldOrNoValue(request,"operation") = NoValue then request.operation := "selected-slot"; end if;
+    if request.operation = "selected-slot" then request.slotId := frontendState.selectedSlotId; end if;
     call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
     width := layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
     request.frontendState := frontendState; request.width := width;
-    \* These current reads and the final query are synchronous, with no callback or command.
+    \* Current reads and final query have no intervening callback/await/command.
   end if;
-ReadThroughBackend:
-  call readBackendProjection(query, request);
-  \* Immutable output only; no mutable Backend helper escapes.
+ScopedBackendRead:
+  call readBackendProjection(query,request);
   return;
 end procedure;
 
@@ -75,83 +77,105 @@ SendValidatedOnly:
   return;
 end procedure;
 
-procedure dispatchSlotSelection(slotId, pendingContentType, direction)
-variables validatedInput = NoValue, interfaceState = NoValue,
-          selectionContext = NoValue, projectResult = NoValue,
-          rendererProjection = NoValue, commandTuple = NoValue;
+procedure dispatchSlotSelection(slotId,pendingContentType,direction)
+variables validatedInput = NoValue, interfaceState = NoValue, selectionContext = NoValue,
+  projectResult = NoValue, rendererProjection = NoValue, commandTuple = NoValue;
 begin
 ValidateSlotBeforeAnyChange:
-  call validateFrontendIntent("SELECT_SLOT", [slotId |-> slotId, direction |-> direction]);
+  call validateFrontendIntent("SELECT_SLOT",[slotId |-> slotId,direction |-> direction]);
   validatedInput := result;
-RejectSlotUnchanged:
   if ~validatedInput.accepted then
-    call InterfaceStateMachine_readState();
-    result := <<result, NoValue, NoValue>>;
-    return;
+    call InterfaceStateMachine_readState(); result := <<result,NoValue,NoValue>>; return;
   end if;
 ApplySlotRuntimeTransition:
-  \* Backend hint distinguishes user toggle/full clear from non-null
-  \* model-to-fsm graph-only clear; no new/second selection event here.
-  call InterfaceStateMachine_send("SELECT_SLOT", validatedInput);
-  interfaceState := result;
-OptionalPersistentIntent:
+  call InterfaceStateMachine_send("SELECT_SLOT",validatedInput); interfaceState := result;
   if interfaceState.selectedSlotId # NoValue /\ pendingContentType # NoValue then
-    call readBackendProjection("slot-selection-context", [slotId |-> interfaceState.selectedSlotId]);
+    call readBackendProjection("slot-selection-context",[slotId |-> interfaceState.selectedSlotId]);
     selectionContext := result;
     if selectionContext # NoValue then
       if selectionContext.empty /\ selectionContext.contentType # pendingContentType then
         call dispatchProjectCommand("SLOT_TYPE_CHANGED",
-             [slotId |-> interfaceState.selectedSlotId, contentType |-> pendingContentType]);
-        commandTuple := result;
-        projectResult := commandTuple[1];
-        interfaceState := commandTuple[2];
+          [slotId |-> interfaceState.selectedSlotId,contentType |-> pendingContentType]);
+        commandTuple := result; projectResult := commandTuple[1];
       end if;
     end if;
   end if;
-ReadFinalSelectionProjection:
+FinalSelectionBeforePresentation:
   call InterfaceStateMachine_readState(); interfaceState := result;
-  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState]);
+  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
+  if interfaceState.selectedSlotId = NoValue then
+    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]);
+    result := <<interfaceState,projectResult,result>>; return;
+  end if;
+  if commandTuple # NoValue then
+    if commandTuple[2].selectedSlotId = interfaceState.selectedSlotId then
+      result := <<interfaceState,projectResult,commandTuple[3]>>; return;
+    end if;
+  end if;
+OneSelectedContentRead:
+  call dispatchProjectQuery("renderer",[operation |-> "selected-slot"]); rendererProjection := result;
+  call updateGraphView(rendererProjection,interfaceState);
+  result := <<interfaceState,projectResult,rendererProjection>>; return;
+end procedure;
+
+procedure dispatchProjectCommand(event,payload)
+variables mutationResult = NoValue, frontendBefore = NoValue, reconciliationInput = NoValue,
+  interfaceState = NoValue, rendererProjection = NoValue, effect = NoValue;
+begin
+OneBackendTransaction:
+  assert event \in PROJECT_COMMANDS;
+  call ProjectStateMachine_send(event,payload); mutationResult := result;
+  call InterfaceStateMachine_readState(); frontendBefore := result;
+  if ~mutationResult.committed then result := <<mutationResult,frontendBefore,NoValue>>; return; end if;
+ActualPostCommitReferences:
+  call buildFrontendReconciliationInput(event,mutationResult,frontendBefore); reconciliationInput := result;
+  call InterfaceStateMachine_reconcileProjectResult(event,reconciliationInput); interfaceState := result;
+  effect := reconciliationInput.projectionEffect;
+StructuralCommand:
+  if event = "PROJECT_LOADED" then
+    call clearWorkspacePresentation();
+    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
+    call applyWorkspaceTransform(rendererProjection,interfaceState);
+    result := <<mutationResult,interfaceState,rendererProjection>>; return;
+  end if;
+  if event \in {"GRID_LAYOUT_CHANGED","SLOTS_MERGED","SLOTS_SPLIT","SLOTS_SWAPPED","LAYOUT_STYLE_CHANGED"} then
+    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
+    call applyWorkspaceTransform(rendererProjection,interfaceState);
+    result := <<mutationResult,interfaceState,rendererProjection>>; return;
+  end if;
+NoContentForPathOrOutputOnly:
+  if (effect.pathOnly /\ ~effect.referencesRemoved) \/ event = "EXPORT_SETTINGS_CHANGED" then
+    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
+    result := <<mutationResult,interfaceState,rendererProjection>>; return;
+  end if;
+SelectedContentOnly:
+  call dispatchProjectQuery("renderer",
+    [operation |-> IF interfaceState.selectedSlotId = NoValue THEN "workspace-structure" ELSE "selected-slot"]);
   rendererProjection := result;
-ReturnSlotOrchestration:
-  result := <<interfaceState, projectResult, rendererProjection>>;
+  call applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,rendererProjection);
+  result := <<mutationResult,interfaceState,rendererProjection>>;
+  \* Commit is retained if the later query/presentation fails. Wrappers do not repeat presentation.
   return;
 end procedure;
 
-procedure dispatchProjectCommand(event, payload)
-variables mutationResult = NoValue, frontendBefore = NoValue,
-          reconciliationInput = NoValue, interfaceState = NoValue,
-          rendererProjection = NoValue;
+procedure transformWorkspace()
+variables projection = NoValue, interfaceState = NoValue;
 begin
-RequireExplicitCommand:
-  assert event \in PROJECT_COMMANDS;
-FinishBackendTransactionFirst:
-  \* Identity/new edits only. Never feed read projections as candidates.
-  call ProjectStateMachine_send(event, payload);
-  mutationResult := result;
-ReadRuntimeReferences:
-  call InterfaceStateMachine_readState();
-  frontendBefore := result;
-NoSuccessPathWithoutCommit:
-  if ~mutationResult.committed then
-    result := <<mutationResult, frontendBefore, NoValue>>;
-    return;
-  end if;
-ValidatePostCommitReferences:
-  \* This is the ONLY post-commit index/hint/map path. A map is command-local.
-  call buildFrontendReconciliationInput(event, mutationResult, frontendBefore);
-  reconciliationInput := result;
-ReconcileOnce:
-  call InterfaceStateMachine_reconcileProjectResult(event, reconciliationInput);
-  interfaceState := result;
-  \* Do not resend SELECT_GRAPH_OBJECT or overwrite independent CSV selection.
-ReadFinalRendererInput:
-  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState,
-                                          mutationResult |-> mutationResult]);
-  rendererProjection := result;
-ReturnInternalTuple:
-  \* Not a public chart/settings/bool result. Wrapper owns its declared return.
-  \* Post-commit read/render failures propagate; no hidden Project rollback.
-  result := <<mutationResult, interfaceState, rendererProjection>>;
+CurrentStructureForCssOnly:
+  call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); projection := result;
+  call InterfaceStateMachine_readState(); interfaceState := result;
+  call applyWorkspaceTransform(projection,interfaceState); return;
+end procedure;
+
+procedure renderWholeWorkspace()
+variables projection = NoValue, interfaceState = NoValue;
+begin
+ExplicitWholeContentEntry:
+  call InterfaceStateMachine_readState(); interfaceState := result;
+  if interfaceState.lifecycle # "ready" then result := NoValue; return; end if;
+  call dispatchProjectQuery("renderer",[operation |-> "whole-workspace"]); projection := result;
+  call InterfaceStateMachine_readState(); interfaceState := result;
+  call Renderer_renderWholeWorkspace(projection,interfaceState);
   return;
 end procedure;
 

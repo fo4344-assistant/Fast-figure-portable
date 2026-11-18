@@ -21,6 +21,7 @@ ActualImportedAssetPath(changed) == ActualImportedAssetPathsInInputOrder(changed
 ActualCreatedDirectoryPath(changed) == changed.createdDirectoryPath
 ActualFinalCanonicalDestination(changed) == changed.movedPathTo
 PUBLIC_API_METHODS == [
+ "workspace.render" |-> <<"wrapper","renderWholeWorkspace">>,
  "project.readName" |-> <<"query","project.readName">>,
  "project.setName" |-> <<"wrapper","setProjectName">>,
  "project.importFile" |-> <<"wrapper","importProjectFile">>,
@@ -184,7 +185,9 @@ procedure InvokePublicWrapper(method,args)
 variables path = NoValue;
 begin
 BindExactSourceInputs:
-  if method = "project.setName" then
+  if method = "workspace.render" then
+    call renderWholeWorkspace();
+  elsif method = "project.setName" then
     call setProjectName(args.value,OptionalArg(args,"trim",FALSE));
   elsif method = "project.importFile" then
     call importProjectFile(args.file);

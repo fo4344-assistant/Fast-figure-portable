@@ -32,14 +32,14 @@ ExposeExistingBoundary:
 PrepareBoundaryInputs:
   \* Application obtains the initial read input BEFORE its Frontend consumer.
   \* This is the supplied input of renderer.startupCoreRuntime, not a system mirror.
-  call dispatchProjectQuery("renderer", []);
+  call dispatchProjectQuery("renderer", [operation |-> "workspace-structure"]);
   projectProjection := result;
   call InterfaceStateMachine_readState();
   interfaceState := result;
   frontendActions := PublicActionSurface(FastFigureApi);
-PrepareAndRenderCore:
-  \* Directly reuse renderer.startupCoreRuntime's Source-defined order:
-  \* zoom -> controllers -> existing visible slots -> supplied slot style -> audit.
+PrepareBlankCore:
+  \* Controllers and a blank frame are prepared without content rendering.
+  \* Initial figures/images wait for the explicit workspace.render action.
   call startupCoreRuntime(projectProjection, interfaceState, frontendActions);
   coreRuntime := result;
 ReadyThroughApplication:

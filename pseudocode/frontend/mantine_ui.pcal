@@ -16,7 +16,7 @@ EXTENDS Naturals, Reals, Sequences, FiniteSets
 CONSTANT NoValue
 SettingsOverlayNames == {"layout","label","caption","print"}
 ComponentOwners == [
-  FastFigureToolbar |-> "overlay toggle / selected target",
+  FastFigureToolbar |-> "overlay toggle / selected target / explicit whole rendering",
   FastFigureDataActions |-> "asset import / slot reset/delete / ordinary empty CSV",
   FastFigureImageEditor |-> "image preview/settings",
   FastFigureProjectDataTree |-> "VFS projection / selection / move / drop / menu",
@@ -684,10 +684,15 @@ NoProjectStoreInShell:
   BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
   BindComponentRenderReadFor("FastFigureGraphDataEditor","objectOptions",ReadGraphObjectOptions);
   BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
+  BindWorkspaceSizeChangeToSuppliedTransformAction(transformWorkspace);
+  \* Size/sidebar changes only read structure and transform existing content pixels.
   BindComponentRenderRead(useAppState);
   BindComponentRenderReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
   BindComponentEvent("FastFigureStatusDebug","debugClicked",handleDebugToggle);
-  BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected">>);
+  BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected","workspace.render">>);
+  PlaceExistingStandardButtonImmediatelyLeftOfPrint("FastFigureToolbar","렌더링","workspace.render");
+  BindWholeRenderButtonReadyDisabledRunningAndKeyboardStateThroughExistingUiCommand();
+  \* Same Button/theme/height/padding as neighbouring controls; no local style variant.
   BindComponentPublicMethods("FastFigureDataActions",<<"assets.importFiles","slots.reset","assets.delete">>);
   BindComponentPublicMethods("FastFigureImageEditor",<<"images.readEditor","images.setSettings","images.insertEmpty">>);
   BindComponentPublicMethods("FastFigureProjectDataTree",<<"assets.selectCsv","assets.selectImage","assets.selectDirectory",
@@ -717,10 +722,10 @@ end procedure;
 
 procedure ResizeSidebar(newGeometry)
 begin
-SessionOnlyThenResizePlots:
+SessionGeometryThenReusePixels:
   sidebarGeometry := NormalizeSessionSidebarGeometry(newGeometry);
   ApplySessionSidebarGeometryCss(sidebarGeometry);
-  RequestCurrentPlotResize();
+  call transformWorkspace();
   result := NoValue;
   return;
 end procedure;

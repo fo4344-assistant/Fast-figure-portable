@@ -96,6 +96,7 @@ procedure setLayoutApiZoom(value)
 begin
 SessionOnly:
   call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM",[value |-> value]);
+  call transformWorkspace();
   call readLayoutApiState(NoValue);
   return;
 end procedure;
@@ -112,6 +113,7 @@ procedure resetLayoutApiZoom()
 begin
 OneResetTransition:
   call dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM",[]);
+  call transformWorkspace();
   call readLayoutApiState(NoValue);
   return;
 end procedure;
@@ -232,7 +234,7 @@ ExplicitGlobalOwner:
   call dispatchProjectCommand("CAPTION_TEXT_INPUT",[target |-> [kind |-> "global"],text |-> text]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
   call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
-  call syncDashboardCaption(state);
+  \* Global workspace caption is refreshed only by the explicit whole-content action.
   result := state; return;
 end procedure;
 
@@ -253,7 +255,7 @@ NoneAllEmptyListNoTargetsBackendCalculatesExactString:
   call dispatchProjectCommand("SLOT_CAPTIONS_INSERTED",[slotIds |-> slotIds]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
   call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
-  call syncDashboardCaption(state);
+  \* Return the official text now; defer workspace global-caption presentation.
   result := state;
   return;
 end procedure;
@@ -304,7 +306,7 @@ begin
 WholePaletteMissingDefaultsNotCurrentMerge:
   call dispatchProjectCommand("APPEARANCE_CHANGED",[palette |-> values]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
-  call applyDashboardProjectionInvalidation("APPEARANCE_CHANGED",tuple[1],tuple[2],tuple[3]);
+  \* dispatchProjectCommand already applied its permitted selected-slot presentation.
   call InterfaceStateMachine_notify("ui","UI_PALETTE_CHANGED",[]);
   call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]);
   return;

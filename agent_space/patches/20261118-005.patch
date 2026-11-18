@@ -1,0 +1,935 @@
+diff --git a/development-versions.json b/development-versions.json
+index 4c3ec9cdc490cf7942b9b89abee95df3b1e6992c..cdd93526449e192961290b37cf334e67f2aea005 100644
+--- a/development-versions.json
++++ b/development-versions.json
+@@ -64,14 +64,14 @@
+       "translation_review": "agent_space/reviews/review-20261118-005-plan042-source-code.md"
+     },
+     "pseudocode": {
+-      "revision": 32,
++      "revision": 33,
+       "status": "stale",
+       "path_rule": "pseudocode/**/*.pcal",
+-      "fingerprint": "sha256:b7b82a6a200d26568648282767a2ab01ec56d1cfd6101a6d2e286f7b39734566",
++      "fingerprint": "sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129",
+       "derived_from": {
+-        "source-script": "sha256:3f2615ec38ee772db09faa669568bf393df8f85bd9c3e0609375145352306913"
++        "source-script": "sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4"
+       },
+-      "translation_review": "agent_space/reviews/review-20261118-004-plan042-pseudocode.md"
++      "translation_review": "agent_space/reviews/review-20261118-008-plan044-pseudocode.md"
+     }
+   }
+ }
+diff --git a/pseudocode/application/adapter.pcal b/pseudocode/application/adapter.pcal
+index a290814e1c6429e4ebed0c95d7b16ff1c255ac29..48c69eb3300aabbf578be9884c018e4cdbf53fc7 100644
+--- a/pseudocode/application/adapter.pcal
++++ b/pseudocode/application/adapter.pcal
+@@ -36,21 +36,23 @@ FrontendPublicationSubscription:
+   return;
+ end procedure;
+ 
+-procedure dispatchProjectQuery(query, payload)
++procedure dispatchProjectQuery(query,payload)
+ variables request = [], frontendState = NoValue, layout = NoValue, width = NoValue;
+ begin
+-CurrentWholeRendererInputs:
++CurrentScopedRendererInputs:
+   request := IF payload = NoValue THEN [] ELSE DeepCopy(payload);
+-  if query = "renderer" /\ FieldOrNoValue(request,"operation") \notin {"slot-image","ui-palette"} then
++  if query = "renderer" /\ FieldOrNoValue(request,"operation")
++      \in {NoValue,"workspace-structure","selected-slot","whole-workspace"} then
+     call InterfaceStateMachine_readState(); frontendState := result;
++    if FieldOrNoValue(request,"operation") = NoValue then request.operation := "selected-slot"; end if;
++    if request.operation = "selected-slot" then request.slotId := frontendState.selectedSlotId; end if;
+     call readBackendProjection("project-api",[operation |-> "layout.readState"]); layout := result;
+     width := layout.slotStyle.referenceWidth * frontendState.dashboardZoomIntent / 100;
+     request.frontendState := frontendState; request.width := width;
+-    \* These current reads and the final query are synchronous, with no callback or command.
++    \* Current reads and final query have no intervening callback/await/command.
+   end if;
+-ReadThroughBackend:
+-  call readBackendProjection(query, request);
+-  \* Immutable output only; no mutable Backend helper escapes.
++ScopedBackendRead:
++  call readBackendProjection(query,request);
+   return;
+ end procedure;
+ 
+@@ -75,83 +77,105 @@ SendValidatedOnly:
+   return;
+ end procedure;
+ 
+-procedure dispatchSlotSelection(slotId, pendingContentType, direction)
+-variables validatedInput = NoValue, interfaceState = NoValue,
+-          selectionContext = NoValue, projectResult = NoValue,
+-          rendererProjection = NoValue, commandTuple = NoValue;
++procedure dispatchSlotSelection(slotId,pendingContentType,direction)
++variables validatedInput = NoValue, interfaceState = NoValue, selectionContext = NoValue,
++  projectResult = NoValue, rendererProjection = NoValue, commandTuple = NoValue;
+ begin
+ ValidateSlotBeforeAnyChange:
+-  call validateFrontendIntent("SELECT_SLOT", [slotId |-> slotId, direction |-> direction]);
++  call validateFrontendIntent("SELECT_SLOT",[slotId |-> slotId,direction |-> direction]);
+   validatedInput := result;
+-RejectSlotUnchanged:
+   if ~validatedInput.accepted then
+-    call InterfaceStateMachine_readState();
+-    result := <<result, NoValue, NoValue>>;
+-    return;
++    call InterfaceStateMachine_readState(); result := <<result,NoValue,NoValue>>; return;
+   end if;
+ ApplySlotRuntimeTransition:
+-  \* Backend hint distinguishes user toggle/full clear from non-null
+-  \* model-to-fsm graph-only clear; no new/second selection event here.
+-  call InterfaceStateMachine_send("SELECT_SLOT", validatedInput);
+-  interfaceState := result;
+-OptionalPersistentIntent:
++  call InterfaceStateMachine_send("SELECT_SLOT",validatedInput); interfaceState := result;
+   if interfaceState.selectedSlotId # NoValue /\ pendingContentType # NoValue then
+-    call readBackendProjection("slot-selection-context", [slotId |-> interfaceState.selectedSlotId]);
++    call readBackendProjection("slot-selection-context",[slotId |-> interfaceState.selectedSlotId]);
+     selectionContext := result;
+     if selectionContext # NoValue then
+       if selectionContext.empty /\ selectionContext.contentType # pendingContentType then
+         call dispatchProjectCommand("SLOT_TYPE_CHANGED",
+-             [slotId |-> interfaceState.selectedSlotId, contentType |-> pendingContentType]);
+-        commandTuple := result;
+-        projectResult := commandTuple[1];
+-        interfaceState := commandTuple[2];
++          [slotId |-> interfaceState.selectedSlotId,contentType |-> pendingContentType]);
++        commandTuple := result; projectResult := commandTuple[1];
+       end if;
+     end if;
+   end if;
+-ReadFinalSelectionProjection:
++FinalSelectionBeforePresentation:
+   call InterfaceStateMachine_readState(); interfaceState := result;
+-  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState]);
+-  rendererProjection := result;
+-ReturnSlotOrchestration:
+-  result := <<interfaceState, projectResult, rendererProjection>>;
+-  return;
++  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
++  if interfaceState.selectedSlotId = NoValue then
++    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]);
++    result := <<interfaceState,projectResult,result>>; return;
++  end if;
++  if commandTuple # NoValue then
++    if commandTuple[2].selectedSlotId = interfaceState.selectedSlotId then
++      result := <<interfaceState,projectResult,commandTuple[3]>>; return;
++    end if;
++  end if;
++OneSelectedContentRead:
++  call dispatchProjectQuery("renderer",[operation |-> "selected-slot"]); rendererProjection := result;
++  call updateGraphView(rendererProjection,interfaceState);
++  result := <<interfaceState,projectResult,rendererProjection>>; return;
+ end procedure;
+ 
+-procedure dispatchProjectCommand(event, payload)
+-variables mutationResult = NoValue, frontendBefore = NoValue,
+-          reconciliationInput = NoValue, interfaceState = NoValue,
+-          rendererProjection = NoValue;
++procedure dispatchProjectCommand(event,payload)
++variables mutationResult = NoValue, frontendBefore = NoValue, reconciliationInput = NoValue,
++  interfaceState = NoValue, rendererProjection = NoValue, effect = NoValue;
+ begin
+-RequireExplicitCommand:
++OneBackendTransaction:
+   assert event \in PROJECT_COMMANDS;
+-FinishBackendTransactionFirst:
+-  \* Identity/new edits only. Never feed read projections as candidates.
+-  call ProjectStateMachine_send(event, payload);
+-  mutationResult := result;
+-ReadRuntimeReferences:
+-  call InterfaceStateMachine_readState();
+-  frontendBefore := result;
+-NoSuccessPathWithoutCommit:
+-  if ~mutationResult.committed then
+-    result := <<mutationResult, frontendBefore, NoValue>>;
+-    return;
++  call ProjectStateMachine_send(event,payload); mutationResult := result;
++  call InterfaceStateMachine_readState(); frontendBefore := result;
++  if ~mutationResult.committed then result := <<mutationResult,frontendBefore,NoValue>>; return; end if;
++ActualPostCommitReferences:
++  call buildFrontendReconciliationInput(event,mutationResult,frontendBefore); reconciliationInput := result;
++  call InterfaceStateMachine_reconcileProjectResult(event,reconciliationInput); interfaceState := result;
++  effect := reconciliationInput.projectionEffect;
++StructuralCommand:
++  if event = "PROJECT_LOADED" then
++    call clearWorkspacePresentation();
++    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
++    call applyWorkspaceTransform(rendererProjection,interfaceState);
++    result := <<mutationResult,interfaceState,rendererProjection>>; return;
+   end if;
+-ValidatePostCommitReferences:
+-  \* This is the ONLY post-commit index/hint/map path. A map is command-local.
+-  call buildFrontendReconciliationInput(event, mutationResult, frontendBefore);
+-  reconciliationInput := result;
+-ReconcileOnce:
+-  call InterfaceStateMachine_reconcileProjectResult(event, reconciliationInput);
+-  interfaceState := result;
+-  \* Do not resend SELECT_GRAPH_OBJECT or overwrite independent CSV selection.
+-ReadFinalRendererInput:
+-  call dispatchProjectQuery("renderer", [frontendState |-> interfaceState,
+-                                          mutationResult |-> mutationResult]);
++  if event \in {"GRID_LAYOUT_CHANGED","SLOTS_MERGED","SLOTS_SPLIT","SLOTS_SWAPPED","LAYOUT_STYLE_CHANGED"} then
++    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
++    call applyWorkspaceTransform(rendererProjection,interfaceState);
++    result := <<mutationResult,interfaceState,rendererProjection>>; return;
++  end if;
++NoContentForPathOrOutputOnly:
++  if (effect.pathOnly /\ ~effect.referencesRemoved) \/ event = "EXPORT_SETTINGS_CHANGED" then
++    call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
++    result := <<mutationResult,interfaceState,rendererProjection>>; return;
++  end if;
++SelectedContentOnly:
++  call dispatchProjectQuery("renderer",
++    [operation |-> IF interfaceState.selectedSlotId = NoValue THEN "workspace-structure" ELSE "selected-slot"]);
+   rendererProjection := result;
+-ReturnInternalTuple:
+-  \* Not a public chart/settings/bool result. Wrapper owns its declared return.
+-  \* Post-commit read/render failures propagate; no hidden Project rollback.
+-  result := <<mutationResult, interfaceState, rendererProjection>>;
++  call applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,rendererProjection);
++  result := <<mutationResult,interfaceState,rendererProjection>>;
++  \* Commit is retained if the later query/presentation fails. Wrappers do not repeat presentation.
++  return;
++end procedure;
++
++procedure transformWorkspace()
++variables projection = NoValue, interfaceState = NoValue;
++begin
++CurrentStructureForCssOnly:
++  call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); projection := result;
++  call InterfaceStateMachine_readState(); interfaceState := result;
++  call applyWorkspaceTransform(projection,interfaceState); return;
++end procedure;
++
++procedure renderWholeWorkspace()
++variables projection = NoValue, interfaceState = NoValue;
++begin
++ExplicitWholeContentEntry:
++  call InterfaceStateMachine_readState(); interfaceState := result;
++  if interfaceState.lifecycle # "ready" then result := NoValue; return; end if;
++  call dispatchProjectQuery("renderer",[operation |-> "whole-workspace"]); projection := result;
++  call InterfaceStateMachine_readState(); interfaceState := result;
++  call Renderer_renderWholeWorkspace(projection,interfaceState);
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/application/public_api/contract.pcal b/pseudocode/application/public_api/contract.pcal
+index 8d44efeead9ec7da365a55e60fb23272c0e402d3..30130b20123ef03e6fc46a88dde49f6c902bef99 100644
+--- a/pseudocode/application/public_api/contract.pcal
++++ b/pseudocode/application/public_api/contract.pcal
+@@ -21,6 +21,7 @@ ActualImportedAssetPath(changed) == ActualImportedAssetPathsInInputOrder(changed
+ ActualCreatedDirectoryPath(changed) == changed.createdDirectoryPath
+ ActualFinalCanonicalDestination(changed) == changed.movedPathTo
+ PUBLIC_API_METHODS == [
++ "workspace.render" |-> <<"wrapper","renderWholeWorkspace">>,
+  "project.readName" |-> <<"query","project.readName">>,
+  "project.setName" |-> <<"wrapper","setProjectName">>,
+  "project.importFile" |-> <<"wrapper","importProjectFile">>,
+@@ -184,7 +185,9 @@ procedure InvokePublicWrapper(method,args)
+ variables path = NoValue;
+ begin
+ BindExactSourceInputs:
+-  if method = "project.setName" then
++  if method = "workspace.render" then
++    call renderWholeWorkspace();
++  elsif method = "project.setName" then
+     call setProjectName(args.value,OptionalArg(args,"trim",FALSE));
+   elsif method = "project.importFile" then
+     call importProjectFile(args.file);
+diff --git a/pseudocode/application/public_api/layout_annotations.pcal b/pseudocode/application/public_api/layout_annotations.pcal
+index a77bbc232a6381c4af6f3b02dbae7ac1b23cc173..70b6abbb84c49fb54f2ffe2658dfe583f99da9c2 100644
+--- a/pseudocode/application/public_api/layout_annotations.pcal
++++ b/pseudocode/application/public_api/layout_annotations.pcal
+@@ -96,6 +96,7 @@ procedure setLayoutApiZoom(value)
+ begin
+ SessionOnly:
+   call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM",[value |-> value]);
++  call transformWorkspace();
+   call readLayoutApiState(NoValue);
+   return;
+ end procedure;
+@@ -112,6 +113,7 @@ procedure resetLayoutApiZoom()
+ begin
+ OneResetTransition:
+   call dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM",[]);
++  call transformWorkspace();
+   call readLayoutApiState(NoValue);
+   return;
+ end procedure;
+@@ -232,7 +234,7 @@ ExplicitGlobalOwner:
+   call dispatchProjectCommand("CAPTION_TEXT_INPUT",[target |-> [kind |-> "global"],text |-> text]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+   call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
+-  call syncDashboardCaption(state);
++  \* Global workspace caption is refreshed only by the explicit whole-content action.
+   result := state; return;
+ end procedure;
+ 
+@@ -253,7 +255,7 @@ NoneAllEmptyListNoTargetsBackendCalculatesExactString:
+   call dispatchProjectCommand("SLOT_CAPTIONS_INSERTED",[slotIds |-> slotIds]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+   call dispatchProjectQuery("project-api",[operation |-> "captions.readGlobal"]); state := result;
+-  call syncDashboardCaption(state);
++  \* Return the official text now; defer workspace global-caption presentation.
+   result := state;
+   return;
+ end procedure;
+@@ -304,7 +306,7 @@ begin
+ WholePaletteMissingDefaultsNotCurrentMerge:
+   call dispatchProjectCommand("APPEARANCE_CHANGED",[palette |-> values]); tuple := result;
+   if ~tuple[1].committed then result := FALSE; return; end if;
+-  call applyDashboardProjectionInvalidation("APPEARANCE_CHANGED",tuple[1],tuple[2],tuple[3]);
++  \* dispatchProjectCommand already applied its permitted selected-slot presentation.
+   call InterfaceStateMachine_notify("ui","UI_PALETTE_CHANGED",[]);
+   call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]);
+   return;
+diff --git a/pseudocode/backend/project_state.pcal b/pseudocode/backend/project_state.pcal
+index 1c7e04f499ea0c882d6e4df113c5d38651f15a54..6aa0c47183a0c5a42a405036b9f13bf60a084262 100644
+--- a/pseudocode/backend/project_state.pcal
++++ b/pseudocode/backend/project_state.pcal
+@@ -728,42 +728,46 @@ CanonicalPathAndCurrentNode:
+   else FailQuery("unregistered VFS query"); end if;
+ end procedure;
+ 
++procedure BuildSlotContentRead(source,sourceSlot)
++variables slot = DeepCopy(sourceSlot), chart = NoValue, csv = NoValue, j = 1, columns = <<>>;
++begin
++OnlyThisSlotExpensiveInputs:
++  chart := ChartById(source,slot.content.chart);
++  if chart # NoValue then
++    slot.chart := DeepCopy(chart);
++    call chartFigure(DeepCopy(chart),source); slot.figure := result;
++    slot.csvViews := <<>>;
++    if ~ConversionRepresentation(chart) then
++      while j <= Len(chart.editor.objects) do
++        csv := CsvById(source,chart.editor.objects[j].csvId);
++        if csv # NoValue then
++          call columnDefinitions(csv.rows,csv.headerLines); columns := result;
++          slot.csvViews := Append(slot.csvViews,[csv |-> DeepCopy(csv),columns |-> columns]);
++        end if;
++        j := j + 1;
++      end while;
++    end if;
++  end if;
++  if slot.content.imageId # NoValue then
++    call BuildImageEditorRead(source,slot.id); slot.imageView := result;
++  end if;
++  result := slot; return;
++end procedure;
++
+ procedure BuildSurfaceRead(source)
+ variables output = [layout |-> DeepCopy(source.layout),appearance |-> DeepCopy(source.appearance),
+-                    annotations |-> DeepCopy(source.annotations),visibleSlots |-> <<>>],
+-          slot = NoValue, chart = NoValue, csv = NoValue, i = 1, j = 1, columns = <<>>;
++                    annotations |-> DeepCopy(source.annotations),visibleSlots |-> <<>>], i = 1;
+ begin
+-CurrentVisibleSlotLocalCopies:
++ExportSurfaceInputs:
+   while i <= Len(source.slots) do
+     if ~source.slots[i].hidden then
+-      slot := DeepCopy(source.slots[i]); chart := ChartById(source,slot.content.chart);
+-      if chart # NoValue then
+-        slot.chart := DeepCopy(chart);
+-        call chartFigure(DeepCopy(chart),source); slot.figure := result;
+-        slot.csvViews := <<>>;
+-        if ~ConversionRepresentation(chart) then
+-          j := 1;
+-          while j <= Len(chart.editor.objects) do
+-            csv := CsvById(source,chart.editor.objects[j].csvId);
+-            if csv # NoValue then
+-              call columnDefinitions(csv.rows,csv.headerLines); columns := result;
+-              slot.csvViews := Append(slot.csvViews,[csv |-> DeepCopy(csv),columns |-> columns]);
+-            end if;
+-            j := j + 1;
+-          end while;
+-        end if;
+-      end if;
+-      if slot.content.imageId # NoValue then call BuildImageEditorRead(source,slot.id); slot.imageView := result; end if;
+-      output.visibleSlots := Append(output.visibleSlots,slot);
++      call BuildSlotContentRead(source,source.slots[i]); output.visibleSlots := Append(output.visibleSlots,result);
+     end if;
+     i := i + 1;
+   end while;
+-OneLabelOrderingForThisProjection:
+   call orderedSlotLabels(source); output.orderedSlotLabels := result;
+   output.captionReferenceStyle := DeepCopy(BackendSettings.defaults.captionReferenceStyle);
+-  result := output;
+-  \* All objects detached from SAME supplied source. No later live graph/CSV fallback.
+-  return;
++  result := output; return;
+ end procedure;
+ 
+ procedure NormalizePreviewReadWidth(value)
+@@ -844,12 +848,43 @@ PublicReadRegisteredOperation:
+ RendererRead:
+   if operation = "slot-image" then call BuildImageEditorRead(source,request.slotId); output := result; goto ImmutableReturn;
+   elsif operation = "ui-palette" then output := DeepCopy(source.appearance.uiPalette); goto ImmutableReturn; end if;
+-  width := FieldOrNoValue(request,"width");
+-  Require(PositiveFinite(width));
++  if operation = NoValue then operation := "selected-slot"; end if;
++  Require(operation \in {"workspace-structure","selected-slot","whole-workspace"});
++  width := FieldOrNoValue(request,"width"); Require(PositiveFinite(width));
+   call DashboardGeometryInProject(source,width,NoValue); geometry := result;
+-  call BuildSurfaceRead(source); output := result;
+-  output.geometry := geometry;
+-  \* One synchronous source read; actual width is not preview-clamped.
++  output := [operation |-> operation,layout |-> DeepCopy(source.layout),geometry |-> geometry,visibleSlots |-> <<>>];
++  i := 1;
++  while i <= Len(source.slots) do
++    slot := source.slots[i];
++    if ~slot.hidden then
++      output.visibleSlots := Append(output.visibleSlots,[id |-> slot.id,row |-> slot.row,col |-> slot.col,
++        rowSpan |-> slot.rowSpan,colSpan |-> slot.colSpan,contentType |-> slot.content.contentType,
++        chartId |-> slot.content.chart,imageId |-> slot.content.imageId]);
++    end if;
++    i := i + 1;
++  end while;
++  if operation = "workspace-structure" then goto ImmutableReturn; end if;
++  if operation = "selected-slot" then
++    output.targetSlot := NoValue;
++    slot := VisibleSlot(source,FieldOrNoValue(request,"slotId"));
++    if slot = NoValue then goto ImmutableReturn; end if;
++    call BuildSlotContentRead(source,slot); output.targetSlot := result;
++    call orderedSlotLabels(source);
++    output.orderedSlotLabels := SelectSeq(result,LAMBDA label : label.slotId = slot.id);
++    output.appearance := DeepCopy(source.appearance);
++    output.annotations := [labels |-> DeepCopy(source.annotations.labels)];
++    goto ImmutableReturn;
++  end if;
++  output.contentSlots := <<>>; i := 1;
++  while i <= Len(source.slots) do
++    if ~source.slots[i].hidden then
++      call BuildSlotContentRead(source,source.slots[i]); output.contentSlots := Append(output.contentSlots,result);
++    end if;
++    i := i + 1;
++  end while;
++  output.appearance := DeepCopy(source.appearance); output.annotations := DeepCopy(source.annotations);
++  call orderedSlotLabels(source); output.orderedSlotLabels := result;
++  output.captionReferenceStyle := DeepCopy(BackendSettings.defaults.captionReferenceStyle);
+   goto ImmutableReturn;
+ ExportRead:
+   if operation = NoValue then call BuildPlainProjectRead(source); output := result; goto ImmutableReturn;
+diff --git a/pseudocode/frontend/mantine_ui.pcal b/pseudocode/frontend/mantine_ui.pcal
+index 1d6ce5b6ea7264cfdc1fb2194c7999a8a8ed4715..5e87e374fa2826780370db968bc469f4e267aead 100644
+--- a/pseudocode/frontend/mantine_ui.pcal
++++ b/pseudocode/frontend/mantine_ui.pcal
+@@ -16,7 +16,7 @@ EXTENDS Naturals, Reals, Sequences, FiniteSets
+ CONSTANT NoValue
+ SettingsOverlayNames == {"layout","label","caption","print"}
+ ComponentOwners == [
+-  FastFigureToolbar |-> "overlay toggle / selected target",
++  FastFigureToolbar |-> "overlay toggle / selected target / explicit whole rendering",
+   FastFigureDataActions |-> "asset import / slot reset/delete / ordinary empty CSV",
+   FastFigureImageEditor |-> "image preview/settings",
+   FastFigureProjectDataTree |-> "VFS projection / selection / move / drop / menu",
+@@ -684,10 +684,15 @@ NoProjectStoreInShell:
+   BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
+   BindComponentRenderReadFor("FastFigureGraphDataEditor","objectOptions",ReadGraphObjectOptions);
+   BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
++  BindWorkspaceSizeChangeToSuppliedTransformAction(transformWorkspace);
++  \* Size/sidebar changes only read structure and transform existing content pixels.
+   BindComponentRenderRead(useAppState);
+   BindComponentRenderReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
+   BindComponentEvent("FastFigureStatusDebug","debugClicked",handleDebugToggle);
+-  BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected">>);
++  BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected","workspace.render">>);
++  PlaceExistingStandardButtonImmediatelyLeftOfPrint("FastFigureToolbar","렌더링","workspace.render");
++  BindWholeRenderButtonReadyDisabledRunningAndKeyboardStateThroughExistingUiCommand();
++  \* Same Button/theme/height/padding as neighbouring controls; no local style variant.
+   BindComponentPublicMethods("FastFigureDataActions",<<"assets.importFiles","slots.reset","assets.delete">>);
+   BindComponentPublicMethods("FastFigureImageEditor",<<"images.readEditor","images.setSettings","images.insertEmpty">>);
+   BindComponentPublicMethods("FastFigureProjectDataTree",<<"assets.selectCsv","assets.selectImage","assets.selectDirectory",
+@@ -717,10 +722,10 @@ end procedure;
+ 
+ procedure ResizeSidebar(newGeometry)
+ begin
+-SessionOnlyThenResizePlots:
++SessionGeometryThenReusePixels:
+   sidebarGeometry := NormalizeSessionSidebarGeometry(newGeometry);
+   ApplySessionSidebarGeometryCss(sidebarGeometry);
+-  RequestCurrentPlotResize();
++  call transformWorkspace();
+   result := NoValue;
+   return;
+ end procedure;
+diff --git a/pseudocode/frontend/renderer.pcal b/pseudocode/frontend/renderer.pcal
+index 13a6ccf0c0e394450ef6b4b68782cb2902f5e7d6..65fcea80a500aa184d5b361a54bc9d65f2a035e1 100644
+--- a/pseudocode/frontend/renderer.pcal
++++ b/pseudocode/frontend/renderer.pcal
+@@ -10,7 +10,7 @@ CONSTANT NoValue
+ (* --algorithm FrontendRenderer
+ variables result = NoValue,
+   uiTelemetryState = InitialUiTelemetryProjection(), debugEnabled = FALSE,
+-  dashboardGeneration = 0, graphInstances = [], imageSurfaces = [],
++  workspaceLifetime = 0, slotOperations = [], graphInstances = [], imageSurfaces = [],
+   dragSource = NoValue, suppressBookmarkClick = FALSE;
+ 
+ procedure syncDashboardCaption(captionState)
+@@ -56,30 +56,22 @@ StatusNotTaskOutcome:
+ end procedure;
+ 
+ procedure applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,projectProjection)
+-variables effect = "NONE", i = 1, slot = NoValue;
+-begin
+-ActualRemovedRenderedReferenceFirst:
+-  if mutationResult.projectionEffect.referencesRemoved then effect := "FULL_DASHBOARD";
+-  elsif mutationResult.projectionEffect.pathOnly then effect := "NONE";
+-  elsif event \in {"CAPTION_TEXT_INPUT","SLOT_CAPTIONS_INSERTED","CAPTION_SETTINGS_CHANGED",
+-                    "LABEL_SETTINGS_CHANGED","LABEL_POSITION_CHANGED","APPEARANCE_CHANGED","SLOT_IMAGE_SETTINGS_CHANGED"}
+-        /\ ExistingHostIdentitiesMatchSuppliedSlots(projectProjection) then effect := "TARGETED_PROJECTION";
+-  else effect := "FULL_DASHBOARD"; end if;
+-  if effect = "FULL_DASHBOARD" then call renderDashboard(projectProjection,interfaceState);
+-  elsif effect = "TARGETED_PROJECTION" then
+-    if event = "APPEARANCE_CHANGED" then
+-      call applyUiPalette(projectProjection.appearance.uiPalette,FALSE);
+-      while i <= Len(projectProjection.visibleSlots) do
+-        slot := projectProjection.visibleSlots[i];
+-        if FieldOrNoValue(slot,"figure") # NoValue then
+-          \* Existing Plotly presentation retains generation/host/chart checks and failure handling.
+-          PresentSuppliedGraphFigureOnCurrentHost(slot,interfaceState,projectProjection.geometry.scale);
+-        end if;
+-        i := i + 1;
+-      end while;
+-    else ApplySuppliedNarrowProjection(event,projectProjection,interfaceState); end if;
++begin
++ReleaseOnlyInvalidOwnedAssociations:
++  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
++  if projectProjection.operation = "workspace-structure" then
++    call applyWorkspaceTransform(projectProjection,interfaceState); result := "STRUCTURE"; return;
++  end if;
++  if mutationResult.projectionEffect.pathOnly /\ ~mutationResult.projectionEffect.referencesRemoved then
++    result := "NONE"; return;
++  end if;
++  if interfaceState.selectedSlotId = NoValue \/ projectProjection.targetSlot = NoValue then
++    result := "NONE"; return;
+   end if;
+-  result := effect;
++  if projectProjection.targetSlot.id # interfaceState.selectedSlotId then result := "NONE"; return; end if;
++  call renderDashboard(projectProjection,interfaceState); result := "SELECTED_SLOT";
++  \* Common UI CSS and official editor reads keep their existing paths.
++  \* Other slots and the global caption wait for the explicit whole-content action.
+   return;
+ end procedure;
+ 
+@@ -110,108 +102,176 @@ HostScopedSlotFrames:
+ end procedure;
+ 
+ procedure renderDashboard(projectProjection,interfaceState)
+-variables geometry = NoValue, slots = <<>>, i = 1, slot = NoValue, frameView = NoValue,
+-          host = NoValue, frame = NoValue, identity = NoValue, currentGeneration = 0, instance = NoValue;
+-begin
+-OneGeneration:
+-  dashboardGeneration := dashboardGeneration + 1;
+-  currentGeneration := dashboardGeneration;
+-ReleaseObsoleteContentBeforeFrameChanges:
+-  geometry := projectProjection.geometry; slots := projectProjection.visibleSlots;
+-  PurgeGraphAssociationsForRemovedOrReplacedHosts(graphInstances,slots);
+-  DetachAndReleaseObsoleteImageSurfaces(imageSurfaces,slots);
+-SharedDashboardFrame:
+-  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,slots,geometry);
++variables slot = NoValue, frameView = NoValue;
++begin
++SelectedCurrentOwnerOnly:
++  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
++  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
++  if interfaceState.selectedSlotId = NoValue then result := NoValue; return; end if;
++  slot := projectProjection.targetSlot;
++  if slot = NoValue then result := NoValue; return; end if;
++  if slot.id # interfaceState.selectedSlotId then result := NoValue; return; end if;
++PrepareOrCheckSameGrid:
++  if WorkspaceHasNoContentFrame() then
++    call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
++                              projectProjection.visibleSlots,projectProjection.geometry);
++    frameView := result;
++  elsif ~CanReuseCurrentGridAndTargetPlacement(projectProjection,slot.id) then
++    ShowWholeRenderingRequiredWithoutChangingValidContent();
++    result := WholeRenderingRequired(); return;
++  end if;
++OneTargetPresentation:
++  call presentSlotContent(slot,interfaceState,projectProjection.geometry);
++  ApplyOnlyTargetLabelsCaptionAndDecoration(slot,projectProjection,interfaceState);
++  return;
++end procedure;
++
++procedure presentSlotContent(slot,interfaceState,geometry)
++variables host = NoValue, identity = NoValue, operation = 0, instance = NoValue,
++          completion = NoValue, baseSize = NoValue, lifetime = workspaceLifetime;
++begin
++CurrentSlotAssociation:
++  host := CurrentContentHostOfSlot(slot.id);
++  identity := [host |-> host,slotId |-> slot.id,contentType |-> slot.content.contentType,
++               chartId |-> slot.content.chart,imageId |-> slot.content.imageId];
++  ReleaseOnlyReplacedAssociationForSlot(graphInstances,imageSurfaces,identity);
++  operation := FieldOrDefault(slotOperations,slot.id,0) + 1;
++  slotOperations[slot.id] := operation;
++SameHostPendingAndExecutionCheck:
++  AwaitPreviousPendingOfThisHostWithoutChangingOtherHosts(host);
++  if lifetime # workspaceLifetime \/ slotOperations[slot.id] # operation
++     \/ ~CurrentHostAssociationMatches(identity) then result := NoValue; return; end if;
++  baseSize := CurrentContentWidthHeight(host);
++  if IsGraphSlotWithFigure(slot) then
++    instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
++    if instance = NoValue then instance := InstallGraphInstance(host,identity); end if;
++    graphInstances[host] := [identity |-> identity,instance |-> instance,lifetime |-> lifetime,operation |-> operation];
++    completion := StartGraphPresentationWithCompletion(slot.figure,instance,
++      [callback |-> "CompleteGraphRender",host |-> host,slotId |-> slot.id,
++       chartId |-> slot.content.chart,lifetime |-> lifetime,operation |-> operation,baseSize |-> baseSize]);
++  elsif IsImageSlotWithView(slot) then
++    completion := StartImageDecodeWithSurfaceOwnedCopiedBytesOrPureUrl(host,slot.imageView,slot.content.imageSettings,
++      [callback |-> "CompleteImageRender",host |-> host,slotId |-> slot.id,input |-> slot.imageView,
++       lifetime |-> lifetime,operation |-> operation,baseSize |-> baseSize]);
++  else
++    ReleaseOnlySlotContentResources(graphInstances,imageSurfaces,slot.id);
++    ApplyEmptySlotSurface(host,slot); completion := CompletedPresentation(host);
++  end if;
++  KeepThisHostPendingUntilItsCompletion(host,completion);
++  UpdateOnlyThisSlotSelectionBoundaryBookmarkAndFocus(slot,interfaceState,geometry.radius,4);
++  result := completion;
++  \* Base size is the owned render-resource size, not a Project read value.
++  \* No content render schedules a later Plotly resize.
++  return;
++end procedure;
++
++procedure Renderer_renderWholeWorkspace(projectProjection,interfaceState)
++variables frameView = NoValue, i = 1, completions = <<>>;
++begin
++OnlyExplicitWholeInput:
++  Require(projectProjection.operation = "whole-workspace");
++  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
++  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
++                            projectProjection.visibleSlots,projectProjection.geometry);
+   frameView := result;
+-VisibleHosts:
+-  while i <= Len(slots) do
+-    slot := slots[i]; host := frameView.slots[slot.id].content;
+-    frame := frameView.slots[slot.id].frame;
+-    if IsGraphSlotWithFigure(slot) then
+-      identity := [host |-> host,slotId |-> slot.id,chartId |-> slot.content.chart];
+-      instance := CurrentGraphInstanceForIdentity(graphInstances,identity);
+-      if instance = NoValue then
+-        PurgePreviousGraphInstanceOfHost(graphInstances,host);
+-        DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
+-        instance := InstallGraphInstance(host,identity);
++  while i <= Len(projectProjection.contentSlots) do
++    call presentSlotContent(projectProjection.contentSlots[i],interfaceState,projectProjection.geometry);
++    completions := Append(completions,result); i := i + 1;
++  end while;
++  ApplySuppliedWholeLabelsAndSlotCaptions(frameView,projectProjection,interfaceState);
++  call syncDashboardCaption(projectProjection.annotations.captions);
++  result := AwaitOnlyThisActionCompletionsWithOriginalFailures(completions);
++  return;
++end procedure;
++
++procedure applyWorkspaceTransform(projectProjection,interfaceState)
++variables frameView = NoValue, i = 1, slot = NoValue, surface = NoValue,
++  size = NoValue, scaleX = 1, scaleY = 1;
++begin
++StructureAndOwnerCleanupOnly:
++  CleanupRemovedOrReplacedSurfaceOwners(graphInstances,imageSurfaces,projectProjection.visibleSlots);
++  if WorkspaceHasNoContentFrame() then
++    call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
++                              projectProjection.visibleSlots,projectProjection.geometry);
++    UpdateSelectionDecorationAndInteractionOnly(interfaceState);
++    result := CurrentDashboardHost(); return;
++  end if;
++  if ~CanSafelyReuseExistingGridAndSpans(projectProjection) then
++    ShowWholeRenderingRequiredWithoutChangingValidContent();
++    result := WholeRenderingRequired(); return;
++  end if;
++  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
++                            projectProjection.visibleSlots,projectProjection.geometry);
++  frameView := result;
++TransformExistingPixels:
++  while i <= Len(projectProjection.visibleSlots) do
++    slot := projectProjection.visibleSlots[i];
++    surface := CurrentRenderedSurfaceOfSlotOrNone(slot.id);
++    if surface # NoValue then
++      size := CurrentContentWidthHeight(frameView.slots[slot.id].content);
++      if PositiveFinite(surface.baseWidth) /\ PositiveFinite(surface.baseHeight) then
++        scaleX := size.width / surface.baseWidth; scaleY := size.height / surface.baseHeight;
++        ApplyOwnedContentCssTranslationAndScale(surface,scaleX,scaleY,"top-left");
++        SetPointerInverseOfCurrentTranslationAndScale(surface,scaleX,scaleY);
+       end if;
+-      graphInstances[host] := [identity |-> identity,instance |-> instance,generation |-> currentGeneration];
+-      StartGraphPresentationWithCompletion(slot.figure,instance,
+-        [callback |-> "CompleteGraphRender",host |-> host,slotId |-> slot.id,
+-         chartId |-> slot.content.chart,generation |-> currentGeneration]);
+-      \* CSV/columns are editor reads, NEVER recomputed into a different figure here.
+-    elsif IsImageSlotWithView(slot) then
+-      PurgePreviousGraphInstanceOfHost(graphInstances,host);
+-      DetachPreviousImageSurfaceBeforeReplacing(imageSurfaces,host);
+-      StartImageDecodeWithSurfaceOwnedCopiedBytesOrPureUrl(host,slot.imageView,slot.content.imageSettings,
+-        [callback |-> "CompleteImageRender",generation |-> currentGeneration,slotId |-> slot.id,input |-> slot.imageView]);
+-    else
+-      PurgePreviousGraphInstanceOfHost(graphInstances,host);
+-      DetachImageSurfaceThenReleaseOwnedResources(imageSurfaces,host);
+-      ApplyEmptySlotSurface(host,slot);
+-    end if;
+-    ApplySelectedInteractionClass(frame,slot.id = interfaceState.selectedSlotId);
+-    ClearPreviousHostSelectionDecoration(frameView.slots[slot.id].decoration);
+-    if slot.id = interfaceState.selectedSlotId /\ IsEmptySlot(slot) then
+-      DrawInnerSelectionBoundary(frameView.slots[slot.id].decoration,4,"uiColor",geometry.radius);
+     end if;
+-    if HasGraphContent(slot) \/ HasImageContent(slot) then
+-      KeepBookmarkAboveContentWithClickAndKeyboardFocus(frameView.slots[slot.id].decoration,slot.id);
+-      ApplyPersistentSelectedBookmarkEmphasis(frameView.slots[slot.id].decoration,
+-                                             slot.id = interfaceState.selectedSlotId);
+-      \* Pointer exit does not clear the current selected emphasis.
+-    end if;
+-    ApplySuppliedLabelAndCaption(frameView.slots[slot.id].decoration,slot,projectProjection.orderedSlotLabels);
+-    \* Decoration cleanup/reuse affects this host only; content geometry/resources remain.
+     i := i + 1;
+   end while;
+-ResizeAfterContentStyleAndGeometry:
+-  RequestResizeOnlyForCurrentLiveGraphHosts(graphInstances,currentGeneration);
+-  SynchronizeDashboardCaptionFromSuppliedProjection(projectProjection);
+-  result := CurrentDashboardPresentation();
++  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
++  result := CurrentDashboardHost();
++  \* Reuses current graph/image pixels, fonts and strokes. No Plotly/decode/resize.
+   return;
+ end procedure;
+ 
+-procedure CompleteGraphRender(host,slotId,chartId,generation,completion)
++procedure clearWorkspacePresentation()
+ begin
+-DiscardStaleCompletionWithoutResurrection:
+-  if generation # dashboardGeneration \/ ~SameLiveGraphHostSlotChart(graphInstances,host,slotId,chartId,generation) then
+-    ReleaseOnlyCompletionTemporaryResources(completion);
+-    result := NoValue; return;
++WorkspaceReplacementLifetime:
++  workspaceLifetime := workspaceLifetime + 1;
++  ReleaseOnlyWorkspaceOwnedGraphsImagesHandlesAndListeners(graphInstances,imageSurfaces);
++  graphInstances := []; imageSurfaces := []; slotOperations := [];
++  ClearOnlyWorkspaceFramesAndSelectionDecoration();
++  result := NoValue;
++  \* Independent export task hosts and resources remain owned by those tasks.
++  return;
++end procedure;
++
++procedure CompleteGraphRender(host,slotId,chartId,lifetime,operation,baseSize,completion)
++begin
++OnlyCurrentSameSlotCompletion:
++  if lifetime # workspaceLifetime \/ FieldOrDefault(slotOperations,slotId,0) # operation
++     \/ ~SameLiveGraphHostSlotChartOperation(graphInstances,host,slotId,chartId,operation) then
++    ReleaseOnlyCompletionTemporaryResources(completion); result := NoValue; return;
+   end if;
+   if completion.threw then
+-    ReleaseOnlyCompletionTemporaryResources(completion);
+-    PropagateOriginalFailure(completion.failure);
++    ReleaseOnlyCompletionTemporaryResources(completion); PropagateOriginalFailure(completion.failure);
+   end if;
+   ApplyCompletedPresentationToCurrentHostOnly(host,completion);
+-  RequestGenerationCheckedResize(host,slotId,chartId,generation);
+-  result := NoValue;
+-  return;
++  SetThisSurfaceBaseRenderSize(host,baseSize);
++  ApplyCssScaleToLatestHostSizeWithInversePointerCoordinates(host,baseSize);
++  result := NoValue; return;
+ end procedure;
+ 
+-procedure CompleteImageRender(host,slotId,imageInput,generation,completion)
++procedure CompleteImageRender(host,slotId,imageInput,lifetime,operation,baseSize,completion)
+ begin
+-SurfaceOwnsHandleNotSharedImageAsset:
+-  if generation # dashboardGeneration \/ ~SameCurrentImageSurfaceInput(host,slotId,imageInput,generation) then
++OnlyCurrentSameImageInput:
++  if lifetime # workspaceLifetime \/ FieldOrDefault(slotOperations,slotId,0) # operation
++     \/ ~SameCurrentImageSurfaceInput(host,slotId,imageInput,operation) then
+     ReleaseOnlyCompletionTemporaryResources(completion); result := NoValue; return;
+   end if;
+   if completion.threw then
+     ReleaseOnlyCompletionTemporaryResources(completion); PropagateOriginalFailure(completion.failure);
+   end if;
+   InstallCompletedImageOnCurrentSurface(host,completion);
+-  \* Removing this surface cannot revoke another live surface's handles/URLs.
+-  result := NoValue;
+-  return;
++  SetThisSurfaceBaseRenderSize(host,baseSize);
++  ApplyCssScaleToLatestHostSizeWithInversePointerCoordinates(host,baseSize);
++  result := NoValue; return;
+ end procedure;
+ 
+ procedure setSelectedSlot(slotId,direction,frontendActions)
+-variables selection = NoValue;
+ begin
+-DoNotValidateOrRetoggleLocally:
+-  selection := InvokeSuppliedAction(frontendActions.slots.select,[slotId |-> slotId,direction |-> direction]);
+-  UpdateWorkspaceFromReturnedFinalStateAndProjection(selection);
+-  RequestResizeOfCurrentWorkspaceHosts();
+-  result := selection;
++SuppliedSelectionActionOnce:
++  result := InvokeSuppliedAction(frontendActions.slots.select,[slotId |-> slotId,direction |-> direction]);
++  \* Application already performs the selected-slot presentation after reconciliation.
+   return;
+ end procedure;
+ 
+@@ -279,14 +339,10 @@ OneClickOrAfterItsOpportunity:
+ end procedure;
+ 
+ procedure swapSlotContents(source,target,frontendActions)
+-variables returned = NoValue;
+-begin
+-OnlyIdsToPublicApi:
+-  returned := InvokeSuppliedAction(frontendActions.slots.swap,[sourceSlotId |-> source.id,targetSlotId |-> target.id]);
+-  \* Existing Application commit/reconcile/projection path renders success.
+-  \* No second swap and no assumption public boolean is an adapter tuple.
+-  ApplyAlreadyReturnedPostReconciliationProjectionIfPresent(returned);
+-  result := returned;
++begin
++SwapOnlyExplicitIds:
++  result := InvokeSuppliedAction(frontendActions.slots.swap,[sourceSlotId |-> source.id,targetSlotId |-> target.id]);
++  \* Application owns the one structural CSS update; do not repeat it here.
+   return;
+ end procedure;
+ 
+@@ -310,7 +366,7 @@ end procedure;
+ procedure applyUiPalette(projectProjection,notify)
+ variables palette = projectProjection;
+ \* Application supplies the ui-palette query result or whole renderer result.appearance.uiPalette.
+-\* Graph figures are applied by applyDashboardProjectionInvalidation.
++\* Workspace graph figures are applied only within the permitted selected or explicit whole scope.
+ begin
+ FiveLegacyCssVariables:
+   SetCssVariables(["--ui-color" |-> palette.uiColor,"--paper" |-> palette.uiBackgroundColor,
+@@ -320,17 +376,14 @@ FiveLegacyCssVariables:
+   return;
+ end procedure;
+ 
+-procedure applySlotStyle(projectProjection,notify)
++procedure applySlotStyle(projectProjection,interfaceState,notify)
+ variables styleView = NoValue;
+ begin
+-SharedStyleApplication:
+-  call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
+-                           projectProjection.visibleSlots,projectProjection.geometry);
+-  styleView := result;
++ReuseCurrentPixelsForStyleGeometry:
++  call applyWorkspaceTransform(projectProjection,interfaceState); styleView := result;
+   ApplyDashboardCaptionCssFromSuppliedStyleAndGeometry(projectProjection.layout.slotStyle,projectProjection.geometry);
+   if notify then ExistingLayoutModelToUiNotification(); end if;
+-  result := styleView;
+-  return;
++  result := styleView; return;
+ end procedure;
+ 
+ procedure resolveSelectedChart(projectProjection,interfaceState)
+@@ -342,24 +395,21 @@ end procedure;
+ 
+ procedure updateGraphView(projectProjection,interfaceState)
+ begin
+-NoDomOrBufferReadAsProjectSource:
+-  result := RenderWorkspaceFromSuppliedSlotChartImageRelations(projectProjection,interfaceState);
+-  return;
++SelectedContentWithCurrentInteraction:
++  UpdateSelectionDecorationAndInteractionOnly(interfaceState);
++  call renderDashboard(projectProjection,interfaceState); return;
+ end procedure;
+ 
+ procedure startupCoreRuntime(projectProjection,interfaceState,frontendActions)
+ variables clickController = NoValue, dropController = NoValue;
+ begin
+-InitialZoomAndControllers:
+-  ApplyZoomProjectionFromSuppliedState(projectProjection,interfaceState);
++ControllersBeforeBlankStructure:
+   call installSlotClickController(frontendActions); clickController := result;
+   dropController := InstallExistingPublicDropController(frontendActions);
+-ExistingSlotsOnly:
+-  call renderDashboard(projectProjection,interfaceState);
+-  call applySlotStyle(projectProjection,FALSE);
++  call applyWorkspaceTransform(projectProjection,interfaceState);
+   AuditSuppliedProjectReferenceRuntimeProjectionContracts(projectProjection,interfaceState);
+   result := RendererRuntimeWithOwnedControllers(clickController,dropController);
+-  \* Application, not renderer, sends lifecycle-ready. No default CSV/grid recreation.
++  \* Initial startup prepares structure and interaction only.
+   return;
+ end procedure;
+ 
+diff --git a/pseudocode/system.pcal b/pseudocode/system.pcal
+index 8be27d751c24e61306f92812c27bc08775604e00..950d5c2453b6317a7b538cbd2e84596d9a2b2e1b 100644
+--- a/pseudocode/system.pcal
++++ b/pseudocode/system.pcal
+@@ -32,14 +32,14 @@ ExposeExistingBoundary:
+ PrepareBoundaryInputs:
+   \* Application obtains the initial read input BEFORE its Frontend consumer.
+   \* This is the supplied input of renderer.startupCoreRuntime, not a system mirror.
+-  call dispatchProjectQuery("renderer", []);
++  call dispatchProjectQuery("renderer", [operation |-> "workspace-structure"]);
+   projectProjection := result;
+   call InterfaceStateMachine_readState();
+   interfaceState := result;
+   frontendActions := PublicActionSurface(FastFigureApi);
+-PrepareAndRenderCore:
+-  \* Directly reuse renderer.startupCoreRuntime's Source-defined order:
+-  \* zoom -> controllers -> existing visible slots -> supplied slot style -> audit.
++PrepareBlankCore:
++  \* Controllers and a blank frame are prepared without content rendering.
++  \* Initial figures/images wait for the explicit workspace.render action.
+   call startupCoreRuntime(projectProjection, interfaceState, frontendActions);
+   coreRuntime := result;
+ ReadyThroughApplication:
+diff --git a/agent_space/reviews/review-20261118-008-plan044-pseudocode.md b/agent_space/reviews/review-20261118-008-plan044-pseudocode.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..e66c59a3a07bd79c8e3a1f1919dd1863a07f681d
+--- /dev/null
++++ b/agent_space/reviews/review-20261118-008-plan044-pseudocode.md
+@@ -0,0 +1,34 @@
++# Plan044 Source Script → pseudocode 번역 검토
++
++## 기준과 범위
++
++- Source Script 56을 기준으로 pseudocode 33을 작성했다.
++- 시작 commit: `e37e1fe5c6ca9aee4d2484872c16896c5da9a731`. Source Script·source code·dist와 이전 문서는 유지했다.
++- Source Script 변경에 대응하는 pseudocode 7개와 직접 호출 경로를 확인했다. 기존 전체 조회는 독립 export 경로에서 유지한다.
++
++## 대응
++
++| 경로 | 번역 내용 |
++|---|---|
++| `pseudocode/backend/project_state.pcal` | 범위·선택 id를 먼저 결정한다. `workspace-structure`는 배치·연결 식별값만 반환한다. `selected-slot`은 유효한 현재 슬롯 하나의 figure/CSV/image만 계산하고, `whole-workspace`는 명시적 요청의 전체 내용을 계산한다. slot-image/ui-palette 및 export 계약은 유지한다. |
++| `pseudocode/application/adapter.pcal` | 현재 Frontend 선택과 현재 layout으로 조회 입력을 만든다. 선택 해제는 내용 조회를 생략하고 조건부 명령의 결과를 재사용한다. 한 번의 명령·참조 보정 뒤 구조/CSS 또는 선택 슬롯 갱신을 수행한다. 전체 내용 갱신은 `renderWholeWorkspace`의 명시적 진입으로 제한한다. |
++| `pseudocode/frontend/renderer.pcal` | 선택 target 하나와 명시적 contentSlots 순회를 분리한다. 슬롯별 작업 순서와 workspace 수명으로 완료를 검증한다. 다른 슬롯 갱신이나 CSS 변환으로 기존 작업을 무효화하지 않는다. |
++| `pseudocode/frontend/renderer.pcal` | 현재 surface의 기준 치수에 대한 scaleX/scaleY, 좌상단 translate/scale과 포인터 역변환을 기술한다. 단순 크기·위치 변경은 현재 픽셀을 재사용한다. 비호환 grid/span은 유지 가능한 내용을 보존하고 전체 렌더링 필요를 안내한다. |
++| `pseudocode/application/public_api/contract.pcal` | `workspace.render`를 기존 public 함수 binding에 연결한다. 새 API registry나 Project 상태는 추가하지 않는다. |
++| `pseudocode/application/public_api/layout_annotations.pcal` | zoom/reset은 구조 조회와 CSS 변환을 호출한다. 전역 caption 표시와 중복 palette 내용 갱신은 명시적 전체/기존 Application 처리로 정리한다. 공식 조회·반환·실패 의미는 유지한다. |
++| `pseudocode/frontend/mantine_ui.pcal` | 렌더링 버튼을 Print 바로 왼쪽에 같은 Button 기준으로 배치하고 기존 UiCommand로 연결한다. Sidebar/창 크기 변화는 transform 경로에 연결한다. |
++| `pseudocode/system.pcal` | 초기 입력을 구조 전용으로 바꾼다. controller와 빈 틀 준비 후 ready·mount 순서를 유지한다. |
++
++## 논리·목적·중복 검토
++
++- 선택 없음, 슬롯 0, 유효하지 않은 선택, 조건부 명령 재사용, non-commit과 원래 실패 전달을 분기에서 확인했다.
++- 전체 내용 계산 후 선택 슬롯만 추리는 경로와 자동 전체 fallback을 제거했다. 구조 변경·프로젝트 교체는 유효하지 않은 소유 연결만 정리한다.
++- graph/image 완료는 해당 host·슬롯·소유 객체·작업 순서·workspace 수명을 확인한다. 독립 export host·bytes/URL 해제 의미는 유지한다.
++- 공통 frame과 기존 figure 계산을 재사용했다. `BuildSlotContentRead`는 기존 동일 source 계산을 분리한 private 확장이다. Application과 Renderer의 같은 이름은 `Renderer_renderWholeWorkspace`로 구분했다.
++- 단순 크기 변경에서 figure 계산·Plotly render/resize·이미지 재해석을 호출하지 않는다. 실제 그래프 내용과 표시 변환의 소유를 분리했다.
++
++## 확인과 한계
++
++- 전체 실제 구현 diff, 절차 경계, 호출 범위, 실제 fingerprint, 메타데이터 변경 범위와 native patch를 정적으로 확인했다.
++- Source Script는 유지했고 source code는 아직 이 변경을 번역하지 않았다.
++- PlusCal 변환·TLC·테스트·앱·브라우저·빌드·checker main은 실행하지 않았다. 실행 결과나 전체 계층 closure를 주장하지 않는다.
+diff --git a/agent_space/patches/20261118-005.md b/agent_space/patches/20261118-005.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3c567b9826beacb745685b99d358075e2ffdc4b2
+--- /dev/null
++++ b/agent_space/patches/20261118-005.md
+@@ -0,0 +1,14 @@
++# Plan044 pseudocode 업데이트
++
++- 기준 commit: `e37e1fe5c6ca9aee4d2484872c16896c5da9a731`.
++- 목적: Source Script 56의 선택 슬롯 자동 내용 갱신·명시적 전체 렌더링·CSS 전용 배치 변환을 pseudocode로 번역한다.
++- 실제 변경: pseudocode 7개, 해당 메타데이터, 신규 검토 문서와 이 설명. Source Script·source code·dist·기존 계획/검토는 유지한다.
++- Backend에서 범위와 선택을 먼저 정해 expensive 입력을 제한한다. 기존 export 전체 조회와 figure 계산을 재사용한다.
++- 전체 내용 후 필터링, 자동 전체 fallback, 크기 변경 후 Plotly resize 대신 명시적인 selected/whole/structure 경로와 renderer 소유 surface의 CSS 변환을 사용한다.
++- 슬롯별 작업 검증·독립 export 자원·기존 명령/반환/실패 의미는 유지한다.
++- 실제 native Git diff와 신규 문서의 native no-index diff를 기록했다. 별도 index와 수작업 diff는 사용하지 않았다.
++- Source Script 56: `sha256:8156cee2ea890dcd2c9c59df78718c0d85318bc2d5aff21ae621d8b68ddc59b4`.
++- pseudocode 33: `sha256:dc128087f092e2bcff242535c9b92f06104d9102fc3c3d4fe91e8dfa9b110129`.
++- 상세: `../reviews/review-20261118-008-plan044-pseudocode.md`.
++- 실제 diff·절차 경계·호출 범위·fingerprint·보호 경로를 정적으로 확인했다. 실행·성능 결과는 확인하지 않았다.
++- PlusCal 변환/TLC·테스트·앱·브라우저·빌드·checker main·추가 commit/push는 실행하지 않았다.
