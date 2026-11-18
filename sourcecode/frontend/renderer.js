@@ -150,8 +150,8 @@ export function renderDashboardFrame(host, layout, visibleSlots, geometry) {
       minWidth: "0", minHeight: "0", boxSizing: "border-box", borderRadius: `${geometry.radius}px`,
       border: "1px solid var(--slot-border-color)", background: "var(--graph-bg, #fff)" });
     Object.assign(content.style, { width: "100%", height: "100%", minWidth: "0", minHeight: "0",
-      overflow: "hidden", borderRadius: "inherit" });
-    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit" });
+      overflow: "hidden", borderRadius: "inherit", position: "relative", zIndex: "0" });
+    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit", zIndex: "2" });
     host.append(frame); slots.set(slot.id, { frame, content, decoration }); existing.delete(slot.id);
   }
   for (const frame of existing.values()) frame.remove();
@@ -553,6 +553,18 @@ export function resolveSelectedChart(projectProjection, interfaceState) {
   return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
 }
 
+function presentSlotSelection(host, selected, empty) {
+  const decoration = host.querySelector(":scope > .slot-decoration");
+  let ring = decoration.querySelector(":scope > .slot-selection-decoration");
+  if (selected && empty) {
+    if (!ring) { ring = document.createElement("div"); ring.className = "slot-selection-decoration"; decoration.append(ring); }
+    Object.assign(ring.style, { position: "absolute", inset: "0", border: "4px solid var(--ui-color)",
+      boxSizing: "border-box", borderRadius: "inherit", pointerEvents: "none" });
+  } else ring?.remove();
+  const tab = decoration.querySelector(":scope > .slot-tab");
+  if (tab) { tab.setAttribute("aria-pressed", String(selected)); tab.style.zIndex = "3"; }
+}
+
 // Selection/workspace presentation owns existing surfaces, not domain selection.
 // React workspace controls subscribe to the final FSM state and use public reads;
 // no chart/image snapshot is published as another editor store here.
@@ -574,7 +586,9 @@ export function updateGraphViewProjection(projectProjection, interfaceState, fro
   const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
   for (const slot of slots) {
     const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
-    hosts.get(String(slot.id)).classList.toggle("selected", selected);
+    const host = hosts.get(String(slot.id));
+    host.classList.toggle("selected", selected);
+    presentSlotSelection(host, selected, !slot.figure && !slot.imageView);
     if (record) presentSuppliedGraph(record, slot, selected && slot.chart === chart, generation, scale, frontendActions);
   }
   const completion = Promise.all([
@@ -701,6 +715,7 @@ export function renderDashboardProjection(projectProjection, interfaceState, fro
       label.style.left = `${settings.x * scale}px`; label.style.top = `${settings.y * scale}px`;
       label.style.fontFamily = settings.fontFamily; label.style.fontSize = `${settings.fontSize * scale}px`; decoration.append(label);
     }
+    presentSlotSelection(host, selected, !graph && !image);
     dashboard.append(host);
     if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
   }

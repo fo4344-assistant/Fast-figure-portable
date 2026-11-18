@@ -14624,9 +14624,11 @@ function renderDashboardFrame(host, layout2, visibleSlots, geometry) {
       minWidth: "0",
       minHeight: "0",
       overflow: "hidden",
-      borderRadius: "inherit"
+      borderRadius: "inherit",
+      position: "relative",
+      zIndex: "0"
     });
-    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit" });
+    Object.assign(decoration.style, { position: "absolute", inset: "0", pointerEvents: "none", borderRadius: "inherit", zIndex: "2" });
     host.append(frame);
     slots.set(slot.id, { frame, content, decoration });
     existing.delete(slot.id);
@@ -15035,6 +15037,30 @@ function resolveSelectedChart(projectProjection, interfaceState) {
   const slot = projectProjection.visibleSlots.find((slot2) => slot2.id === interfaceState.selectedSlotId);
   return slot && slot.content.contentType !== "image" ? slot.chart || null : null;
 }
+function presentSlotSelection(host, selected, empty) {
+  const decoration = host.querySelector(":scope > .slot-decoration");
+  let ring = decoration.querySelector(":scope > .slot-selection-decoration");
+  if (selected && empty) {
+    if (!ring) {
+      ring = document.createElement("div");
+      ring.className = "slot-selection-decoration";
+      decoration.append(ring);
+    }
+    Object.assign(ring.style, {
+      position: "absolute",
+      inset: "0",
+      border: "4px solid var(--ui-color)",
+      boxSizing: "border-box",
+      borderRadius: "inherit",
+      pointerEvents: "none"
+    });
+  } else ring?.remove();
+  const tab = decoration.querySelector(":scope > .slot-tab");
+  if (tab) {
+    tab.setAttribute("aria-pressed", String(selected));
+    tab.style.zIndex = "3";
+  }
+}
 function updateGraphViewProjection(projectProjection, interfaceState, frontendActions = {}) {
   const dashboard = $("dashboard"), slots = projectProjection.visibleSlots, hosts = new Map([...dashboard.children].filter((host) => host.classList.contains("slot")).map((host) => [host.dataset.slot, host])), generation = rendererRuntime.dashboardRenderGeneration;
   if (hosts.size !== slots.length || slots.some((slot) => {
@@ -15048,7 +15074,9 @@ function updateGraphViewProjection(projectProjection, interfaceState, frontendAc
   const chart = resolveSelectedChart(projectProjection, interfaceState), scale = projectProjection.geometry.scale;
   for (const slot of slots) {
     const selected = slot.id === interfaceState.selectedSlotId, record = rendererRuntime.graphInstances.get(slot.id);
-    hosts.get(String(slot.id)).classList.toggle("selected", selected);
+    const host = hosts.get(String(slot.id));
+    host.classList.toggle("selected", selected);
+    presentSlotSelection(host, selected, !slot.figure && !slot.imageView);
     if (record) presentSuppliedGraph(record, slot, selected && slot.chart === chart, generation, scale, frontendActions);
   }
   const completion = Promise.all([
@@ -15179,6 +15207,7 @@ function renderDashboardProjection(projectProjection, interfaceState, frontendAc
       label.style.fontSize = `${settings.fontSize * scale}px`;
       decoration.append(label);
     }
+    presentSlotSelection(host, selected, !graph && !image);
     dashboard.append(host);
     if (record) presentSuppliedGraph(record, slot, selected, generation, scale, frontendActions);
   }
@@ -15933,7 +15962,6 @@ var INTERFACE_EVENTS = /* @__PURE__ */ new Set([
   "OUTSIDE_CLICK",
   "ESCAPE",
   "SET_DASHBOARD_ZOOM",
-  "SET_DASHBOARD_ZOOM_LOCK",
   "RESET_DASHBOARD_ZOOM",
   "LIFECYCLE_START",
   "LIFECYCLE_COMPLETE",
@@ -15956,12 +15984,7 @@ var InterfaceStateMachine = class {
     });
     this.listeners = /* @__PURE__ */ new Set();
     this.writeLocks = /* @__PURE__ */ new Set();
-    Object.assign(interfaceRuntime, {
-      selectedSlotId: null,
-      dashboardZoomIntent: 100,
-      dashboardZoomLocked: false,
-      dashboardZoomLockedWidth: null
-    });
+    Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100 });
   }
   definition(region, state = this.state[region]) {
     const definition = this.definitions[region]?.[state];
@@ -16025,22 +16048,12 @@ var InterfaceStateMachine = class {
     } else if (["CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"].includes(event)) {
       next.overlay = "none";
     } else if (event === "SET_DASHBOARD_ZOOM") {
-      if (interfaceRuntime.dashboardZoomLocked) return this.readState();
       const raw = values.value, numeric = typeof raw === "number" || typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN, value2 = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
       if (value2 === interfaceRuntime.dashboardZoomIntent) return this.readState();
       interfaceRuntime.dashboardZoomIntent = value2;
-    } else if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
-      if (event === "SET_DASHBOARD_ZOOM_LOCK" && values.locked === true) {
-        if (interfaceRuntime.dashboardZoomLocked || !Number.isFinite(values.renderedWidth) || values.renderedWidth <= 0)
-          return this.readState();
-        interfaceRuntime.dashboardZoomLocked = true;
-        interfaceRuntime.dashboardZoomLockedWidth = values.renderedWidth;
-      } else {
-        if (!interfaceRuntime.dashboardZoomLocked && interfaceRuntime.dashboardZoomLockedWidth === null && interfaceRuntime.dashboardZoomIntent === 100) return this.readState();
-        interfaceRuntime.dashboardZoomLocked = false;
-        interfaceRuntime.dashboardZoomLockedWidth = null;
-        interfaceRuntime.dashboardZoomIntent = 100;
-      }
+    } else if (event === "RESET_DASHBOARD_ZOOM") {
+      if (interfaceRuntime.dashboardZoomIntent === 100) return this.readState();
+      interfaceRuntime.dashboardZoomIntent = 100;
     } else if (event === "LIFECYCLE_START") {
       next.lifecycle = values.lifecycle;
       next.error = null;
@@ -16064,9 +16077,7 @@ var InterfaceStateMachine = class {
     return Object.freeze({
       ...this.state,
       selectedSlotId: interfaceRuntime.selectedSlotId,
-      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent,
-      dashboardZoomLocked: interfaceRuntime.dashboardZoomLocked,
-      dashboardZoomLockedWidth: interfaceRuntime.dashboardZoomLockedWidth
+      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent
     });
   }
   reconcileProjectResult(event, input) {
@@ -16342,9 +16353,7 @@ function isSlotSelected(slot) {
 }
 var interfaceRuntime = {
   selectedSlotId: null,
-  dashboardZoomIntent: 100,
-  dashboardZoomLocked: false,
-  dashboardZoomLockedWidth: null
+  dashboardZoomIntent: 100
 };
 
 // sourcecode/application/public_api/layout_annotations.js
@@ -16589,7 +16598,7 @@ function resetAppearanceApiPalette() {
 }
 function readLayoutApiState(previewWidth = null) {
   const layout2 = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }), session = interfaceFSM.readState();
-  return Object.freeze({ ...layout2, zoom: session.dashboardZoomIntent, zoomLocked: session.dashboardZoomLocked });
+  return Object.freeze({ ...layout2, zoom: session.dashboardZoomIntent });
 }
 function setLayoutApiStyle(patch = {}) {
   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
@@ -16613,17 +16622,6 @@ function setLayoutApiZoom(value2) {
 }
 function commitLayoutApiZoom() {
   appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
-  return readLayoutApiState();
-}
-function setLayoutApiZoomLocked(locked) {
-  const session = interfaceFSM.readState();
-  let renderedWidth = null;
-  if (locked === true && !session.dashboardZoomLocked) {
-    renderedWidth = readDashboardRenderedWidth();
-    if (!Number.isFinite(renderedWidth) || renderedWidth <= 0) return false;
-  }
-  const state = appFSM.send("SET_DASHBOARD_ZOOM_LOCK", { locked: locked === true, renderedWidth });
-  if (state.revision !== session.revision) renderDashboard();
   return readLayoutApiState();
 }
 function resetLayoutApiZoom() {
@@ -16690,10 +16688,7 @@ function applyDashboardZoom(resize = true) {
   return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
 }
 function syncDashboardZoomDisplay() {
-  const width = readDashboardRenderedWidth(), state = interfaceFSM.readState();
-  if (!width) return;
-  const reference = dispatchProjectQuery("renderer").layout.slotStyle.referenceWidth;
-  return state.dashboardZoomLocked ? Math.max(50, Math.min(200, Math.round(width / reference * 100))) : Math.round(state.dashboardZoomIntent);
+  return Math.round(interfaceFSM.readState().dashboardZoomIntent);
 }
 function updateFileAvailability() {
   const state = interfaceFSM.readState();
@@ -16750,7 +16745,7 @@ function dispatchProjectQuery(query, payload = {}) {
   if (query === "renderer" && !["slot-image", "ui-palette"].includes(request.operation)) {
     const state = interfaceFSM.readState(), layout2 = readBackendProjection("project-api", { operation: "layout.readState" });
     request.frontendState = state;
-    request.width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth : layout2.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
+    request.width = layout2.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
   }
   return readBackendProjection(query, request);
 }
@@ -17362,7 +17357,6 @@ function createPublicApi() {
       setGrid: setLayoutApiGrid,
       setZoom: setLayoutApiZoom,
       commitZoom: commitLayoutApiZoom,
-      setZoomLocked: setLayoutApiZoomLocked,
       resetZoom: resetLayoutApiZoom,
       mergeSlots,
       splitSlots
@@ -17392,16 +17386,160 @@ async function dashboardExternalFileDrop(file, slotId, choosePlan, frontendActio
     }
   }
 }
+var sameUiTarget = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function prepareNumericInput(text, current, allowEmpty = false, emptyValue = null) {
+  const value2 = String(text).trim();
+  if (!value2) return [allowEmpty, allowEmpty ? emptyValue : current];
+  if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(value2)) return [false, current];
+  const number = Number(value2);
+  return Number.isFinite(number) ? [true, number] : [false, current];
+}
+var UiCommand = class {
+  constructor(readTarget, readValue, prepare, invoke, stepSize = null) {
+    Object.assign(this, {
+      readTarget,
+      readValue,
+      prepare,
+      invoke,
+      stepSize,
+      text: "",
+      editTarget: null,
+      editing: false,
+      composing: false,
+      running: false,
+      active: true,
+      changed: () => {
+      }
+    });
+  }
+  input(text, composing = false) {
+    if (!this.active || this.running) return this.text;
+    const target = this.readTarget();
+    if (target === null) {
+      this.cancel();
+      return this.text;
+    }
+    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
+    if (!this.editing) {
+      this.editTarget = target;
+      this.editing = true;
+    }
+    this.text = text;
+    this.composing = composing;
+    this.changed();
+    return text;
+  }
+  refresh(target) {
+    if (!this.active || !this.readValue || !sameUiTarget(this.readTarget(), target)) return;
+    const value2 = this.readValue(target);
+    this.text = value2 == null ? "" : String(value2);
+    this.changed();
+    return value2;
+  }
+  cancel() {
+    this.editing = false;
+    this.composing = false;
+    this.editTarget = null;
+    this.text = "";
+    const target = this.active ? this.readTarget() : null;
+    const value2 = target !== null && this.readValue ? this.readValue(target) : "";
+    this.text = value2 == null ? "" : String(value2);
+    this.changed();
+    return value2;
+  }
+  send(value2, target = null) {
+    if (!this.active || this.running || appFSM.readState().lifecycle !== "ready") return null;
+    const current = this.readTarget();
+    if (current === null || target !== null && !sameUiTarget(current, target)) return null;
+    if (this.readValue && this.readValue(current) === value2) {
+      this.refresh(current);
+      return null;
+    }
+    this.running = true;
+    this.changed();
+    const settle = (failed, outcome2) => {
+      this.running = false;
+      if (this.active) this.changed();
+      let refreshError, refreshFailed = false;
+      try {
+        this.refresh(current);
+      } catch (error) {
+        refreshFailed = true;
+        refreshError = error;
+      }
+      if (failed) throw outcome2;
+      if (refreshFailed) throw refreshError;
+      return outcome2;
+    };
+    let outcome;
+    try {
+      outcome = this.invoke(current, value2);
+    } catch (error) {
+      return settle(true, error);
+    }
+    if (outcome && typeof outcome.then === "function")
+      return Promise.resolve(outcome).then((value3) => settle(false, value3), (error) => settle(true, error));
+    return settle(false, outcome);
+  }
+  commit() {
+    if (!this.active || !this.editing || this.running || this.composing) return null;
+    const target = this.editTarget;
+    if (appFSM.readState().lifecycle !== "ready" || target === null || !sameUiTarget(this.readTarget(), target)) {
+      this.cancel();
+      return null;
+    }
+    const [valid, value2] = this.prepare(this.text, this.readValue(target));
+    if (!valid) {
+      this.cancel();
+      status("완성된 숫자를 입력하세요.");
+      return null;
+    }
+    this.editing = false;
+    this.composing = false;
+    const report = (outcome2) => {
+      if (this.active && sameUiTarget(this.readTarget(), target)) {
+        const applied = this.readValue(target);
+        if (applied !== value2) status(`입력값 ${value2} → 적용값 ${applied}`);
+      }
+      return outcome2;
+    };
+    const outcome = this.send(value2, target);
+    return outcome && typeof outcome.then === "function" ? outcome.then(report) : report(outcome);
+  }
+  step(direction) {
+    if (!this.active || this.running || this.composing || this.stepSize === null) return null;
+    const target = this.readTarget();
+    if (target === null) {
+      this.cancel();
+      return null;
+    }
+    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
+    let value2 = this.readValue(target);
+    if (this.editing) {
+      const parsed = prepareNumericInput(this.text, value2);
+      if (parsed[0]) value2 = parsed[1];
+    }
+    if (typeof value2 !== "number" || !Number.isFinite(value2)) value2 = 0;
+    this.input(String(value2 + (direction === "increase" ? this.stepSize : -this.stepSize)));
+    return this.commit();
+  }
+  dispose() {
+    this.changed = () => {
+    };
+    this.cancel();
+    this.active = false;
+  }
+};
 function mountMantineUi() {
   const runtime = window.FastFigureUiRuntime;
   if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
   if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
   const { React, MantineCore } = runtime;
   const {
-    ActionIcon,
+    ActionIcon: NativeActionIcon,
     AppShell,
     Box,
-    Button,
+    Button: NativeButton,
     Code,
     ColorInput,
     FileButton,
@@ -17411,7 +17549,6 @@ function mountMantineUi() {
     MantineProvider,
     Menu,
     Modal,
-    NumberInput,
     ScrollArea,
     Select,
     Stack,
@@ -17425,11 +17562,14 @@ function mountMantineUi() {
     TextInput,
     Textarea,
     Tree,
-    UnstyledButton,
+    UnstyledButton: NativeUnstyledButton,
     createTheme,
     useTree
   } = MantineCore;
   const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
+  const Button = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeButton, controlRef: ref }));
+  const ActionIcon = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeActionIcon, controlRef: ref }));
+  const UnstyledButton = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeUnstyledButton, controlRef: ref }));
   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
   const fastFigureTheme = createTheme({
     fontFamily: 'system-ui, "Segoe UI", sans-serif',
@@ -17448,11 +17588,11 @@ function mountMantineUi() {
     },
     components: {
       Group: Group.extend({ defaultProps: { align: "flex-end", gap: "xs", wrap: "wrap" } }),
-      Button: Button.extend({
+      Button: NativeButton.extend({
         defaultProps: { size: "ff", radius: "ff" },
         vars: () => ({ root: { "--button-height": "38px", "--button-padding-x": "12px", "--button-fz": "14px" } })
       }),
-      ActionIcon: ActionIcon.extend({
+      ActionIcon: NativeActionIcon.extend({
         defaultProps: { size: "ff", radius: "ff" },
         vars: () => ({ root: { "--ai-size": "38px" } })
       }),
@@ -17462,7 +17602,6 @@ function mountMantineUi() {
       }),
       TextInput: TextInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
       Select: Select.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
-      NumberInput: NumberInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
       ColorInput: ColorInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
       Modal: Modal.extend({
         defaultProps: {
@@ -17491,6 +17630,170 @@ function mountMantineUi() {
     { value: "Georgia, serif", label: "Georgia" },
     { value: "Courier New, monospace", label: "Courier New" }
   ]);
+  function numericBinding(group, field, axis = null) {
+    const read = () => {
+      const api = window.FastFigureApi, state = appFSM.readState();
+      if (state.lifecycle !== "ready") return null;
+      let view, target, value2;
+      if (group === "image") {
+        view = api.images.readEditor();
+        target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
+        value2 = view?.settings?.[field];
+      } else if (group === "csv" || group === "object") {
+        view = api.graphs.readData();
+        target = group === "csv" ? view.currentCsv ? [group, view.currentCsv.id] : null : view.chart?.editor?.editable !== false && view.selectedIndex != null ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null;
+        value2 = group === "csv" ? view.currentCsv?.headerLines : view.objects?.[view.selectedIndex]?.[field];
+      } else if (group === "axis" || group === "global") {
+        view = api.graphs.readLayout();
+        target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
+        value2 = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
+      } else if (group === "label") {
+        view = api.labels.readState();
+        target = state.overlay === "label" ? [group] : null;
+        value2 = view.settings[field];
+      } else if (group === "caption") {
+        view = api.captions.readGlobal();
+        target = state.overlay === "caption" ? [group] : null;
+        value2 = view.settings[field];
+      } else if (group === "print") {
+        view = api.print.readSettings();
+        target = state.overlay === "print" ? [group] : null;
+        value2 = field === "height" && view.heightMode !== "explicit" ? null : view[field];
+      } else {
+        view = api.layout.readState();
+        target = state.overlay === "layout" ? [group] : null;
+        value2 = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"] : group === "zoom" ? view.zoom : view.slotStyle[field];
+      }
+      if (typeof value2 === "string" && value2.trim() && Number.isFinite(Number(value2))) value2 = Number(value2);
+      return { target: target === null ? null : [...target, field], value: value2, view };
+    };
+    const allowEmpty = group === "axis" && ["min", "max", "tick"].includes(field) || group === "global" || group === "print" && field === "height";
+    return {
+      readTarget: () => read()?.target ?? null,
+      readValue: () => read()?.value,
+      prepare: (text, current) => prepareNumericInput(
+        text,
+        current,
+        allowEmpty,
+        group === "print" && field === "height" ? null : ""
+      ),
+      invoke: (target, value2) => {
+        const api = window.FastFigureApi, current = read();
+        if (!current || !sameUiTarget(current.target, target)) return null;
+        if (group === "image") return api.images.setSettings(target[1], { [field]: value2 });
+        if (group === "csv") return api.graphs.setHeaderLines(target[1], value2);
+        if (group === "object") return api.graphs.setObjectValues(target[2], target[3], { [field]: value2 });
+        if (group === "axis") return updateSelectedGraphLayout({ axisKey: axis, axisValues: { [field]: String(value2) } });
+        if (group === "global") return updateSelectedGraphLayout({ globalSettings: { [field]: String(value2) } });
+        if (group === "label") return ["x", "y"].includes(field) ? api.labels.setPosition(field === "x" ? value2 : current.view.settings.x, field === "y" ? value2 : current.view.settings.y) : api.labels.setSettings({ [field]: value2 });
+        if (group === "caption") return api.captions.setSettings({ [field]: value2 });
+        if (group === "print") return api.print.setSettings(field === "height" ? { heightMode: value2 === null ? "auto" : "explicit", height: value2 } : { [field]: value2 });
+        if (group === "grid") {
+          const layout2 = current.view, bounds = layout2.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
+          value2 = Math.max(bounds[0], Math.min(bounds[1], value2));
+          return api.layout.setGrid(field === "rows" ? value2 : layout2.gridRows, field === "cols" ? value2 : layout2.gridCols);
+        }
+        if (group === "zoom") return api.layout.setZoom(value2);
+        return api.layout.setStyle({ [field]: value2 });
+      }
+    };
+  }
+  function useUiCommand(binding, stepSize = null) {
+    const [, render] = useState(0), ref = useRef(null);
+    if (!ref.current) ref.current = new UiCommand(binding.readTarget, binding.readValue, binding.prepare, binding.invoke, stepSize);
+    const command = ref.current;
+    Object.assign(command, binding, { stepSize });
+    command.changed = () => render((value2) => value2 + 1);
+    const state = useAppState(), target = JSON.stringify(command.readTarget());
+    useEffect(() => {
+      command.cancel();
+    }, [target, state.lifecycle]);
+    useEffect(() => {
+      command.active = true;
+      command.changed = () => render((value2) => value2 + 1);
+      const unsubscribe = appFSM.subscribe(() => {
+        if (appFSM.readState().lifecycle !== "ready" || command.editing && !sameUiTarget(command.editTarget, command.readTarget())) command.cancel();
+      });
+      return () => {
+        unsubscribe();
+        command.dispose();
+      };
+    }, []);
+    return command;
+  }
+  function CommandNumberInput({ command: descriptor, onApplied, ...props }) {
+    const [group, field, axis] = descriptor, binding = numericBinding(group, field, axis);
+    const invoke = binding.invoke;
+    binding.invoke = (target, value3) => {
+      const outcome = invoke(target, value3);
+      const applied = (result) => {
+        if (result !== false && result != null) onApplied?.(result);
+        return result;
+      };
+      return outcome && typeof outcome.then === "function" ? outcome.then(applied) : applied(outcome);
+    };
+    const command = useUiCommand(binding, props.step ?? 1);
+    const { value: value2, onChange, onBlur, min, max, step, allowDecimal, clampBehavior, ...inputProps } = props;
+    const run = (callback) => {
+      try {
+        const result = callback();
+        if (result?.catch) result.catch((error) => reportTaskError("UI_COMMAND", error));
+      } catch (error) {
+        reportTaskError("UI_COMMAND", error);
+      }
+    };
+    const editing = command.editing && sameUiTarget(command.editTarget, command.readTarget());
+    const control = React.createElement(TextInput, {
+      ...inputProps,
+      type: "text",
+      inputMode: "decimal",
+      value: editing ? command.text : binding.readValue() ?? "",
+      disabled: props.disabled || command.running,
+      onChange: (event) => command.input(event.currentTarget.value, event.nativeEvent.isComposing),
+      onCompositionStart: () => {
+        command.composing = true;
+      },
+      onCompositionEnd: (event) => command.input(event.currentTarget.value, false),
+      onBlur: () => run(() => command.commit()),
+      onKeyDown: (event) => {
+        if (event.nativeEvent.isComposing || command.composing) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          run(() => command.commit());
+        } else if (event.key === "Escape") {
+          event.stopPropagation();
+          command.cancel();
+        } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          event.preventDefault();
+          run(() => command.step(event.key === "ArrowUp" ? "increase" : "decrease"));
+        }
+      },
+      rightSection: React.createElement("span", { style: { display: "grid" } }, ...["increase", "decrease"].map((direction) => React.createElement("button", {
+        key: direction,
+        type: "button",
+        disabled: props.disabled || command.running,
+        "aria-label": `${props.label} ${direction === "increase" ? "늘리기" : "줄이기"}`,
+        onMouseDown: (event) => event.preventDefault(),
+        onClick: () => run(() => command.step(direction))
+      }, direction === "increase" ? "▴" : "▾")))
+    });
+    return React.createElement("div", { style: { display: "contents" }, onClick: (event) => event.stopPropagation() }, control);
+  }
+  function CommandButton({ control = NativeButton, controlRef, localAction = false, onClick, ...props }) {
+    const rendered = appFSM.readState();
+    const displayedTarget = [rendered.selectedSlotId, rendered.assetPath, rendered.graphObjectIndex, rendered.overlay];
+    const readTarget = () => {
+      const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
+      return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
+    };
+    const command = useUiCommand({ readTarget, readValue: null, prepare: null, invoke: (_target, event) => onClick?.(event) });
+    return React.createElement(control, {
+      ...props,
+      ref: controlRef,
+      disabled: props.disabled || command.running,
+      onClick: onClick ? (event) => localAction ? onClick(event) : command.send(event) : void 0
+    });
+  }
   function FoldSection({ title, initiallyOpen = false, children }) {
     const [open, setOpen] = useState(initiallyOpen);
     const id = React.useId(), button = useRef(null), content = useRef(null);
@@ -17504,6 +17807,7 @@ function mountMantineUi() {
       React.createElement(Button, {
         ref: button,
         variant: "subtle",
+        localAction: true,
         onClick: toggle,
         "aria-expanded": open,
         "aria-controls": id
@@ -17528,7 +17832,8 @@ function mountMantineUi() {
           inset: "0",
           width: "100%",
           height: "100%",
-          border: "0",
+          boxSizing: "border-box",
+          border: layout2.slotStyle.showBorders ? "0" : "1px dashed var(--ui-color)",
           borderRadius: "inherit",
           padding: "0",
           pointerEvents: "auto",
@@ -17684,12 +17989,12 @@ function mountMantineUi() {
           { justify: "flex-end", gap: "xs" },
           React.createElement(
             Button,
-            { variant: "light", onClick: () => resolveCollision("rename") },
+            { variant: "light", localAction: true, onClick: () => resolveCollision("rename") },
             "새 이름으로 추가"
           ),
           collision.mode === "replace-or-rename" ? React.createElement(
             Button,
-            { onClick: () => resolveCollision("replace") },
+            { localAction: true, onClick: () => resolveCollision("replace") },
             "기존 파일 교체"
           ) : null
         )
@@ -17859,7 +18164,7 @@ function mountMantineUi() {
             { justify: "flex-end", gap: "xs" },
             React.createElement(
               Button,
-              { variant: "light", onClick: () => setDeleteTarget(null) },
+              { variant: "light", localAction: true, onClick: () => setDeleteTarget(null) },
               "취소"
             ),
             React.createElement(
@@ -17893,7 +18198,7 @@ function mountMantineUi() {
           React.createElement(
             Group,
             { justify: "flex-end", gap: "xs" },
-            React.createElement(Button, { variant: "light", onClick: closeResetDialog }, "취소"),
+            React.createElement(Button, { variant: "light", localAction: true, onClick: closeResetDialog }, "취소"),
             React.createElement(Button, { onClick: confirmSlotReset }, "초기화")
           )
         )
@@ -17959,32 +18264,32 @@ function mountMantineUi() {
       settings?.fit === "manual" ? React.createElement(
         Stack,
         { gap: "xs" },
-        React.createElement(NumberInput, {
+        React.createElement(CommandNumberInput, {
           label: "크기 (%)",
           value: settings.scale,
           min: 1,
           max: 1e3,
           disabled: busy,
-          onChange: (value2) => updateSettings({ scale: value2 })
+          command: ["image", "scale"]
         }),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "X (%)",
             value: settings.x,
             min: -100,
             max: 200,
             disabled: busy,
-            onChange: (value2) => updateSettings({ x: value2 })
+            command: ["image", "x"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "Y (%)",
             value: settings.y,
             min: -100,
             max: 200,
             disabled: busy,
-            onChange: (value2) => updateSettings({ y: value2 })
+            command: ["image", "y"]
           })
         )
       ) : null
@@ -18435,7 +18740,7 @@ function mountMantineUi() {
           React.createElement(
             Group,
             { justify: "flex-end", gap: "xs" },
-            React.createElement(Button, { variant: "light", onClick: closeFolderDialog }, "취소"),
+            React.createElement(Button, { variant: "light", localAction: true, onClick: closeFolderDialog }, "취소"),
             React.createElement(Button, { onClick: createFolderFromMantine }, "만들기")
           )
         )
@@ -18467,7 +18772,7 @@ function mountMantineUi() {
           React.createElement(
             Group,
             { justify: "flex-end", gap: "xs" },
-            React.createElement(Button, { variant: "light", onClick: closeTrashDialog }, "취소"),
+            React.createElement(Button, { variant: "light", localAction: true, onClick: closeTrashDialog }, "취소"),
             React.createElement(Button, { onClick: emptyTrashFromMantine }, "비우기")
           )
         ) : null
@@ -18503,7 +18808,7 @@ function mountMantineUi() {
             { justify: "flex-end", gap: "xs" },
             React.createElement(
               Button,
-              { variant: "light", onClick: () => setMovePicker(null) },
+              { variant: "light", localAction: true, onClick: () => setMovePicker(null) },
               "취소"
             ),
             React.createElement(
@@ -18540,7 +18845,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             { justify: "flex-end", gap: "xs" },
             React.createElement(
               Button,
-              { variant: "light", onClick: () => setMoveConfirm(null) },
+              { variant: "light", localAction: true, onClick: () => setMoveConfirm(null) },
               "취소"
             ),
             React.createElement(
@@ -18573,6 +18878,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           fullWidth: true,
           justify: "flex-start",
           "aria-expanded": slotsExpanded,
+          localAction: true,
           onClick: () => setSlotsExpanded((value2) => !value2)
         },
         `${slotsExpanded ? "▾" : "▸"} /slots`
@@ -18701,14 +19007,14 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       disabled: busy,
       onChange: (value2) => value2 !== null && update({ [key]: value2 })
     });
-    const numberField = (label, key, min, max, step = 1) => React.createElement(NumberInput, {
+    const numberField = (label, key, min, max, step = 1) => React.createElement(CommandNumberInput, {
       label,
       value: selected?.[key],
       min,
       max,
       step,
       disabled: busy,
-      onChange: (value2) => update({ [key]: value2 })
+      command: ["object", key]
     });
     return React.createElement(
       Stack,
@@ -18733,14 +19039,14 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           if (csv) graphApi.selectCsv(csv.path);
         }
       }),
-      activeCsv ? React.createElement(NumberInput, {
+      activeCsv ? React.createElement(CommandNumberInput, {
         label: "헤더 행 수",
         value: activeCsv.headerLines,
         min: 0,
         max: activeCsv.rows.length,
         allowDecimal: false,
         disabled: busy,
-        onChange: (value2) => graphApi.setHeaderLines(activeCsv.id, value2)
+        command: ["csv", "headerLines"]
       }) : null,
       activeCsv && columns.length ? React.createElement(
         ScrollArea,
@@ -18948,14 +19254,12 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       },
       label
     );
-    const axisNumber = (key, axis, field, label, options = {}) => React.createElement(NumberInput, {
+    const axisNumber = (key, axis, field, label, options = {}) => React.createElement(CommandNumberInput, {
       label,
       value: axis[field],
       disabled: busy || !editable,
       ...options,
-      onChange: (value2) => updateAxis(key, {
-        [field]: value2 === "" ? "" : String(value2)
-      })
+      command: ["axis", field, key]
     });
     const axisToggle = (key, axis, field, label) => React.createElement(
       Button,
@@ -19080,17 +19384,17 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       React.createElement(
         Group,
         { gap: "xs", grow: true },
-        React.createElement(NumberInput, {
+        React.createElement(CommandNumberInput, {
           label: "제목 크기",
           value: settings.titleFontSize,
           disabled: busy || !editable,
-          onChange: (value2) => updateGlobal({ titleFontSize: value2 === "" ? "" : String(value2) })
+          command: ["global", "titleFontSize"]
         }),
-        React.createElement(NumberInput, {
+        React.createElement(CommandNumberInput, {
           label: "범례 크기",
           value: settings.legendFontSize,
           disabled: busy || !editable,
-          onChange: (value2) => updateGlobal({ legendFontSize: value2 === "" ? "" : String(value2) })
+          command: ["global", "legendFontSize"]
         })
       ),
       React.createElement(FoldSection, { title: "X축" }, axisEditor("xBottom"), axisEditor("xTop")),
@@ -19328,7 +19632,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
               { gap: "xs" },
               React.createElement(
                 Button,
-                { variant: "light", onClick: () => setOpened(false) },
+                { variant: "light", localAction: true, onClick: () => setOpened(false) },
                 "취소"
               ),
               React.createElement(
@@ -19387,6 +19691,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
               variant: telemetry.debugEnabled ? "filled" : "light",
               disabled: busy,
               "aria-pressed": telemetry.debugEnabled,
+              localAction: true,
               onClick: () => setDebugEnabled(!readDebugEnabled())
             },
             telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기"
@@ -19396,6 +19701,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             {
               variant: "light",
               disabled: busy || !telemetry.debugLines.length,
+              localAction: true,
               onClick: saveDebugOutput
             },
             "로그 저장"
@@ -19405,6 +19711,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             {
               variant: "light",
               disabled: busy || !telemetry.debugLines.length,
+              localAction: true,
               onClick: clearDebugOutput
             },
             "로그 지우기"
@@ -19693,37 +20000,28 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
               if (fontFamily !== null) commit({ fontFamily });
             }
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "크기",
             value: settings.fontSize,
             min: 6,
             disabled: busy,
-            onChange: (value2) => {
-              const number = Number(value2);
-              commit({ fontSize: Number.isFinite(number) ? Math.max(6, number) : 14 });
-            }
+            command: ["label", "fontSize"]
           })
         ),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "X (px)",
             value: settings.x,
             disabled: busy,
-            onChange: (value2) => labelApi.setPosition(
-              Number.isFinite(Number(value2)) ? Number(value2) : 0,
-              settings.y
-            )
+            command: ["label", "x"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "Y (px)",
             value: settings.y,
             disabled: busy,
-            onChange: (value2) => labelApi.setPosition(
-              settings.x,
-              Number.isFinite(Number(value2)) ? Number(value2) : 0
-            )
+            command: ["label", "y"]
           }),
           React.createElement(
             Button,
@@ -19826,6 +20124,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
               variant: slotMode ? "filled" : "light",
               disabled: busy || !selectedSlot,
               "aria-pressed": slotMode,
+              localAction: true,
               onClick: () => setTargetMode(slotMode ? "global" : "slot")
             },
             "슬롯별 캡션"
@@ -19889,22 +20188,22 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
               if (fontFamily !== null) commitSettings({ fontFamily });
             }
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "크기",
             value: settings.fontSize,
             min: 6,
             max: 96,
             disabled: busy,
-            onChange: (value2) => commitSettings({ fontSize: value2 })
+            command: ["caption", "fontSize"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "줄 간격",
             value: settings.lineHeight,
             min: 0.8,
             max: 4,
             step: 0.05,
             disabled: busy,
-            onChange: (value2) => commitSettings({ lineHeight: value2 })
+            command: ["caption", "lineHeight"]
           })
         )
       )
@@ -19914,19 +20213,12 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const state = useAppState();
     const printApi = window.FastFigureApi.print;
     const initial = printApi.readSettings();
-    const [width, setWidth] = useState(initial.width);
-    const [height, setHeight] = useState(
-      initial.heightMode === "explicit" ? initial.height : ""
-    );
-    const [dpi, setDpi] = useState(initial.dpi);
+    const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
     const [format, setFormat] = useState(initial.format);
     const [message, setMessage] = useState("");
     useEffect(() => {
       if (state.overlay !== "print") return;
       const saved = printApi.readSettings();
-      setWidth(saved.width);
-      setHeight(saved.heightMode === "explicit" ? saved.height : "");
-      setDpi(saved.dpi);
       setFormat(saved.format);
     }, [state.overlay]);
     if (state.overlay !== "print") return null;
@@ -19934,9 +20226,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
     const commit = (patch) => {
       const next = printApi.setSettings(patch);
-      setWidth(next.width);
-      setHeight(next.heightMode === "explicit" ? next.height : "");
-      setDpi(next.dpi);
       setFormat(next.format);
       return next;
     };
@@ -19965,37 +20254,33 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             disabled: busy,
             onChange: (value2) => value2 !== null && commit({ format: value2 })
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "DPI",
             value: dpi,
             min: 36,
             max: 1200,
             disabled: busy,
-            onChange: (value2) => commit({ dpi: value2 })
+            command: ["print", "dpi"]
           })
         ),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "가로 (px)",
             value: width,
             min: 100,
             max: 2e4,
             disabled: busy,
-            onChange: (value2) => commit({ width: value2 })
+            command: ["print", "width"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "세로 (px, 비우면 자동)",
             value: height,
             min: 100,
             max: 2e4,
             disabled: busy,
-            onChange: (value2) => {
-              if (value2 === "" || value2 === null)
-                commit({ heightMode: "auto" });
-              else commit({ heightMode: "explicit", height: value2 });
-            }
+            command: ["print", "height"]
           })
         ),
         React.createElement(
@@ -20024,10 +20309,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => /* @__PURE__ */ new Set());
     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
-    const [dimensionEdits, setDimensionEdits] = useState({});
-    useEffect(() => {
-      setDimensionEdits({});
-    }, [state.overlay]);
     const previewFrameRef = useRef(null);
     const layoutApi = window.FastFigureApi.layout;
     const layout2 = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
@@ -20050,30 +20331,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     if (state.overlay !== "layout") return null;
     const busy = state.lifecycle !== "ready";
     const style = layout2.slotStyle;
-    const clamp = (value2, fallback, min, max) => {
-      const number = Number(value2);
-      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
-    };
     const commitStyle = (patch) => layoutApi.setStyle(patch);
-    const changeGrid = (dimension, value2, editingFinished = false) => {
-      if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
-      if (editingFinished) {
-        layoutApi.readState();
-        setDimensionEdits((current2) => ({ ...current2, [dimension]: void 0 }));
-        return null;
-      }
-      setDimensionEdits((current2) => ({ ...current2, [dimension]: value2 }));
-      if (value2 == null || value2 === "") return null;
-      const current = layoutApi.readState();
-      const number = typeof value2 === "number" || typeof value2 === "string" && value2.trim() !== "" ? Number(value2) : NaN;
-      const bounds = current.gridLimits[dimension === "rows" ? "gridRows" : "gridCols"];
-      const edited = Number.isFinite(number) ? Math.max(bounds[0], Math.min(bounds[1], number)) : dimension === "rows" ? current.gridRows : current.gridCols;
-      const rows = dimension === "rows" ? edited : current.gridRows;
-      const cols = dimension === "cols" ? edited : current.gridCols;
-      const result = layoutApi.setGrid(rows, cols);
-      setLayoutSelection(/* @__PURE__ */ new Set());
-      return result;
-    };
     const toggleSlot = (slotId) => {
       setLayoutSelection((current) => {
         const next = new Set(current);
@@ -20089,8 +20347,6 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         setLayoutSelection((current) => new Set([...current].filter((id) => visibleIds.has(id))));
       }
     };
-    const changeZoom = (value2) => layoutApi.setZoom(clamp(value2, 100, 50, 200));
-    const commitZoom = () => layoutApi.commitZoom();
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
     return React.createElement(
       FastFigureSettingsModal,
@@ -20106,76 +20362,76 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "행",
-            value: dimensionEdits.rows ?? layout2.gridRows,
+            value: layout2.gridRows,
             clampBehavior: "none",
             min: layout2.gridLimits.gridRows[0],
             max: layout2.gridLimits.gridRows[1],
             allowDecimal: false,
             disabled: busy,
-            onChange: (value2) => changeGrid("rows", value2),
-            onBlur: () => changeGrid("rows", dimensionEdits.rows, true)
+            command: ["grid", "rows"],
+            onApplied: () => setLayoutSelection(/* @__PURE__ */ new Set())
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "열",
-            value: dimensionEdits.cols ?? layout2.gridCols,
+            value: layout2.gridCols,
             clampBehavior: "none",
             min: layout2.gridLimits.gridCols[0],
             max: layout2.gridLimits.gridCols[1],
             allowDecimal: false,
             disabled: busy,
-            onChange: (value2) => changeGrid("cols", value2),
-            onBlur: () => changeGrid("cols", dimensionEdits.cols, true)
+            command: ["grid", "cols"],
+            onApplied: () => setLayoutSelection(/* @__PURE__ */ new Set())
           })
         ),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "기준 폭",
             value: style.referenceWidth,
             min: 100,
             max: 2e4,
             disabled: busy,
-            onChange: (value2) => commitStyle({ referenceWidth: clamp(value2, style.referenceWidth, 100, 2e4) })
+            command: ["style", "referenceWidth"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "간격",
             value: style.gap,
             min: 0,
             max: 2e3,
             disabled: busy,
-            onChange: (value2) => commitStyle({ gap: clamp(value2, style.gap, 0, 2e3) })
+            command: ["style", "gap"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "바깥 여백",
             value: style.outerMargin,
             min: 0,
             max: 5e3,
             disabled: busy,
-            onChange: (value2) => commitStyle({ outerMargin: clamp(value2, style.outerMargin, 0, 5e3) })
+            command: ["style", "outerMargin"]
           })
         ),
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "모서리 반경",
             value: style.radius,
             min: 0,
             max: 2e3,
             disabled: busy,
-            onChange: (value2) => commitStyle({ radius: clamp(value2, style.radius, 0, 2e3) })
+            command: ["style", "radius"]
           }),
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "종횡비",
             value: style.aspect,
             min: 0.1,
             max: 10,
             step: 0.01,
             disabled: busy,
-            onChange: (value2) => commitStyle({ aspect: clamp(value2, style.aspect, 0.1, 10) })
+            command: ["style", "aspect"]
           }),
           React.createElement(
             Button,
@@ -20191,25 +20447,14 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         React.createElement(
           Group,
           { gap: "xs", grow: true },
-          React.createElement(NumberInput, {
+          React.createElement(CommandNumberInput, {
             label: "확대 비율 (%)",
             value: layout2.zoom,
             min: 50,
             max: 200,
-            disabled: busy || layout2.zoomLocked,
-            onChange: changeZoom,
-            onBlur: commitZoom
+            disabled: busy,
+            command: ["zoom", "zoom"]
           }),
-          React.createElement(
-            Button,
-            {
-              variant: layout2.zoomLocked ? "filled" : "light",
-              disabled: busy,
-              "aria-pressed": layout2.zoomLocked,
-              onClick: () => layoutApi.setZoomLocked(!layout2.zoomLocked)
-            },
-            layout2.zoomLocked ? "크기 고정" : "크기 고정 해제"
-          ),
           React.createElement(
             Button,
             {
@@ -20368,6 +20613,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
             {
               variant: "light",
               "aria-expanded": !navbarCollapsed,
+              localAction: true,
               onClick: toggleNavbar
             },
             navbarCollapsed ? "사이드바 표시" : "사이드바 숨기기"

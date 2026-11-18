@@ -3,7 +3,7 @@ import { projectVfs } from '../backend/assets_files.js';
 import { PROJECT_COMMAND_ACTIONS, projectEFSM } from '../backend/project_efsm.js';
 import { buildFrontendReconciliationInput, getChart, getProjectCsv, readBackendProjection, validateFrontendIntent } from '../backend/project_state.js';
 import { interfaceFSM } from '../frontend/interface_fsm.js';
-import { applyDashboardProjectionInvalidation, applyDashboardZoomProjection, applyReferenceGeometryProjection, applySlotStyleProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, readDashboardRenderedWidth, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
+import { applyDashboardProjectionInvalidation, applyDashboardZoomProjection, applyReferenceGeometryProjection, applySlotStyleProjection, applyUiPaletteProjection, debugLog, installSlotClickControllerProjection, renderDashboardProjection, startupCoreRuntimeProjection, syncDashboardCaptionProjection, updateGraphViewProjection } from '../frontend/renderer.js';
 import { axisRangeValueFromPlotly } from '../backend/graphs.js';
 import { readAppearanceApiPalette, setSelectedSlot, swapSlots } from './public_api/layout_annotations.js';
 
@@ -74,11 +74,7 @@ export function applyDashboardZoom(resize = true) {
   return applyDashboardZoomProjection(dispatchProjectQuery("renderer"), interfaceFSM.readState(), resize);
 }
 export function syncDashboardZoomDisplay() {
-  const width = readDashboardRenderedWidth(), state = interfaceFSM.readState();
-  if (!width) return;
-  const reference = dispatchProjectQuery("renderer").layout.slotStyle.referenceWidth;
-  return state.dashboardZoomLocked ? Math.max(50, Math.min(200, Math.round(width / reference * 100)))
-    : Math.round(state.dashboardZoomIntent);
+  return Math.round(interfaceFSM.readState().dashboardZoomIntent);
 }
 export function updateFileAvailability() {
   const state = interfaceFSM.readState();
@@ -139,8 +135,7 @@ export function dispatchProjectQuery(query, payload = {}) {
     const state = interfaceFSM.readState(),
       layout = readBackendProjection("project-api", { operation: "layout.readState" });
     request.frontendState = state;
-    request.width = state.dashboardZoomLocked ? state.dashboardZoomLockedWidth
-      : layout.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
+    request.width = layout.slotStyle.referenceWidth * state.dashboardZoomIntent / 100;
   }
   return readBackendProjection(query, request);
 }

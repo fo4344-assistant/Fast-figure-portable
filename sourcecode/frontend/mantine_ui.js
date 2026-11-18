@@ -19,6 +19,93 @@ export async function dashboardExternalFileDrop(file, slotId, choosePlan, fronte
   }
 }
 
+// pseudocode/frontend/mantine_ui.pcal: UiCommand_* / prepareNumericInput.
+const sameUiTarget = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+export function prepareNumericInput(text, current, allowEmpty = false, emptyValue = null) {
+  const value = String(text).trim();
+  if (!value) return [allowEmpty, allowEmpty ? emptyValue : current];
+  if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(value)) return [false, current];
+  const number = Number(value);
+  return Number.isFinite(number) ? [true, number] : [false, current];
+}
+export class UiCommand {
+  constructor(readTarget, readValue, prepare, invoke, stepSize = null) {
+    Object.assign(this, { readTarget, readValue, prepare, invoke, stepSize, text: "", editTarget: null,
+      editing: false, composing: false, running: false, active: true, changed: () => {} });
+  }
+  input(text, composing = false) {
+    if (!this.active || this.running) return this.text;
+    const target = this.readTarget();
+    if (target === null) { this.cancel(); return this.text; }
+    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
+    if (!this.editing) { this.editTarget = target; this.editing = true; }
+    this.text = text; this.composing = composing; this.changed(); return text;
+  }
+  refresh(target) {
+    if (!this.active || !this.readValue || !sameUiTarget(this.readTarget(), target)) return;
+    const value = this.readValue(target);
+    this.text = value == null ? "" : String(value); this.changed(); return value;
+  }
+  cancel() {
+    this.editing = false; this.composing = false; this.editTarget = null; this.text = "";
+    const target = this.active ? this.readTarget() : null;
+    const value = target !== null && this.readValue ? this.readValue(target) : "";
+    this.text = value == null ? "" : String(value); this.changed(); return value;
+  }
+  send(value, target = null) {
+    if (!this.active || this.running || appFSM.readState().lifecycle !== "ready") return null;
+    const current = this.readTarget();
+    if (current === null || (target !== null && !sameUiTarget(current, target))) return null;
+    if (this.readValue && this.readValue(current) === value) { this.refresh(current); return null; }
+    this.running = true; this.changed();
+    const settle = (failed, outcome) => {
+      this.running = false; if (this.active) this.changed();
+      let refreshError, refreshFailed = false;
+      try { this.refresh(current); } catch (error) { refreshFailed = true; refreshError = error; }
+      if (failed) throw outcome;
+      if (refreshFailed) throw refreshError;
+      return outcome;
+    };
+    let outcome;
+    try { outcome = this.invoke(current, value); }
+    catch (error) { return settle(true, error); }
+    if (outcome && typeof outcome.then === "function")
+      return Promise.resolve(outcome).then(value => settle(false, value), error => settle(true, error));
+    return settle(false, outcome);
+  }
+  commit() {
+    if (!this.active || !this.editing || this.running || this.composing) return null;
+    const target = this.editTarget;
+    if (appFSM.readState().lifecycle !== "ready" || target === null || !sameUiTarget(this.readTarget(), target)) {
+      this.cancel(); return null;
+    }
+    const [valid, value] = this.prepare(this.text, this.readValue(target));
+    if (!valid) { this.cancel(); status("완성된 숫자를 입력하세요."); return null; }
+    this.editing = false; this.composing = false;
+    const report = outcome => {
+      if (this.active && sameUiTarget(this.readTarget(), target)) {
+        const applied = this.readValue(target);
+        if (applied !== value) status(`입력값 ${value} → 적용값 ${applied}`);
+      }
+      return outcome;
+    };
+    const outcome = this.send(value, target);
+    return outcome && typeof outcome.then === "function" ? outcome.then(report) : report(outcome);
+  }
+  step(direction) {
+    if (!this.active || this.running || this.composing || this.stepSize === null) return null;
+    const target = this.readTarget();
+    if (target === null) { this.cancel(); return null; }
+    if (this.editing && !sameUiTarget(this.editTarget, target)) this.cancel();
+    let value = this.readValue(target);
+    if (this.editing) { const parsed = prepareNumericInput(this.text, value); if (parsed[0]) value = parsed[1]; }
+    if (typeof value !== "number" || !Number.isFinite(value)) value = 0;
+    this.input(String(value + (direction === "increase" ? this.stepSize : -this.stepSize)));
+    return this.commit();
+  }
+  dispose() { this.changed = () => {}; this.cancel(); this.active = false; }
+}
+
 export function mountMantineUi() {
   const runtime = window.FastFigureUiRuntime;
   if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
@@ -26,10 +113,10 @@ export function mountMantineUi() {
 
   const { React, MantineCore } = runtime;
   const {
-    ActionIcon,
+    ActionIcon: NativeActionIcon,
     AppShell,
     Box,
-    Button,
+    Button: NativeButton,
     Code,
     ColorInput,
     FileButton,
@@ -39,7 +126,6 @@ export function mountMantineUi() {
     MantineProvider,
     Menu,
     Modal,
-    NumberInput,
     ScrollArea,
     Select,
     Stack,
@@ -53,11 +139,14 @@ export function mountMantineUi() {
     TextInput,
     Textarea,
     Tree,
-    UnstyledButton,
+    UnstyledButton: NativeUnstyledButton,
     createTheme,
     useTree,
   } = MantineCore;
   const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
+  const Button = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeButton, controlRef: ref }));
+  const ActionIcon = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeActionIcon, controlRef: ref }));
+  const UnstyledButton = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeUnstyledButton, controlRef: ref }));
   const FAST_FIGURE_SETTINGS_MODAL_SIZE = "min(96vw, 1320px)";
 
   const fastFigureTheme = createTheme({
@@ -77,11 +166,11 @@ shell: {
     },
     components: {
 Group: Group.extend({ defaultProps: { align: "flex-end", gap: "xs", wrap: "wrap" } }),
-Button: Button.extend({
+Button: NativeButton.extend({
   defaultProps: { size: "ff", radius: "ff" },
   vars: () => ({ root: { "--button-height": "38px", "--button-padding-x": "12px", "--button-fz": "14px" } }),
 }),
-ActionIcon: ActionIcon.extend({
+ActionIcon: NativeActionIcon.extend({
   defaultProps: { size: "ff", radius: "ff" },
   vars: () => ({ root: { "--ai-size": "38px" } }),
 }),
@@ -91,7 +180,6 @@ Input: Input.extend({
 }),
 TextInput: TextInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
 Select: Select.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
-NumberInput: NumberInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
 ColorInput: ColorInput.extend({ defaultProps: { size: "ff" }, styles: { root: { flex: "1 1 0", minWidth: "min(100%, 12ch)" } } }),
 Modal: Modal.extend({
   defaultProps: {
@@ -121,6 +209,134 @@ Modal: Modal.extend({
     { value: "Georgia, serif", label: "Georgia" },
     { value: "Courier New, monospace", label: "Courier New" },
   ]);
+  // Binding metadata contains only group/field/axis identifiers; every read is fresh.
+  function numericBinding(group, field, axis = null) {
+    const read = () => {
+      const api = window.FastFigureApi, state = appFSM.readState();
+      if (state.lifecycle !== "ready") return null;
+      let view, target, value;
+      if (group === "image") {
+        view = api.images.readEditor(); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
+        value = view?.settings?.[field];
+      } else if (group === "csv" || group === "object") {
+        view = api.graphs.readData();
+        target = group === "csv" ? (view.currentCsv ? [group, view.currentCsv.id] : null)
+          : (view.chart?.editor?.editable !== false && view.selectedIndex != null
+            ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null);
+        value = group === "csv" ? view.currentCsv?.headerLines : view.objects?.[view.selectedIndex]?.[field];
+      } else if (group === "axis" || group === "global") {
+        view = api.graphs.readLayout();
+        target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
+        value = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
+      } else if (group === "label") {
+        view = api.labels.readState(); target = state.overlay === "label" ? [group] : null; value = view.settings[field];
+      } else if (group === "caption") {
+        view = api.captions.readGlobal(); target = state.overlay === "caption" ? [group] : null; value = view.settings[field];
+      } else if (group === "print") {
+        view = api.print.readSettings(); target = state.overlay === "print" ? [group] : null;
+        value = field === "height" && view.heightMode !== "explicit" ? null : view[field];
+      } else {
+        view = api.layout.readState(); target = state.overlay === "layout" ? [group] : null;
+        value = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"]
+          : group === "zoom" ? view.zoom : view.slotStyle[field];
+      }
+      if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) value = Number(value);
+      return { target: target === null ? null : [...target, field], value, view };
+    };
+    const allowEmpty = (group === "axis" && ["min", "max", "tick"].includes(field))
+      || group === "global" || (group === "print" && field === "height");
+    return {
+      readTarget: () => read()?.target ?? null,
+      readValue: () => read()?.value,
+      prepare: (text, current) => prepareNumericInput(text, current, allowEmpty,
+        group === "print" && field === "height" ? null : ""),
+      invoke: (target, value) => {
+        const api = window.FastFigureApi, current = read();
+        if (!current || !sameUiTarget(current.target, target)) return null;
+        if (group === "image") return api.images.setSettings(target[1], { [field]: value });
+        if (group === "csv") return api.graphs.setHeaderLines(target[1], value);
+        if (group === "object") return api.graphs.setObjectValues(target[2], target[3], { [field]: value });
+        if (group === "axis") return updateSelectedGraphLayout({ axisKey: axis, axisValues: { [field]: String(value) } });
+        if (group === "global") return updateSelectedGraphLayout({ globalSettings: { [field]: String(value) } });
+        if (group === "label") return ["x", "y"].includes(field)
+          ? api.labels.setPosition(field === "x" ? value : current.view.settings.x, field === "y" ? value : current.view.settings.y)
+          : api.labels.setSettings({ [field]: value });
+        if (group === "caption") return api.captions.setSettings({ [field]: value });
+        if (group === "print") return api.print.setSettings(field === "height"
+          ? { heightMode: value === null ? "auto" : "explicit", height: value } : { [field]: value });
+        if (group === "grid") {
+          const layout = current.view, bounds = layout.gridLimits[field === "rows" ? "gridRows" : "gridCols"];
+          value = Math.max(bounds[0], Math.min(bounds[1], value));
+          return api.layout.setGrid(field === "rows" ? value : layout.gridRows, field === "cols" ? value : layout.gridCols);
+        }
+        if (group === "zoom") return api.layout.setZoom(value);
+        return api.layout.setStyle({ [field]: value });
+      }
+    };
+  }
+  function useUiCommand(binding, stepSize = null) {
+    const [, render] = useState(0), ref = useRef(null);
+    if (!ref.current) ref.current = new UiCommand(binding.readTarget, binding.readValue, binding.prepare, binding.invoke, stepSize);
+    const command = ref.current;
+    Object.assign(command, binding, { stepSize });
+    command.changed = () => render(value => value + 1);
+    const state = useAppState(), target = JSON.stringify(command.readTarget());
+    useEffect(() => { command.cancel(); }, [target, state.lifecycle]);
+    useEffect(() => {
+      command.active = true; command.changed = () => render(value => value + 1);
+      const unsubscribe = appFSM.subscribe(() => {
+        if (appFSM.readState().lifecycle !== "ready" || (command.editing &&
+            !sameUiTarget(command.editTarget, command.readTarget()))) command.cancel();
+      });
+      return () => { unsubscribe(); command.dispose(); };
+    }, []);
+    return command;
+  }
+  function CommandNumberInput({ command: descriptor, onApplied, ...props }) {
+    const [group, field, axis] = descriptor, binding = numericBinding(group, field, axis);
+    const invoke = binding.invoke;
+    binding.invoke = (target, value) => {
+      const outcome = invoke(target, value);
+      const applied = result => { if (result !== false && result != null) onApplied?.(result); return result; };
+      return outcome && typeof outcome.then === "function" ? outcome.then(applied) : applied(outcome);
+    };
+    const command = useUiCommand(binding, props.step ?? 1);
+    const { value, onChange, onBlur, min, max, step, allowDecimal, clampBehavior, ...inputProps } = props;
+    const run = callback => { try { const result = callback(); if (result?.catch) result.catch(error => reportTaskError("UI_COMMAND", error)); }
+      catch (error) { reportTaskError("UI_COMMAND", error); } };
+    const editing = command.editing && sameUiTarget(command.editTarget, command.readTarget());
+    const control = React.createElement(TextInput, { ...inputProps, type: "text", inputMode: "decimal",
+      value: editing ? command.text : (binding.readValue() ?? ""), disabled: props.disabled || command.running,
+      onChange: event => command.input(event.currentTarget.value, event.nativeEvent.isComposing),
+      onCompositionStart: () => { command.composing = true; },
+      onCompositionEnd: event => command.input(event.currentTarget.value, false),
+      onBlur: () => run(() => command.commit()),
+      onKeyDown: event => {
+        if (event.nativeEvent.isComposing || command.composing) return;
+        if (event.key === "Enter") { event.preventDefault(); run(() => command.commit()); }
+        else if (event.key === "Escape") { event.stopPropagation(); command.cancel(); }
+        else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          event.preventDefault(); run(() => command.step(event.key === "ArrowUp" ? "increase" : "decrease"));
+        }
+      },
+      rightSection: React.createElement("span", { style: { display: "grid" } }, ...["increase", "decrease"].map(direction =>
+        React.createElement("button", { key: direction, type: "button", disabled: props.disabled || command.running,
+          "aria-label": `${props.label} ${direction === "increase" ? "늘리기" : "줄이기"}`,
+          onMouseDown: event => event.preventDefault(), onClick: () => run(() => command.step(direction)) }, direction === "increase" ? "▴" : "▾"))) });
+    return React.createElement("div", { style: { display: "contents" }, onClick: event => event.stopPropagation() }, control);
+  }
+  function CommandButton({ control = NativeButton, controlRef, localAction = false, onClick, ...props }) {
+    const rendered = appFSM.readState();
+    const displayedTarget = [rendered.selectedSlotId, rendered.assetPath, rendered.graphObjectIndex, rendered.overlay];
+    const readTarget = () => {
+      const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
+      return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
+    };
+    const command = useUiCommand({ readTarget, readValue: null, prepare: null, invoke: (_target, event) => onClick?.(event) });
+    return React.createElement(control, { ...props, ref: controlRef, disabled: props.disabled || command.running,
+      onClick: onClick ? event => localAction ? onClick(event) : command.send(event) : undefined });
+  }
+
   function FoldSection({ title, initiallyOpen = false, children }) {
     const [open, setOpen] = useState(initiallyOpen);
     const id = React.useId(), button = useRef(null), content = useRef(null);
@@ -129,7 +345,7 @@ Modal: Modal.extend({
       setOpen(value => !value);
     };
     return React.createElement(Stack, { gap: "xs" },
-      React.createElement(Button, { ref: button, variant: "subtle", onClick: toggle,
+      React.createElement(Button, { ref: button, variant: "subtle", localAction: true, onClick: toggle,
         "aria-expanded": open, "aria-controls": id }, title),
       React.createElement("div", { id, ref: content, hidden: !open }, children));
   }
@@ -146,7 +362,8 @@ Modal: Modal.extend({
         button.textContent = `${slot.row},${slot.col}`;
         button.setAttribute("aria-pressed", String(selection.has(slot.id)));
         Object.assign(button.style, { position: "absolute", inset: "0", width: "100%", height: "100%",
-          border: "0", borderRadius: "inherit", padding: "0", pointerEvents: "auto", color: "inherit",
+          boxSizing: "border-box", border: layout.slotStyle.showBorders ? "0" : "1px dashed var(--ui-color)",
+          borderRadius: "inherit", padding: "0", pointerEvents: "auto", color: "inherit",
           background: selection.has(slot.id) ? "var(--mantine-primary-color-light)" : "transparent",
           boxShadow: selection.has(slot.id) ? "inset 0 0 0 2px var(--mantine-primary-color-filled)" : "none" });
         const click = event => { event.stopPropagation(); onToggle(slot.id); };
@@ -311,13 +528,13 @@ collision
         { justify: "flex-end", gap: "xs" },
         React.createElement(
           Button,
-          { variant: "light", onClick: () => resolveCollision("rename") },
+          { variant: "light", localAction: true, onClick: () => resolveCollision("rename") },
           "새 이름으로 추가",
         ),
         collision.mode === "replace-or-rename"
           ? React.createElement(
               Button,
-              { onClick: () => resolveCollision("replace") },
+              { localAction: true, onClick: () => resolveCollision("replace") },
               "기존 파일 교체",
             )
           : null,
@@ -506,7 +723,7 @@ React.createElement(
           { justify: "flex-end", gap: "xs" },
           React.createElement(
             Button,
-            { variant: "light", onClick: () => setDeleteTarget(null) },
+            { variant: "light", localAction: true, onClick: () => setDeleteTarget(null) },
             "취소",
           ),
           React.createElement(
@@ -543,7 +760,7 @@ React.createElement(
     React.createElement(
       Group,
       { justify: "flex-end", gap: "xs" },
-      React.createElement(Button, { variant: "light", onClick: closeResetDialog }, "취소"),
+      React.createElement(Button, { variant: "light", localAction: true, onClick: closeResetDialog }, "취소"),
       React.createElement(Button, { onClick: confirmSlotReset }, "초기화"),
     ),
   ),
@@ -614,33 +831,36 @@ settings?.fit === "manual"
   ? React.createElement(
       Stack,
       { gap: "xs" },
-      React.createElement(NumberInput, {
+      React.createElement(CommandNumberInput, {
+
         label: "크기 (%)",
         value: settings.scale,
         min: 1,
         max: 1000,
         disabled: busy,
-        onChange: (value) => updateSettings({ scale: value }),
-      }),
+command: ["image","scale"],
+}),
       React.createElement(
         Group,
         { gap: "xs", grow: true },
-        React.createElement(NumberInput, {
+        React.createElement(CommandNumberInput, {
+
           label: "X (%)",
           value: settings.x,
           min: -100,
           max: 200,
           disabled: busy,
-          onChange: (value) => updateSettings({ x: value }),
-        }),
-        React.createElement(NumberInput, {
+command: ["image","x"],
+}),
+        React.createElement(CommandNumberInput, {
+
           label: "Y (%)",
           value: settings.y,
           min: -100,
           max: 200,
           disabled: busy,
-          onChange: (value) => updateSettings({ y: value }),
-        }),
+command: ["image","y"],
+}),
       ),
     )
   : null,
@@ -1137,7 +1357,7 @@ React.createElement(
     React.createElement(
       Group,
       { justify: "flex-end", gap: "xs" },
-      React.createElement(Button, { variant: "light", onClick: closeFolderDialog }, "취소"),
+      React.createElement(Button, { variant: "light", localAction: true, onClick: closeFolderDialog }, "취소"),
       React.createElement(Button, { onClick: createFolderFromMantine }, "만들기"),
     ),
   ),
@@ -1174,7 +1394,7 @@ React.createElement(
         React.createElement(
           Group,
           { justify: "flex-end", gap: "xs" },
-          React.createElement(Button, { variant: "light", onClick: closeTrashDialog }, "취소"),
+          React.createElement(Button, { variant: "light", localAction: true, onClick: closeTrashDialog }, "취소"),
           React.createElement(Button, { onClick: emptyTrashFromMantine }, "비우기"),
         ),
       )
@@ -1215,7 +1435,7 @@ React.createElement(
           { justify: "flex-end", gap: "xs" },
           React.createElement(
             Button,
-            { variant: "light", onClick: () => setMovePicker(null) },
+            { variant: "light", localAction: true, onClick: () => setMovePicker(null) },
             "취소",
           ),
           React.createElement(
@@ -1260,7 +1480,7 @@ React.createElement(
           { justify: "flex-end", gap: "xs" },
           React.createElement(
             Button,
-            { variant: "light", onClick: () => setMoveConfirm(null) },
+            { variant: "light", localAction: true, onClick: () => setMoveConfirm(null) },
             "취소",
           ),
           React.createElement(
@@ -1295,7 +1515,7 @@ React.createElement(
     fullWidth: true,
     justify: "flex-start",
     "aria-expanded": slotsExpanded,
-    onClick: () => setSlotsExpanded((value) => !value),
+    localAction: true, onClick: () => setSlotsExpanded((value) => !value),
   },
   `${slotsExpanded ? "▾" : "▸"} /slots`,
 ),
@@ -1428,10 +1648,11 @@ React.createElement(
 label, data, value: selected?.[key] ?? null, disabled: busy,
 onChange: (value) => value !== null && update({ [key]: value }),
     });
-    const numberField = (label, key, min, max, step = 1) => React.createElement(NumberInput, {
+    const numberField = (label, key, min, max, step = 1) => React.createElement(CommandNumberInput, {
+
 label, value: selected?.[key], min, max, step, disabled: busy,
-onChange: (value) => update({ [key]: value }),
-    });
+command: ["object",key],
+});
     return React.createElement(
 Stack,
 { gap: "xs", p: "md" },
@@ -1453,10 +1674,11 @@ React.createElement(Select, {
     if (csv) graphApi.selectCsv(csv.path);
   },
 }),
-activeCsv ? React.createElement(NumberInput, {
+activeCsv ? React.createElement(CommandNumberInput, {
+
   label: "헤더 행 수", value: activeCsv.headerLines, min: 0, max: activeCsv.rows.length,
   allowDecimal: false, disabled: busy,
-  onChange: (value) => graphApi.setHeaderLines(activeCsv.id, value),
+command: ["csv","headerLines"],
 }) : null,
 activeCsv && columns.length
   ? React.createElement(
@@ -1627,15 +1849,13 @@ React.createElement(
   label,
 );
     const axisNumber = (key, axis, field, label, options = {}) =>
-React.createElement(NumberInput, {
+React.createElement(CommandNumberInput, {
+
   label,
   value: axis[field],
   disabled: busy || !editable,
   ...options,
-  onChange: (value) =>
-    updateAxis(key, {
-      [field]: value === "" ? "" : String(value),
-    }),
+command: ["axis",field,key],
 });
     const axisToggle = (key, axis, field, label) =>
 React.createElement(
@@ -1782,20 +2002,20 @@ React.createElement(Select, {
 React.createElement(
   Group,
   { gap: "xs", grow: true },
-  React.createElement(NumberInput, {
+  React.createElement(CommandNumberInput, {
+
     label: "제목 크기",
     value: settings.titleFontSize,
     disabled: busy || !editable,
-    onChange: (value) =>
-      updateGlobal({ titleFontSize: value === "" ? "" : String(value) }),
-  }),
-  React.createElement(NumberInput, {
+command: ["global","titleFontSize"],
+}),
+  React.createElement(CommandNumberInput, {
+
     label: "범례 크기",
     value: settings.legendFontSize,
     disabled: busy || !editable,
-    onChange: (value) =>
-      updateGlobal({ legendFontSize: value === "" ? "" : String(value) }),
-  }),
+command: ["global","legendFontSize"],
+}),
 ),
 React.createElement(FoldSection, { title: "X축" }, axisEditor("xBottom"), axisEditor("xTop")),
 React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEditor("yRight")),
@@ -2040,7 +2260,7 @@ React.createElement(
         { gap: "xs" },
         React.createElement(
           Button,
-          { variant: "light", onClick: () => setOpened(false) },
+          { variant: "light", localAction: true, onClick: () => setOpened(false) },
           "취소",
         ),
         React.createElement(
@@ -2099,7 +2319,7 @@ React.createElement(
       variant: telemetry.debugEnabled ? "filled" : "light",
       disabled: busy,
       "aria-pressed": telemetry.debugEnabled,
-      onClick: () => setDebugEnabled(!readDebugEnabled()),
+      localAction: true, onClick: () => setDebugEnabled(!readDebugEnabled()),
     },
     telemetry.debugEnabled ? "디버깅 끄기" : "디버깅 켜기",
   ),
@@ -2108,7 +2328,7 @@ React.createElement(
     {
       variant: "light",
       disabled: busy || !telemetry.debugLines.length,
-      onClick: saveDebugOutput,
+      localAction: true, onClick: saveDebugOutput,
     },
     "로그 저장",
   ),
@@ -2117,7 +2337,7 @@ React.createElement(
     {
       variant: "light",
       disabled: busy || !telemetry.debugLines.length,
-      onClick: clearDebugOutput,
+      localAction: true, onClick: clearDebugOutput,
     },
     "로그 지우기",
   ),
@@ -2425,40 +2645,32 @@ React.createElement(
         if (fontFamily !== null) commit({ fontFamily });
       },
     }),
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "크기",
       value: settings.fontSize,
       min: 6,
       disabled: busy,
-      onChange: (value) => {
-        const number = Number(value);
-        commit({ fontSize: Number.isFinite(number) ? Math.max(6, number) : 14 });
-      },
-    }),
+command: ["label","fontSize"],
+}),
   ),
   React.createElement(
     Group,
     { gap: "xs", grow: true },
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "X (px)",
       value: settings.x,
       disabled: busy,
-      onChange: (value) =>
-        labelApi.setPosition(
-          Number.isFinite(Number(value)) ? Number(value) : 0,
-          settings.y,
-        ),
-    }),
-    React.createElement(NumberInput, {
+command: ["label","x"],
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "Y (px)",
       value: settings.y,
       disabled: busy,
-      onChange: (value) =>
-        labelApi.setPosition(
-          settings.x,
-          Number.isFinite(Number(value)) ? Number(value) : 0,
-        ),
-    }),
+command: ["label","y"],
+}),
     React.createElement(
       Button,
       {
@@ -2565,7 +2777,7 @@ React.createElement(
         variant: slotMode ? "filled" : "light",
         disabled: busy || !selectedSlot,
         "aria-pressed": slotMode,
-        onClick: () => setTargetMode(slotMode ? "global" : "slot"),
+        localAction: true, onClick: () => setTargetMode(slotMode ? "global" : "slot"),
       },
       "슬롯별 캡션",
     ),
@@ -2635,23 +2847,25 @@ React.createElement(
         if (fontFamily !== null) commitSettings({ fontFamily });
       },
     }),
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "크기",
       value: settings.fontSize,
       min: 6,
       max: 96,
       disabled: busy,
-      onChange: (value) => commitSettings({ fontSize: value }),
-    }),
-    React.createElement(NumberInput, {
+command: ["caption","fontSize"],
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "줄 간격",
       value: settings.lineHeight,
       min: 0.8,
       max: 4,
       step: 0.05,
       disabled: busy,
-      onChange: (value) => commitSettings({ lineHeight: value }),
-    }),
+command: ["caption","lineHeight"],
+}),
   ),
 ),
     );
@@ -2661,19 +2875,12 @@ React.createElement(
     const state = useAppState();
     const printApi = window.FastFigureApi.print;
     const initial = printApi.readSettings();
-    const [width, setWidth] = useState(initial.width);
-    const [height, setHeight] = useState(
-initial.heightMode === "explicit" ? initial.height : "",
-    );
-    const [dpi, setDpi] = useState(initial.dpi);
+    const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
     const [format, setFormat] = useState(initial.format);
     const [message, setMessage] = useState("");
     useEffect(() => {
 if (state.overlay !== "print") return;
 const saved = printApi.readSettings();
-setWidth(saved.width);
-setHeight(saved.heightMode === "explicit" ? saved.height : "");
-setDpi(saved.dpi);
 setFormat(saved.format);
     }, [state.overlay]);
     if (state.overlay !== "print") return null;
@@ -2683,9 +2890,6 @@ setFormat(saved.format);
 appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
     const commit = (patch) => {
 const next = printApi.setSettings(patch);
-setWidth(next.width);
-setHeight(next.heightMode === "explicit" ? next.height : "");
-setDpi(next.dpi);
 setFormat(next.format);
 return next;
     };
@@ -2719,38 +2923,37 @@ React.createElement(
       disabled: busy,
       onChange: (value) => value !== null && commit({ format: value }),
     }),
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "DPI",
       value: dpi,
       min: 36,
       max: 1200,
       disabled: busy,
-      onChange: (value) => commit({ dpi: value }),
-    }),
+command: ["print","dpi"],
+}),
   ),
   React.createElement(
     Group,
     { gap: "xs", grow: true },
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "가로 (px)",
       value: width,
       min: 100,
       max: 20000,
       disabled: busy,
-      onChange: (value) => commit({ width: value }),
-    }),
-    React.createElement(NumberInput, {
+command: ["print","width"],
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "세로 (px, 비우면 자동)",
       value: height,
       min: 100,
       max: 20000,
       disabled: busy,
-      onChange: (value) => {
-        if (value === "" || value === null)
-          commit({ heightMode: "auto" });
-        else commit({ heightMode: "explicit", height: value });
-      },
-    }),
+command: ["print","height"],
+}),
   ),
   React.createElement(
     Group,
@@ -2780,8 +2983,6 @@ React.createElement(
     const state = useAppState();
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
     const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
-    const [dimensionEdits, setDimensionEdits] = useState({});
-    useEffect(() => { setDimensionEdits({}); }, [state.overlay]);
     const previewFrameRef = useRef(null);
     const layoutApi = window.FastFigureApi.layout;
     const layout = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
@@ -2805,32 +3006,7 @@ return () => observer.disconnect();
     const busy = state.lifecycle !== "ready";
     const style = layout.slotStyle;
 
-    const clamp = (value, fallback, min, max) => {
-const number = Number(value);
-return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
-    };
     const commitStyle = (patch) => layoutApi.setStyle(patch);
-    const changeGrid = (dimension, value, editingFinished = false) => {
-if (!["rows", "cols"].includes(dimension)) throw Error("알 수 없는 grid 편집 차원입니다.");
-if (editingFinished) {
-  layoutApi.readState();
-  setDimensionEdits(current => ({ ...current, [dimension]: undefined }));
-  return null;
-}
-setDimensionEdits(current => ({ ...current, [dimension]: value }));
-if (value == null || value === "") return null;
-const current = layoutApi.readState();
-const number = typeof value === "number" || (typeof value === "string" && value.trim() !== "")
-  ? Number(value) : NaN;
-const bounds = current.gridLimits[dimension === "rows" ? "gridRows" : "gridCols"];
-const edited = Number.isFinite(number) ? Math.max(bounds[0], Math.min(bounds[1], number))
-  : dimension === "rows" ? current.gridRows : current.gridCols;
-const rows = dimension === "rows" ? edited : current.gridRows;
-const cols = dimension === "cols" ? edited : current.gridCols;
-const result = layoutApi.setGrid(rows, cols);
-setLayoutSelection(new Set());
-return result;
-    };
     const toggleSlot = (slotId) => {
 setLayoutSelection((current) => {
   const next = new Set(current);
@@ -2846,9 +3022,6 @@ if (layoutState !== false) {
   setLayoutSelection((current) => new Set([...current].filter((id) => visibleIds.has(id))));
 }
     };
-    const changeZoom = (value) =>
-layoutApi.setZoom(clamp(value, 100, 50, 200));
-    const commitZoom = () => layoutApi.commitZoom();
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-layout" });
 
     return React.createElement(
@@ -2865,80 +3038,84 @@ React.createElement(
   React.createElement(
     Group,
     { gap: "xs", grow: true },
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "행",
-      value: dimensionEdits.rows ?? layout.gridRows,
+      value: layout.gridRows,
       clampBehavior: "none",
       min: layout.gridLimits.gridRows[0],
       max: layout.gridLimits.gridRows[1],
       allowDecimal: false,
       disabled: busy,
-      onChange: (value) =>
-        changeGrid("rows", value),
-      onBlur: () => changeGrid("rows", dimensionEdits.rows, true),
-    }),
-    React.createElement(NumberInput, {
+command: ["grid","rows"],
+onApplied: () => setLayoutSelection(new Set()),
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "열",
-      value: dimensionEdits.cols ?? layout.gridCols,
+      value: layout.gridCols,
       clampBehavior: "none",
       min: layout.gridLimits.gridCols[0],
       max: layout.gridLimits.gridCols[1],
       allowDecimal: false,
       disabled: busy,
-      onChange: (value) =>
-        changeGrid("cols", value),
-      onBlur: () => changeGrid("cols", dimensionEdits.cols, true),
-    }),
+command: ["grid","cols"],
+onApplied: () => setLayoutSelection(new Set()),
+}),
   ),
   React.createElement(
     Group,
     { gap: "xs", grow: true },
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "기준 폭",
       value: style.referenceWidth,
       min: 100,
       max: 20000,
       disabled: busy,
-      onChange: (value) =>
-        commitStyle({ referenceWidth: clamp(value, style.referenceWidth, 100, 20000) }),
-    }),
-    React.createElement(NumberInput, {
+command: ["style","referenceWidth"],
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "간격",
       value: style.gap,
       min: 0,
       max: 2000,
       disabled: busy,
-      onChange: (value) => commitStyle({ gap: clamp(value, style.gap, 0, 2000) }),
-    }),
-    React.createElement(NumberInput, {
+command: ["style","gap"],
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "바깥 여백",
       value: style.outerMargin,
       min: 0,
       max: 5000,
       disabled: busy,
-      onChange: (value) => commitStyle({ outerMargin: clamp(value, style.outerMargin, 0, 5000) }),
-    }),
+command: ["style","outerMargin"],
+}),
   ),
   React.createElement(
     Group,
     { gap: "xs", grow: true },
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "모서리 반경",
       value: style.radius,
       min: 0,
       max: 2000,
       disabled: busy,
-      onChange: (value) => commitStyle({ radius: clamp(value, style.radius, 0, 2000) }),
-    }),
-    React.createElement(NumberInput, {
+command: ["style","radius"],
+}),
+    React.createElement(CommandNumberInput, {
+
       label: "종횡비",
       value: style.aspect,
       min: 0.1,
       max: 10,
       step: 0.01,
       disabled: busy,
-      onChange: (value) => commitStyle({ aspect: clamp(value, style.aspect, 0.1, 10) }),
-    }),
+command: ["style","aspect"],
+}),
     React.createElement(
       Button,
       {
@@ -2953,25 +3130,15 @@ React.createElement(
   React.createElement(
     Group,
     { gap: "xs", grow: true },
-    React.createElement(NumberInput, {
+    React.createElement(CommandNumberInput, {
+
       label: "확대 비율 (%)",
       value: layout.zoom,
       min: 50,
       max: 200,
-      disabled: busy || layout.zoomLocked,
-      onChange: changeZoom,
-      onBlur: commitZoom,
-    }),
-    React.createElement(
-      Button,
-      {
-        variant: layout.zoomLocked ? "filled" : "light",
-        disabled: busy,
-        "aria-pressed": layout.zoomLocked,
-        onClick: () => layoutApi.setZoomLocked(!layout.zoomLocked),
-      },
-      layout.zoomLocked ? "크기 고정" : "크기 고정 해제",
-    ),
+      disabled: busy,
+command: ["zoom","zoom"],
+}),
     React.createElement(
       Button,
       {
@@ -3130,7 +3297,7 @@ React.createElement(
       {
         variant: "light",
         "aria-expanded": !navbarCollapsed,
-        onClick: toggleNavbar,
+        localAction: true, onClick: toggleNavbar,
       },
       navbarCollapsed ? "사이드바 표시" : "사이드바 숨기기",
     ),

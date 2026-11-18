@@ -3,7 +3,7 @@ import { appFSM, applyCommittedDashboardProjection, dispatchProjectCommand, disp
 import { activeProject } from '../../backend/project_state.js';
 import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
-import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, readDashboardRenderedWidth, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
+import { clearSlotDragState, debugLog, exportDashboard, exportDashboardTarget, schedulePlotResize, syncSlotImageElement } from '../../frontend/renderer.js';
 
 export function swapSlots(sourceSlotId, targetSlotId) {
   const [result, frontendState, projection] = dispatchProjectCommand("SLOTS_SWAPPED", { sourceSlotId, targetSlotId });
@@ -281,7 +281,7 @@ export function resetAppearanceApiPalette() {
 export function readLayoutApiState(previewWidth = null) {
   const layout = appFSM.query("project-api", { operation: "layout.readState", renderedWidth: previewWidth }),
     session = interfaceFSM.readState();
-  return Object.freeze({ ...layout, zoom: session.dashboardZoomIntent, zoomLocked: session.dashboardZoomLocked });
+  return Object.freeze({ ...layout, zoom: session.dashboardZoomIntent });
 }
 
 export function setLayoutApiStyle(patch = {}) {
@@ -309,18 +309,6 @@ export function setLayoutApiZoom(value) {
 
 export function commitLayoutApiZoom() {
   appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
-  return readLayoutApiState();
-}
-
-export function setLayoutApiZoomLocked(locked) {
-  const session = interfaceFSM.readState();
-  let renderedWidth = null;
-  if (locked === true && !session.dashboardZoomLocked) {
-    renderedWidth = readDashboardRenderedWidth();
-    if (!Number.isFinite(renderedWidth) || renderedWidth <= 0) return false;
-  }
-  const state = appFSM.send("SET_DASHBOARD_ZOOM_LOCK", { locked: locked === true, renderedWidth });
-  if (state.revision !== session.revision) renderDashboard();
   return readLayoutApiState();
 }
 

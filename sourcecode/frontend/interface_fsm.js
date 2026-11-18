@@ -4,7 +4,7 @@ import { debugLog } from './renderer.js';
 const REFERENCE_EVENTS = new Set(["SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"]);
 const INTERFACE_EVENTS = new Set([...REFERENCE_EVENTS, "CLEAR_ASSET_SELECTION", "CLEAR_GRAPH_OBJECT",
   "TOGGLE_OVERLAY", "CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE", "SET_DASHBOARD_ZOOM",
-  "SET_DASHBOARD_ZOOM_LOCK", "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"]);
+  "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"]);
 
 export class InterfaceStateMachine {
   constructor(definitions) {
@@ -14,8 +14,7 @@ export class InterfaceStateMachine {
       direction: "model-to-ui", revision: 0, error: null });
     this.listeners = new Set();
     this.writeLocks = new Set();
-    Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100,
-      dashboardZoomLocked: false, dashboardZoomLockedWidth: null });
+    Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100 });
   }
   definition(region, state = this.state[region]) {
     const definition = this.definitions[region]?.[state];
@@ -75,24 +74,14 @@ export class InterfaceStateMachine {
     } else if (["CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"].includes(event)) {
       next.overlay = "none";
     } else if (event === "SET_DASHBOARD_ZOOM") {
-      if (interfaceRuntime.dashboardZoomLocked) return this.readState();
       const raw = values.value, numeric = typeof raw === "number" ||
         (typeof raw === "string" && raw.trim() !== "") ? Number(raw) : NaN,
         value = Number.isFinite(numeric) ? Math.max(50, Math.min(200, numeric)) : 100;
       if (value === interfaceRuntime.dashboardZoomIntent) return this.readState();
       interfaceRuntime.dashboardZoomIntent = value;
-    } else if (event === "SET_DASHBOARD_ZOOM_LOCK" || event === "RESET_DASHBOARD_ZOOM") {
-      if (event === "SET_DASHBOARD_ZOOM_LOCK" && values.locked === true) {
-        if (interfaceRuntime.dashboardZoomLocked || !Number.isFinite(values.renderedWidth) || values.renderedWidth <= 0)
-          return this.readState();
-        interfaceRuntime.dashboardZoomLocked = true;
-        interfaceRuntime.dashboardZoomLockedWidth = values.renderedWidth;
-      } else {
-        if (!interfaceRuntime.dashboardZoomLocked && interfaceRuntime.dashboardZoomLockedWidth === null &&
-            interfaceRuntime.dashboardZoomIntent === 100) return this.readState();
-        interfaceRuntime.dashboardZoomLocked = false; interfaceRuntime.dashboardZoomLockedWidth = null;
-        interfaceRuntime.dashboardZoomIntent = 100;
-      }
+    } else if (event === "RESET_DASHBOARD_ZOOM") {
+      if (interfaceRuntime.dashboardZoomIntent === 100) return this.readState();
+      interfaceRuntime.dashboardZoomIntent = 100;
     } else if (event === "LIFECYCLE_START") {
       next.lifecycle = values.lifecycle; next.error = null;
     } else if (event === "LIFECYCLE_COMPLETE") {
@@ -114,8 +103,7 @@ export class InterfaceStateMachine {
   }
   readState() {
     return Object.freeze({ ...this.state, selectedSlotId: interfaceRuntime.selectedSlotId,
-      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent, dashboardZoomLocked: interfaceRuntime.dashboardZoomLocked,
-      dashboardZoomLockedWidth: interfaceRuntime.dashboardZoomLockedWidth });
+      dashboardZoomIntent: interfaceRuntime.dashboardZoomIntent });
   }
   reconcileProjectResult(event, input) {
     interfaceRuntime.selectedSlotId = input.selectedSlot;
@@ -407,7 +395,5 @@ export function isSlotSelected(slot) {
 
 export const interfaceRuntime = {
   selectedSlotId: null,
-  dashboardZoomIntent: 100,
-  dashboardZoomLocked: false,
-  dashboardZoomLockedWidth: null
+  dashboardZoomIntent: 100
 };
