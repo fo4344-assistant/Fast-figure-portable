@@ -92,38 +92,36 @@ appFSM = ApplicationInterface()
 
 
 def dispatchProjectQuery(query, payload=None):
-    projection = "Backend 조회 결과."
+    projection = "이번 공식 조회의 읽기 전용 결과."
     request = "이번 호출용 요청 딕셔너리."
-    frontendState = "interfaceFSM.readState의 이번 읽기 결과."
-    layout = "layout.readState의 이번 읽기 결과."
-    width = "실제 대시보드 표시 너비. 단위: px."
+    frontendState = "현재 Frontend 상태 읽기."
+    layout = "현재 layout.readState 결과."
+    width = "대시보드 표시 너비. 단위: px."
     """
     Args:
     - query:
-      readBackendProjection의 등록된 조회 이름.
-
+      등록된 Backend 조회 종류.
     - payload:
-      명시적 id·path 및 Frontend 선택 참조를 가진 요청 딕셔너리 또는 None.
+      명시적 operation·id·새 조회 인자의 딕셔너리 또는 None.
 
     Return:
     - projection:
-      등록된 조회가 정한 읽기 전용 결과.
+      해당 범위의 읽기 전용 결과.
 
     변경:
     - 없음.
 
     처리:
-        1. payload의 필드를 이번 호출의 request에 복사한다. None이면 빈 딕셔너리다.
-        2. query가 renderer의 전면 투영 요청이면 interfaceFSM.readState()를 frontendState에 둔다.
-           readBackendProjection("project-api", {operation: BACKEND_QUERY_KINDS["project-api"]["layout.readState"]})를
-           layout에 둔다. layout["slotStyle"]["referenceWidth"] *
-           frontendState["dashboardZoomIntent"] / 100을 width에 둔다.
-           request["frontendState"]와 request["width"]에 이 두 읽기·계산 결과를 넣는다.
-           두 조회와 반환 사이에 비동기 대기·사용자 callback·다른 명령을 실행하지 않는다.
-           이 계산값은 이번 요청에서만 사용한다.
-        3. query와 request를 readBackendProjection에 전달하여 projection에 둔다.
-           slot-image·ui-palette 등의 부분 renderer 요청은 기존 요청 필드만 전달한다.
-        4. projection을 이번 호출의 결과로 전달한다. 조회 실패는 호출자에게 전파한다.
+        1. payload를 request로 복사한다. None이면 빈 딕셔너리다.
+        2. renderer의 workspace-structure·selected-slot·whole-workspace 요청과 operation 생략이면
+           interfaceFSM.readState()를 frontendState에 둔다. 생략 operation은 selected-slot으로 정한다.
+           selected-slot이면 현재 frontendState["selectedSlotId"]를 request["slotId"]에 넣는다.
+           layout.readState의 공식 Backend 조회로 현재 referenceWidth를 읽는다.
+           width=referenceWidth*frontendState["dashboardZoomIntent"]/100을 계산한다.
+           request에 width와 frontendState를 넣는다. 두 읽기 사이에 비동기 대기·callback·명령을 넣지 않는다.
+        3. 같은 request로 readBackendProjection(query, request)를 호출하여 projection에 둔다.
+           slot-image·ui-palette와 export·project-api의 기존 입력·반환 계약은 유지한다.
+        4. projection을 반환하고 원래 조회 오류를 전파한다.
     """
     return projection
 
@@ -160,86 +158,146 @@ def dispatchInterfaceEvent(event, payload=None):
 
 
 def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"):
-    validatedInput = "FrontendValidatedInput 딕셔너리."
-    interfaceState = "Frontend 상태 읽기 딕셔너리."
-    selectionContext = "slot-selection-context 조회 결과."
-    projectResult = "ProjectMutationResult 또는 None."
-    rendererProjection = "renderer 조회 결과 또는 None."
+    validatedInput = "Backend가 검증한 선택 입력."
+    interfaceState = "최종 Frontend 상태."
+    selectionContext = "현재 visible 슬롯의 선택 문맥."
+    projectResult = "조건부 종류 변경 결과 또는 None."
+    rendererProjection = "구조 또는 선택 슬롯 조회 결과."
     """
     Args:
     - slotId:
-      선택할 슬롯 정수 id 또는 None. 0은 유효한 id다.
-
+      슬롯 정수 id 또는 None. 0은 유효하다.
     - pendingContentType:
-      빈 슬롯에 지정할 graph/image 문자열 또는 None.
-
+      빈 슬롯의 graph/image 종류 입력 또는 None.
     - direction:
       ui-to-fsm 또는 model-to-fsm.
 
     Return:
     - interfaceState, projectResult, rendererProjection:
-      선택 처리 뒤 상태, 조건부 영속 명령 결과와 표시 입력의 튜플.
+      최종 선택·조건부 명령·이번 표시 입력의 튜플.
 
     변경:
-    - Frontend 선택 상태. 빈 슬롯의 종류 변경 조건을 만족하면 해당 슬롯 contentType.
+    - Frontend 선택과 선택 장식. 조건이 맞으면 빈 슬롯 종류.
 
     처리:
-        1. INTERFACE_EVENTS["SELECT_SLOT"]에 대응하는 BACKEND_REFERENCE_EVENTS의 함수에
-           해당 이벤트 값과 slotId·direction을 가진 payload를 전달하여 반환값을 validatedInput에 둔다.
-        2. 거부이면 현재 Frontend 읽기, None, None을 반환한다.
-        3. interfaceFSM.send(INTERFACE_EVENTS["SELECT_SLOT"], validatedInput)으로 선택을 확정한다.
-           ui-to-fsm의 같은 슬롯 입력은 toggle-clear, model-to-fsm 입력은 선택 유지다.
-        4. 확정된 선택 id가 있고 pendingContentType이 있으면
-           readBackendProjection("slot-selection-context", 현재 선택 참조)를 호출한다.
-        5. 현재 대상이 비어 있고 contentType이 요청과 다르면
-           dispatchProjectCommand("SLOT_TYPE_CHANGED", {slotId, contentType})를 한 번 호출한다.
-           그 결과를 projectResult에 둔다. 그 외 projectResult에는 None을 둔다.
-        6. 최종 interfaceFSM.readState()를 interfaceState에 두고 이를 요청에 담아
-           dispatchProjectQuery("renderer", 요청)를 호출하여 rendererProjection에 둔다.
-        7. 세 결과를 반환한다. 처리 중 예외는 호출자에게 전파한다.
+        1. 기존 Backend SELECT_SLOT 검증을 실행한다. 거부이면 현재 상태와 None, None을 반환한다.
+        2. interfaceFSM.send로 선택을 반영한다. 같은 슬롯의 UI 입력은 toggle-clear,
+           model-to-fsm은 선택 유지 규칙을 사용한다.
+        3. 선택 id가 None이 아니고 pendingContentType이 있으면 slot-selection-context를 읽는다.
+           현재 빈 슬롯의 종류가 요청과 다르면 dispatchProjectCommand의 SLOT_TYPE_CHANGED를 한 번 호출한다.
+           그 결과를 projectResult에 둔다. 그 외에는 None이다.
+        4. 최종 interfaceFSM.readState를 interfaceState에 둔다.
+           renderer의 선택 장식·상호작용 권한을 이 상태로 먼저 갱신한다.
+           선택이 None이면 workspace-structure를 조회하여 rendererProjection에 두고 튜플을 반환한다.
+        5. 3번 명령이 이미 같은 최종 선택의 표시를 수행했으면 그 rendererProjection을 포함한 튜플을 반환한다.
+           남은 유효 선택은 selected-slot을 한 번 조회하여 rendererProjection에 둔다.
+           renderer.updateGraphView에 그 결과와 최종 상태를 전달하여 선택 슬롯 하나만 표시한다.
+           실패하거나 틀이 호환되지 않아도 자동 전체 렌더링을 실행하지 않는다.
+        6. 튜플을 반환한다. 선택·명령·표시 오류는 원래 예외로 전파한다.
     """
     return interfaceState, projectResult, rendererProjection
 
 
 def dispatchProjectCommand(event, payload):
     result = "ProjectMutationResult 딕셔너리."
-    frontendBefore = "Frontend 상태 읽기 딕셔너리."
-    reconciliationInput = "FrontendReconciliationInput 딕셔너리."
-    interfaceState = "Frontend 상태 읽기 딕셔너리."
-    rendererProjection = "renderer 조회 결과 또는 None."
+    frontendBefore = "참조 보정 전 Frontend 상태."
+    reconciliationInput = "Backend 참조 보정 결과."
+    interfaceState = "참조 보정을 마친 Frontend 상태."
+    rendererProjection = "구조 또는 선택 슬롯의 이번 표시 입력."
     """
     Args:
     - event:
-      PROJECT_COMMANDS에 등록된 명령 이름.
-
+      PROJECT_COMMANDS의 명령 이름.
     - payload:
-      명령에 필요한 식별자·새 값·입력 파일 바이트 딕셔너리.
+      기존 명령의 식별자·새 값·파일 바이트.
 
     Return:
     - result, interfaceState, rendererProjection:
-      명령 결과, 최종 Frontend 상태, 표시 입력의 튜플.
+      명령 결과·최종 선택·그 범위의 표시 입력 튜플.
 
     변경:
-    - 명령이 지정하는 Backend 상태와 commit 뒤 Frontend 참조·revision.
+    - 기존 Backend 명령의 상태와 Frontend 참조. 허용된 표시 범위.
 
     처리:
-        1. event가 PROJECT_COMMANDS에 등록되었는지 확인한다. 미등록이면 실패를 전달한다.
-        2. projectEFSM.send(event, payload)를 호출하여 result에 둔다.
-        3. interfaceFSM.readState()를 frontendBefore에 둔다.
-           result["committed"]가 False이면 frontendBefore, rendererProjection=None으로 반환한다.
-        4. buildFrontendReconciliationInput(event, result, frontendBefore)를 호출한다.
-           결과를 interfaceFSM.reconcileProjectResult에 전달하여 interfaceState에 둔다.
-           object index mapping과 selection hint는 이 조회에서 현재 대상과 대조한다.
-        5. interfaceState를 포함한 renderer 요청으로 dispatchProjectQuery("renderer", 요청)를 호출하여
-           rendererProjection에 둔다. 이동 뒤 index 대응과 최종 선택은 4번에서 확정한 값을 사용한다.
-           APPEARANCE_CHANGED의 호출자는 튜플의 rendererProjection 전체를
-           renderer.applyDashboardProjectionInvalidation의 네 번째 인자로 전달한다.
-           renderer는 그 결과의 appearance.uiPalette와 visibleSlots별 figure를 사용한다.
-           같은 명령의 표시 입력을 다시 조회하지 않는다.
-        6. 튜플을 반환한다. 명령 실패와 반영 후 조회 실패는 원래 예외로 전달한다.
-           이미 반영한 명령의 상태는 반영 후 표시 실패 시에도 유지한다.
+        1. 등록된 명령인지 확인하고 projectEFSM.send(event, payload)를 한 번 호출한다.
+        2. interfaceFSM.readState()를 frontendBefore에 둔다.
+           result["committed"]가 False이면 (result, frontendBefore, None)을 반환한다.
+        3. buildFrontendReconciliationInput(event, result, frontendBefore)를 reconciliationInput에 둔다.
+           그 실제 delta·hint·index mapping을 interfaceFSM.reconcileProjectResult에 전달하여 interfaceState에 둔다.
+        4. PROJECT_LOADED이면 renderer.clearWorkspacePresentation()으로 이전 workspace 자원을 정리한다.
+           workspace-structure 조회를 renderer.applyWorkspaceTransform에 전달해 새 빈 틀과 선택 장식만 준비한다.
+           이 구조 조회를 rendererProjection에 둔다. 내용은 전체 버튼에서 표시한다.
+           (result, interfaceState, rendererProjection)을 반환한다.
+        5. GRID_LAYOUT_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED·LAYOUT_STYLE_CHANGED이면
+           workspace-structure를 조회한다. 사라진 소유 연결만 정리하고 유지되는 내용은 CSS로 이동·확대·축소한다.
+           틀이 안전하게 호환되지 않으면 전체 렌더링 필요를 안내한다.
+           rendererProjection에 이 구조 조회를 두고 (result, interfaceState, rendererProjection)을 반환한다.
+           내용 표시 분기로 진행하지 않는다.
+        6. reconciliationInput["projectionEffect"]의 pathOnly가 참이고 referencesRemoved가 거짓이면 구조·참조 정리만 수행한다.
+           EXPORT_SETTINGS_CHANGED는 파일 출력 설정만 변경하므로 workspace 내용 갱신을 생략한다.
+           이 두 경우에는 workspace-structure 조회를 rendererProjection에 두고
+           (result, interfaceState, rendererProjection)을 반환한다. 선택 내용 표시 분기로 진행하지 않는다.
+           그 외에는 selected-slot을 조회한다. 선택 None이면 구조 조회로 바꾸고 내용 계산을 생략한다.
+           renderer.applyDashboardProjectionInvalidation에 event, result, interfaceState, 조회 결과를 한 번 전달한다.
+           전체 palette/CSV/labels/captions 변경의 다른 슬롯 표시는 전체 렌더링 버튼에서 반영한다.
+           전역 dashboard caption도 전체 버튼에서 갱신한다. Sidebar의 공식 값 읽기는 계속 허용한다.
+        7. rendererProjection에 이번 조회 결과를 두고 튜플을 반환한다.
+           wrapper는 이 명령의 표시 작업을 중복 실행하지 않는다.
+           조회·표시 오류는 원래 실패로 전달하며 이미 완료한 commit은 유지한다.
     """
     return result, interfaceState, rendererProjection
+
+
+def transformWorkspace():
+    projection = "현재 workspace 구조·기하 읽기."
+    interfaceState = "현재 Frontend 상태."
+    outcome = "기존 화면 CSS 변환 결과."
+    """
+    Args:
+    - 없음.
+
+    Return:
+    - outcome:
+      기존 화면의 이동·확대·축소 결과.
+
+    변경:
+    - workspace의 CSS 배치·배율과 장식.
+
+    처리:
+        1. dispatchProjectQuery("renderer", {"operation": "workspace-structure"})를 projection에 둔다.
+           현재 Frontend 상태를 interfaceState에 둔다.
+        2. renderer.applyWorkspaceTransform(projection, interfaceState)를 한 번 호출하여 outcome에 둔다.
+           내용 figure 조회·Plotly 갱신·resize·이미지 decode를 실행하지 않는다.
+        3. outcome과 원래 오류를 전달한다.
+    """
+    return outcome
+
+
+def renderWholeWorkspace():
+    projection = "이번 명시적 전체 표시의 Backend 조회 결과."
+    interfaceState = "버튼 실행 시점의 Frontend 상태."
+    outcome = "전체 표시 완료 결과 또는 busy 거부의 None."
+    """
+    Args:
+    - 없음.
+
+    Return:
+    - outcome:
+      renderer의 전체 표시 완료 결과.
+
+    변경:
+    - 전체 workspace의 표시 surface와 그 자원.
+
+    처리:
+        1. 현재 lifecycle이 ready인지 확인한다. busy이면 None을 반환한다.
+        2. dispatchProjectQuery("renderer", {"operation": "whole-workspace"})를 한 번 호출한다.
+           같은 처리에서 현재 Frontend 상태를 읽어 interfaceState에 둔다.
+        3. renderer.renderWholeWorkspace(projection, interfaceState)를 호출하여 완료를 outcome에 둔다.
+           이 진입점은 상단 렌더링 버튼의 workspace.render에 연결한다.
+           Project 명령이나 선택 변경을 실행하지 않는다.
+        4. outcome과 원래 오류를 호출자에게 전달한다.
+    """
+    return outcome
 
 
 def runLifecycleTask(lifecycle, event, task):

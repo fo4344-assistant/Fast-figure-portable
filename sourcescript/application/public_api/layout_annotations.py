@@ -240,7 +240,9 @@ def setLayoutApiZoom(value):
     - Frontend dashboardZoomIntent.
 
     처리:
-        1. 배율 session event 뒤 현재 layout을 읽어 반환한다.
+        1. 배율 session event 뒤 workspace-structure를 공식 조회하고 현재 Frontend 상태와 함께
+           renderer.applyWorkspaceTransform에 전달하여 기존 화면만 확대·축소한다.
+           Plotly 내용 갱신·resize·이미지 재해석을 실행하지 않는다. 현재 layout을 읽어 반환한다.
            dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})를 호출한다.
            readLayoutApiState()를 반환한다.
     """
@@ -283,7 +285,9 @@ def resetLayoutApiZoom():
     - Frontend dashboardZoomIntent.
 
     처리:
-        1. 단일 RESET event로 배율을 100%로 되돌리고 현재 layout을 읽는다.
+        1. 단일 RESET event로 배율을 100%로 되돌린다.
+           workspace-structure와 현재 Frontend 상태를 renderer.applyWorkspaceTransform에 전달한다.
+           기존 내용의 CSS 배율만 바꾸고 현재 layout을 읽는다.
            dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})를 호출한다.
            readLayoutApiState()를 반환한다.
     """
@@ -605,8 +609,9 @@ def setGlobalCaptionText(text):
 
     처리:
         1. Backend project_efsm.ProjectStateMachine.send의 CAPTION_TEXT_INPUT 처리의 nullish/text 변환과 empty 저장 규칙으로 global caption project property 하나만 변경한다.
-           slot caption 값은 변경하지 않는다. commit 후 official copied state를 한 번 읽고 그 supplied state로 caption renderer를 갱신한다.
-           read/renderer 오류는 전파하며 committed text를 rollback하지 않는다. 미commit은 read/render를 실행하지 않는다.
+           slot caption 값은 유지한다. dispatchProjectCommand의 선택 슬롯 표시 정책을 적용한다.
+           global caption의 workspace 표시는 전체 렌더링 버튼에서 갱신한다.
+           편집기의 official copied state는 반환한다. 원래 오류를 전파하며 committed text를 유지한다.
            CAPTION_TEXT_INPUT에 explicit global owner를 전달해 projectEFSM으로 commit한다.
            captionState를 반환한다.
     """
@@ -662,7 +667,7 @@ def insertSlotCaptionsIntoGlobalCaption(slotIds=None):
         3. 연속 동일/뒤따르는 empty를 label range로 묶고, 시작 empty는 label만 두며 기존 global text의 맨 뒤에 공백 구분으로 append한다.
         4. source slot.caption/ownership/afterText/name/settings는 변경하지 않는다. no target은 unchanged False다.
         5. SLOT_CAPTIONS_INSERTED 내부의 candidate 계산/전체 검증/current-source 재확인·재시도/one commit 이후에만
-           공식 global caption copy를 읽고 그 동일한 supplied state로 syncDashboardCaption을 한 번 호출한 뒤 반환한다.
+           공식 global caption copy를 읽어 반환한다. workspace의 global caption은 전체 렌더링 버튼에서 표시한다.
            no target/noncommit은 read/render 없이 False; query/renderer 원래 오류는 전파하며 완료 commit은 rollback하지 않는다.
            captionState를 반환한다.
     """
@@ -770,7 +775,7 @@ def setAppearanceApiPalette(values):
     palette = "appearance.readPalette 딕셔너리 또는 False."
     result = "ProjectMutationResult 딕셔너리."
     interfaceState = "명령 뒤 참조 보정을 마친 Frontend 상태."
-    rendererInput = "같은 표시 작업의 전체 renderer 조회 결과 또는 None."
+    rendererInput = "같은 표시 작업의 선택 슬롯 또는 구조 조회 결과 또는 None."
     """
     Args:
     - values:
@@ -789,10 +794,10 @@ def setAppearanceApiPalette(values):
            missing field를 current palette와 merge하지 않는다. 미commit False, throw/rejection 전파; 성공 read로 위장하지 않는다.
            dispatchProjectCommand('APPEARANCE_CHANGED', {'palette': values})의 값을 (result, interfaceState, rendererInput)에 대입한다.
            result["committed"]가 False이면 False를 반환한다.
-           반영되었으면 renderer.applyDashboardProjectionInvalidation에 APPEARANCE_CHANGED,
-           result, interfaceState, rendererInput을 순서대로 전달한다.
-           rendererInput은 dispatchProjectCommand 내부의 전체 renderer 조회 결과다.
-           그 안의 appearance.uiPalette와 visibleSlots의 figure를 CSS·Plotly 표시에 사용한다.
+           선택 슬롯의 내용 표시는 dispatchProjectCommand가 한 번 수행한다.
+           rendererInput은 그 선택 슬롯 또는 구조 조회 결과다. wrapper에서 표시 작업을 중복 실행하지 않는다.
+           UI 팔레트의 CSS는 공식 appearance.readPalette 결과로 applyUiPalette에 전달한다.
+           다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
            interfaceFSM.notify("ui", "UI_PALETTE_CHANGED")로 한 번 알린다.
            dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})를 반환한다.
     """

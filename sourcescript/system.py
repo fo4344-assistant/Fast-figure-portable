@@ -74,12 +74,13 @@ def initializeFastFigure():
            검증 성공 후 project_state.activeProject에 채택한다.
         3. public_api.FastFigureApi를 public command/query/event interface로 공개한다.
            renderer에는 이 action surface와 Application이 조회한 읽기 결과를 제공한다.
-        4. adapter.dispatchProjectQuery("renderer", {})로 초기 project projection을 구성한다.
+        4. adapter.dispatchProjectQuery("renderer", {"operation": "workspace-structure"})로 초기 project projection을 구성한다.
            Application이 현재 Frontend 확대 비율과 현재 layout으로 정한 너비를 전달하고
            Backend가 같은 project 조회에서 geometry를 제공한다.
            renderer.startupCoreRuntime에 이 projection·Frontend state·public actions를 전달하여
-           dashboard projection과 slot interaction controller를 준비한다.
-           이미 생성한 빈 슬롯과 slot style·dashboard geometry를 초기 renderer 입력으로 적용한다.
+           빈 dashboard 틀과 slot interaction controller를 준비한다.
+           초기 slot style·geometry와 선택 장식만 적용한다. 초기 전체 내용 렌더링은 실행하지 않는다.
+           프로젝트 내용은 선택 슬롯 자동 갱신 또는 명시적 전체 렌더링 버튼에서 표시한다.
         5. Application boundary가 Frontend FSM에 lifecycle ready 전이를 전달한다.
         6. mantine_ui.FastFigureApp의 MantineProvider·FastFigureShell 트리를
            기존 React root 하나에 mount한다.

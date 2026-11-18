@@ -7,7 +7,7 @@ Python 문법으로 작성한 구현 명세다.
 
 from math import isnan
 from sourcescript.application.public_api import FastFigureApi
-from sourcescript.application.adapter import appFSM, dispatchInterfaceEvent, runLifecycleTask as runApplicationLifecycleTask
+from sourcescript.application.adapter import appFSM, dispatchInterfaceEvent, transformWorkspace, runLifecycleTask as runApplicationLifecycleTask
 from sourcescript.frontend.renderer import renderDashboardFrame
 
 
@@ -733,6 +733,9 @@ def FastFigureApp():
            네 Modal의 하단 resize 입력은 각각 열린 Modal의 UI-local 높이를 갱신한다.
            README Modal에는 해당 resize 입력을 붙이지 않는다.
         3. useProjectAssetImportCollision의 결과를 choosePlan에 둔다.
+           toolbar의 '렌더링' 버튼은 '프린트' 바로 왼쪽에 배치한다.
+           기존 공통 Button과 UiCommand.send를 사용하여 FastFigureApi.workspace.render를 한 번 호출한다.
+           다른 일반 버튼과 같은 theme·높이·padding·정렬·busy 표시·접근성 규칙을 사용한다.
            toolbar의 overlay 버튼은 연결된 overlay 이름으로 dispatchInterfaceEvent의 TOGGLE_OVERLAY를 호출한다.
            선택 대상은 slots.readSelected로 표시한다.
            data actions에는 assets.importFiles, slots.reset과 asset 삭제 동작을 연결한다.
@@ -819,7 +822,7 @@ def FastFigureApp():
         14. 각 숫자 입력과 명령 버튼에 UiCommand 인스턴스를 한 개씩 연결한다.
             버튼의 invoke에는 3~10번의 해당 공개 API·기존 helper와 필요한 명시 인자만 둔다.
             오브젝트 추가·이동·삭제, 파일 가져오기·저장, asset 이동·삭제·복구, palette 적용·초기화,
-            labels/captions/print/layout 작업 버튼은 클릭에서 그 인스턴스의 send를 호출한다.
+            labels/captions/print/layout 작업 버튼과 전체 렌더링 버튼은 클릭에서 그 인스턴스의 send를 호출한다.
             readTarget은 현재 공식 선택과 해당 작업의 기존 활성 조건을 읽는다.
             숫자 입력은 슬롯 id·chart id·object index·CSV id·축 키·열린 Modal의 global/slot 대상 중
             해당 필드를 식별하는 값을 사용한다. 선택이 필요 없는 설정은 설정 영역으로 식별한다.
@@ -891,8 +894,10 @@ def FastFigureShell():
     - renderer host layout CSS variable.
 
     처리:
-        1. sidebar resize는 renderer geometry에 반영하고 plot resize를 요청한다.
-           domain/project 값을 별도 local store로 복제하지 않는다.
-           shell를 반환한다.
+        1. Sidebar·창·graphArea 크기 변경과 스크롤 이동은 기존 workspace 내용의 CSS 위치·배율로 처리한다.
+           transformWorkspace()로 Application의 workspace-structure 조회와 CSS 변환을 실행한다.
+           Plotly.react/newPlot/resize·figure/CSV 계산·이미지 재해석을 요청하지 않는다.
+        2. 기존 content와 포커스·선택 장식·bookmark를 유지한다.
+           아직 내용이 없는 슬롯을 resize만으로 그리지 않는다. shell을 반환한다.
     """
     return shell

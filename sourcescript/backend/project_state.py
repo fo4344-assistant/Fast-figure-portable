@@ -159,6 +159,9 @@ BACKEND_QUERY_KINDS = {
     'interface-reconciliation': {
     },
     'renderer': {
+        'workspace-structure': 'workspace-structure',
+        'selected-slot': 'selected-slot',
+        'whole-workspace': 'whole-workspace',
     },
     'export': {
         'print.save': 'print.save',
@@ -321,18 +324,27 @@ def readBackendProjection(kind, request):
         35. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["graphs.exportPlotlyJson"]이면: 같은 target의 graphs.chartFigure(chart, current project) -> UTF-8 JSON bytes copy; MIME application/json; noneditable imported figure/frame 보존; missing은 none
         36. 위 export operation의 파일 이름은 다음과 같이 계산한다: request.stamp는 Application이 이번 호출에 만든 UTC ISO timestamp의 colon/dot을 hyphen으로 바꾼 값이며 이번 다운로드 작업의 값이다. project는 assets_files.projectFileStem의 project-name sanitize + stamp + .ffpx; slot은 fast-figure-slot-{slotId}-{stamp}.ffsx; Plotly는 plotly-figure-{slotId}-{stamp}.json; original asset은 asset.name을 그대로 사용한다.
         37. export 결과에는 한 download 작업의 copied entries/bytes/name/MIME만 반환; resource URL 할당이나 다운로드는 하지 않으며 원본을 mutation input으로 쓰지 않음
-        38. kind=renderer의 전면 투영 요청이면: default renderer request는 final frontendState와 optional mutationResult를 받는다. current layout/grid/style, appearance, annotations, visible slots와 slot-local content/caption/settings를 detached copy로 구성한다. label 번호/표시는 layout_annotations.orderedSlotLabels(current project)로 계산하며 captionReferenceStyle은 backend/settings.json의 backend.defaults.captionReferenceStyle에서 복사한다. 각 visible graph slot의 owning chart, 실제 project object의 참조 CSV/columns와 graphs.chartFigure(chart, project) 계산 결과를 포함한다. project는 이번 query가 읽는 같은 current authority이며 chart copy와 CSV가 같은 read 작업에 속한다. non-editable imported conversion chartFigure는 imported representation을 보존하며 conversion view로 project CSV를 resolve하지 않는다. image slot은 images.readEditor와 같은 copied bytes/name/display URL 의미를 사용한다. slot/chart/CSV resolve와 graph projection 계산은 Backend에서 끝내며 renderer가 Backend를 다시 조회하지 않는다. Backend authority에 없는 default/compatibility 값은 copy에만 적용한다. final Frontend state는 ProjectObject에 합치지 않는다.
-           전면 renderer 요청의 request["width"]는 Application이 전달한 유한 양수 px다.
-           무효 너비는 조회 오류로 전파한다. 같은 동기 조회에서
-           layout_annotations.dashboardGeometry(request["width"], None)를 geometry에 둔다.
-           이번 query가 처음 읽은 project와 같은 activeProject를 사용하는 동안 호출하며
-           project 교체·명령·callback·비동기 대기를 끼우지 않는다.
-           projection["geometry"]에 geometry를 넣는다. 실제 renderer 너비에는 preview의 너비 제한을 적용하지 않는다.
-           projection["appearance"]["uiPalette"]는 이번 프로젝트의 팔레트 복사다.
-           projection["visibleSlots"]의 각 graph slot의 figure는 위 graphs.chartFigure 계산 결과다.
-           Application은 전체 조회 결과를 renderer.applyDashboardProjectionInvalidation의
-           projectProjection 인자로 전달하여 팔레트 CSS와 Plotly 표시에 사용한다.
-           같은 geometry의 scale·margin·gap·radius 계산은 dashboardGeometry에서 수행한다.
+        38. kind=renderer이고 operation이 workspace-structure·selected-slot·whole-workspace 또는 생략이면
+           조회 범위를 먼저 결정한다. 생략은 selected-slot이다.
+           slot-image·ui-palette는 39~40번의 기존 부분 요청 분기에서 처리한다.
+           request["width"]가 유한 양수 px인지 검증한다. 무효이면 조회 오류다.
+           같은 project 읽기에서 layout_annotations.dashboardGeometry(request["width"], None)를 계산한다.
+           geometry 계산 중 명령·callback·비동기 대기·project 교체를 끼우지 않는다.
+           세 범위 모두 operation, layout, geometry와 visibleSlots의 배치·종류·chart/image 식별 참조를 반환한다.
+           visibleSlots는 id·row·col·rowSpan·colSpan·contentType·chartId·imageId만 가진 구조 읽기다.
+           workspace-structure는 여기서 반환하며 chartFigure·CSV 변환·이미지 바이트 복사를 실행하지 않는다.
+           selected-slot은 명시된 request["slotId"]를 current project의 visible slot에서 찾는다.
+           None·missing·hidden이면 targetSlot=None으로 반환하고 내용 계산을 생략한다. 0은 유효하다.
+           유효하면 그 슬롯 하나의 owning chart·참조 CSV/columns와 graphs.chartFigure(chart, project)를
+           targetSlot에 구성한다. image이면 그 슬롯의 bytes·settings를 구성한다.
+           같은 슬롯의 label/caption과 현재 공통 표시 설정만 함께 제공한다.
+           다른 슬롯의 graph·CSV·이미지 표시 입력을 계산하거나 복사하지 않는다.
+           whole-workspace는 visible 슬롯별로 같은 내용 계산을 수행하여 contentSlots 배열에 둔다.
+           공통 appearance·annotations·orderedSlotLabels·captionReferenceStyle을 같은 project에서 구성한다.
+           이 범위는 Application의 명시적 전체 렌더링 진입점에서 요청한다.
+           구조 읽기와 targetSlot/contentSlots는 같은 current project에서 구성한다.
+           noneditable imported figure 보존, bytes 복사와 읽기 전용 반환 규칙을 유지한다.
+           반환된 표시 입력은 이번 표시 작업에서만 소비한다. Project와 저장 schema는 유지한다.
         39. kind=renderer의 slot-image 요청이면: explicit slotId에 대한 images.readEditor와 동일한 Backend 계산; UI selection을 query 내부에서 읽지 않음
         40. kind=renderer의 ui-palette 요청이면: appearance.readPalette와 동일한 palette copy; CSS variable 적용은 Frontend가 수행
         41. renderer의 투영 결과는 한 render 작업에만 소비; 다음 작업은 current authority에서 재조회; mutation 입력이나 장기 project mirror로 재사용 금지

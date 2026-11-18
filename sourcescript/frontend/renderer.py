@@ -14,6 +14,26 @@ RENDERER_INPUT_CONTRACT = {
 }
 
 
+def clearWorkspacePresentation():
+    """
+    Args:
+    - 없음.
+
+    Return:
+    - 없음.
+
+    변경:
+    - 이전 workspace 자원의 연결 수명.
+
+    처리:
+        1. 프로젝트 교체 때 현재 workspace 수명을 종료한다. 이전 슬롯별 작업을 무효화한다.
+        2. 해당 workspace의 graph instance·image surface·임시 handle·URL을 소유 규칙으로 해제한다.
+           진행 중 작업의 늦은 완료는 이전 수명임을 확인하고 자기 임시 자원만 정리한다.
+        3. 새 틀은 구조 조회로 준비한다. 전체 내용 렌더링과 Backend 명령은 실행하지 않는다.
+           독립된 export 작업의 host·작업 순번은 유지한다.
+    """
+
+
 def syncDashboardCaption(captionState):
     outcome = "None."
     """
@@ -29,7 +49,7 @@ def syncDashboardCaption(captionState):
     - 대시보드 caption DOM과 해당 표시 자원.
 
     처리:
-        1. explicit immutable captionState의 text/name/settings/enabled 값으로 caption host를 표시한다.
+        1. 명시적 전체 렌더링 작업이 전달한 immutable captionState의 text/name/settings/enabled 값으로 caption host를 표시한다.
            Backend/Project/Application query를 재호출하거나 persistent text를 변경하지 않는다.
            DOM 표시 오류는 caller에 전파한다. renderer-local 값은 이번 표시 호출에 사용한다.
            None를 반환한다.
@@ -157,46 +177,30 @@ def status(message):
 
 
 def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, projectProjection):
-    effect = "FULL_DASHBOARD, TARGETED_PROJECTION, NONE 중 하나."
+    effect = "SELECTED_SLOT, STRUCTURE, NONE 중 하나."
     """
     Args:
     - event:
-      처리할 이벤트 이름 문자열.
-
+      반영한 명령 이름.
     - mutationResult:
-      이번 명령의 ProjectMutationResult. 원형: /backend/project_efsm/ProjectMutationResult
-
+      이번 실제 명령 결과.
     - interfaceState:
-      이번 표시 작업의 Frontend 상태 읽기 딕셔너리.
-
+      참조 보정 뒤 현재 상태.
     - projectProjection:
-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
+      Application이 제공한 구조 또는 선택 슬롯 조회 결과.
 
     Return:
-    - effect:
-      FULL_DASHBOARD, TARGETED_PROJECTION, NONE 중 하나.
-      projection effect
+    - effect: 이번에 적용한 표시 범위.
 
     변경:
-    - 판정된 범위의 renderer host·projection.
+    - renderer의 유효하지 않은 자원 정리와 선택 슬롯 표시.
 
     처리:
-        1. post-reconciliation renderer effect.
-           FULL_DASHBOARD/TARGETED_PROJECTION/NONE을 project result와 final interface state에서 계산한다.
-           ProjectObject 또는 interface state를 변경하지 않는다.
-
-        2. Application boundary는 Project EFSM commit result 뒤 Backend reconciliation query와 Frontend FSM reconciliation을 먼저 완료하고 final interfaceState, mutationResult, 필요한 Backend renderer projection을 renderer에 전달한다. 실제 rendered reference 제거가 있으면 FULL_DASHBOARD, path/tree 변화만 있으면 NONE, 기존 narrow update가 충분하면 TARGETED_PROJECTION이다. renderer는 supplied projection만 소비하고 Backend command/query 또는 Frontend FSM command를 재귀 호출하지 않는다. rendered reference 제거는 result의 실제 제거 delta/현재 host identity와 supplied final slot/chart/image reference로 판정한다. 제거가 없고 actual 변경이 project name/VFS path/tree에만 한정되면 NONE이다. CAPTION_TEXT_INPUT/SLOT_CAPTIONS_INSERTED/CAPTION_SETTINGS_CHANGED/LABEL_SETTINGS_CHANGED/LABEL_POSITION_CHANGED/APPEARANCE_CHANGED/SLOT_IMAGE_SETTINGS_CHANGED는 기존 host identity가 모두 유지되고 supplied projection만으로 갱신 가능할 때 TARGETED_PROJECTION이다. 해당 narrow projection은 각각 caption/label, CSS palette와 graph presentation, 해당 image surface를 갱신한다. host 교체/제거가 있거나 그 외 persistent visual 변경이면 FULL_DASHBOARD로 fallback한다. 추측한 event별 stale Backend snapshot을 사용하지 않는다.
-        3. APPEARANCE_CHANGED의 TARGETED_PROJECTION이면 다음 표시를 수행한다.
-           projectProjection은 Application의 dispatchProjectCommand가 참조 보정 뒤
-           dispatchProjectQuery("renderer", {frontendState: 최종 Frontend 상태})로 조회해 반환한 값이다.
-           projectProjection["appearance"]["uiPalette"]를 applyUiPalette의 첫 인자로,
-           False를 notify로 전달하여 CSS를 적용한다.
-           projectProjection["visibleSlots"]의 각 graph slot에 대해 그 slot의 figure를
-           현재 host의 기존 Plotly 갱신 절차에 전달한다. figure의 배경·글자색은 Backend의
-           graphs.chartFigure(chart, project)가 같은 프로젝트의 appearance.uiPalette에서 계산한 값이다.
-           기존 generation·host·chart 확인과 비동기 실패 처리를 유지한다.
-           host가 바뀌어 FULL_DASHBOARD이면 기존 renderDashboard가 같은 조회 결과를 적용한다.
-        4. effect를 반환한다.
+        1. projectProjection의 visibleSlots 구조와 현재 surface 소유 연결을 대조한다. 삭제·종류 변경·다른 chart/image 소유 연결의 surface만 정리한다. 같은 소유의 다른 슬롯 내용과 작업 순번을 유지한다.
+        2. workspace-structure이면 applyWorkspaceTransform을 호출하고 effect=STRUCTURE로 반환한다. pathOnly이고 실제 참조 제거가 없으면 effect=NONE으로 반환한다.
+        3. 현재 선택이 None이거나 targetSlot이 없으면 effect=NONE으로 반환한다. targetSlot.id가 현재 선택과 다르면 결과를 적용하지 않는다.
+        4. 그 외에는 renderDashboard(projectProjection, interfaceState)를 한 번 호출하고 effect=SELECTED_SLOT으로 반환한다. APPEARANCE_CHANGED도 선택 슬롯의 figure만 사용한다. 전체 함수로 전환하는 분기를 두지 않는다.
+        5. 공통 UI CSS·편집기 공식 읽기·성공 알림은 기존 경로를 유지한다. 다른 슬롯의 그래프 배경·글꼴·캡션은 전체 버튼에서 갱신한다.
     """
     return effect
 
@@ -248,66 +252,114 @@ def renderDashboardFrame(host, layout, visibleSlots, geometry):
 
 
 def renderDashboard(projectProjection, interfaceState):
-    dashboardView = "대시보드 DOM 표시 결과."
-    frameView = "renderDashboardFrame의 이번 DOM 참조 결과."
+    dashboardView = "선택 슬롯 표시 결과 또는 전체 갱신 필요 안내."
+    slot = "이번 선택 슬롯의 Backend 표시 입력 또는 None."
     """
     Args:
     - projectProjection:
-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
-
+      selected-slot 조회의 구조·기하·targetSlot.
     - interfaceState:
-      이번 표시 작업의 Frontend 상태 읽기 딕셔너리.
+      Application이 확정한 Frontend 상태.
 
     Return:
-    - dashboardView:
-      대시보드 DOM 표시 결과.
-      supplied Backend projection에서 생성된 dashboard projection
+    - dashboardView: 선택 슬롯 하나의 완료 결과.
 
     변경:
-    - dashboard/slot/Plotly/image/label/caption DOM projection.
-    - Backend project state와 Frontend FSM state는 변경하지 않는다.
+    - 선택 슬롯 content·label·caption·장식과 그 자원.
 
     처리:
-        1. 7~8번의 수명 규칙에 따라 교체·제거되는 이전 graph instance와 image surface를 먼저 정리한다.
-           Application이 제공한 projectProjection["geometry"]와 같은 조회의 layout·visible slots를
-           실제 dashboard host와 함께 renderDashboardFrame에 전달한다.
-           반환값을 frameView에 두고 그 frame·content·decoration 참조를 이번 표시 작업에서 사용한다.
-           너비·height·margin·gap·radius는 supplied geometry를 적용하고
-           확대 비율은 Frontend 세션에 유지한다. geometry 변경 뒤 current host만 resize한다.
-        2. 공통 틀의 decoration 영역에 label/bookmark와 선택·상호작용 표시를 구성한다.
-           이번 interfaceState["selectedSlotId"]와 visible slot id를 비교하여 선택 표시를 정한다.
-           빈 슬롯이 선택되었으면 decoration 안쪽에 UI 색상의 4px 경계를 표시한다.
-           frame의 프로젝트 외곽선·content 치수·span·gap·radius는 유지한다.
-           graph/image의 bookmark는 같은 decoration에서 content보다 위에 표시하고 클릭·포커스 영역을 유지한다.
-           선택된 bookmark의 강조는 포인터가 벗어나도 유지한다. 선택 해제·이동 뒤에는 이전 강조를 지운다.
-           host 재사용·style·zoom·병합·분할 갱신에서도 현재 선택과 현재 틀의 치수로 장식을 다시 구성한다.
-           지난 host의 선택 장식만 정리하며 현재 Plotly·이미지 자원과 비동기 완료 검증은 유지한다.
-           슬롯 content 영역은 graph·image 표시에 사용한다.
-        3. graph slot은 Backend가 같은 project read에서 계산해 projection에 포함한 figure를 Plotly로 표시한다.
-           supplied CSV/columns는 editor 표시용 read 값이며 Frontend에서 traces/chartFigure를 다시 계산하거나
-           CSV를 resolve해 Backend figure를 다른 결과로 바꾸지 않는다.
-        4. image slot은 projection의 image bytes/view와 normalized slot-local imageSettings copy로 image surface를 동기화한다.
-        5. interfaceState["selectedSlotId"]에 따라 selection/interaction class를 적용한다.
-        6. caption과 label projection을 동기화한다. label 번호/문자열은 supplied orderedSlotLabels 결과를 사용한다.
-           label format/order를 renderer가 독립 재정의하지 않으며 설정 JSON/Backend를 직접 읽지 않는다.
-        7. 현재 dashboard render generation을 기준으로 visible slot id/chart id와 instance 소유 관계를 대조한다.
-           같은 host/slot/chart가 유지되면 기존 graph instance를 갱신한다. 사라진 slot, 다른 chart로 교체된 host,
-           graph에서 image/empty로 바뀐 host의 이전 instance는 purge한 뒤 현재 view만 설치한다.
-           새 content/style/geometry를 적용한 뒤 살아 있는 current graph host에만 resize를 요청한다.
-           비동기 graph 완료/resize는 시작 당시 generation과 host/slot/chart가 여전히 current일 때만 적용한다.
-           더 오래된 작업의 완료는 새 DOM/view를 덮어쓰거나 없어진 instance를 되살리지 않고 자기 임시 자원만 해제한다.
-           generation/instance association은 renderer-local lifetime 정보이며 Project/Frontend FSM state를 복제하지 않는다.
-        8. image projection은 copied bytes 또는 그 bytes에서 순수 계산한 display URL과 slot-local settings를 사용한다.
-           renderer가 decode/display handle이나 revocable URL을 만들면 해당 image surface/render 작업이 소유한다.
-           image 교체/slot 제거/cleanup에서 이전 surface를 분리한 뒤 더 이상 쓰이지 않는 handle/URL을 해제한다.
-           오래된 decode/load 완료에는 generation과 slot/image 입력이 일치하는지 확인하고 아니면 결과를 버리고 자원을 해제한다.
-           여러 surface가 같은 image를 보여도 한 surface의 해제가 다른 살아 있는 surface의 자원을 무효화하지 않아야 한다.
-           교체 실패도 현재 Project를 바꾸지 않으며, 실패한 임시 자원을 남기거나 다음 render에 완료를 재적용하지 않는다.
-           구체 Plotly 호출/URL 표현/scheduler primitive는 이 수명 의미를 보존하는 하위 구현 선택이다.
-        9. 누락/default normalization이 필요해도 projectProjection copy만 다루며 live ProjectObject에 write하지 않는다.
-           dashboardView를 반환한다.
+        1. 구조 읽기로 사라진 surface만 정리하고 현재 선택 장식·bookmark·상호작용 권한을 갱신한다. 선택 0은 유효하며 None이면 내용 표시 없이 반환한다.
+        2. targetSlot을 slot에 둔다. slot.id가 현재 selectedSlotId와 같은지 확인한다. 다르면 내용 표시 없이 반환한다.
+        3. 현재 틀이 같은 slot 배치와 연결로 안전하게 재사용 가능한지 확인한다. 새로 시작한 빈 틀은 구조 정보로 준비할 수 있다. 기존 내용이 있는 틀의 비호환 grid/span 변경이면 기존 유효 내용을 보존하고 전체 렌더링 필요를 안내하여 반환한다.
+        4. 다른 슬롯의 틀·내용·작업 순번은 유지한다. 현재 대상 content 틀과 target geometry로 presentSlotContent(slot, interfaceState, projectProjection['geometry'])를 한 번 호출하여 dashboardView에 둔다.
+        5. 대상의 label·caption·선택 표시만 갱신하여 dashboardView를 반환한다. 전역 caption과 다른 슬롯 내용은 유지한다. 자동 전체 렌더링과 Plotly resize를 실행하지 않는다.
     """
     return dashboardView
+
+def presentSlotContent(slot, interfaceState, geometry):
+    surface = "해당 슬롯 content host와 표시 자원."
+    operation = "해당 슬롯의 이번 작업 순번."
+    outcome = "해당 슬롯 표시 완료 결과."
+    """
+    Args:
+    - slot:
+      Backend가 한 프로젝트 읽기에서 구성한 슬롯 하나의 figure 또는 image 표시 입력.
+    - interfaceState:
+      표시 작업의 Frontend 상태.
+    - geometry:
+      같은 조회의 Backend 기하.
+
+    Return:
+    - outcome: 해당 content 표시 결과.
+
+    변경:
+    - 그 슬롯의 graph/image surface와 슬롯별 비동기 작업.
+
+    처리:
+        1. 현재 slot id의 host·종류·chart/image 소유 연결을 확인한다. 연결이 바뀌었으면 이전 자원을 정리한다. 같은 연결이면 기존 surface를 사용한다.
+        2. 이 슬롯의 작업 순번을 한 번 증가시켜 operation에 둔다. 같은 host의 기존 pending 뒤에 이번 작업을 연결한다. 다른 슬롯의 작업 순번과 pending은 변경하지 않는다.
+        3. 실행 직전과 완료 시 슬롯 작업 순번·workspace 수명·host 연결·slot/chart/image 식별값을 확인한다. 교체되었거나 더 최신 같은 슬롯 작업이 있으면 결과를 버리고 이 작업의 임시 자원만 해제한다.
+        4. graph이면 supplied figure만 현재 host의 Plotly 내용 갱신에 전달한다. Backend CSV/figure를 Frontend에서 다시 계산하지 않는다. 실제 내용 렌더링의 새 기준 너비·높이를 surface에 둔다.
+        5. image이면 supplied bytes의 decode/display handle을 해당 surface가 소유한다. 같은 자산의 다른 surface가 사용하는 자원은 유지한다. 실패·교체·해제에서 자기 handle/URL만 정리한다.
+        6. 기존 화면의 이동·크기 변경은 applyWorkspaceTransform이 처리한다. 이 작업에 뒤따르는 별도 Plotly resize를 예약하지 않는다. 완료 뒤 최신 host 치수에 맞게 기존 화면의 CSS 배율만 적용한다.
+        7. 빈 슬롯이면 이 슬롯의 이전 내용만 해제한다. 현재 선택된 빈 슬롯은 안쪽 4px 경계, graph/image bookmark는 content 위에서 선택·포커스를 표시한다. 포인터 이탈로 선택 강조를 지우지 않는다.
+        8. 해당 surface 표시의 완료 결과를 outcome에 두어 반환한다. 원래 오류는 호출자에게 전달한다.
+           renderer는 Project/FSM을 변경하거나 Backend를 재조회하지 않는다.
+    """
+    return outcome
+
+def renderWholeWorkspace(projectProjection, interfaceState):
+    dashboardView = "명시적 전체 표시 완료 결과."
+    frameView = "이번 전체 grid와 슬롯별 DOM 참조."
+    """
+    Args:
+    - projectProjection:
+      whole-workspace 조회 결과.
+    - interfaceState:
+      버튼 실행 시점의 Frontend 상태.
+
+    Return:
+    - dashboardView: 이번 전체 내용 표시 결과.
+
+    변경:
+    - 전체 workspace 틀·content·caption·장식과 해당 자원.
+
+    처리:
+        1. operation이 whole-workspace인지 확인한다. 다른 조회 결과는 이 전체 진입점에서 거부한다. 공개 workspace.render 버튼의 명시적 작업으로 실행한다.
+        2. 전체 구조와 기존 자원 연결을 대조하여 사라진 소유 연결을 정리한다. renderDashboardFrame에 같은 layout·visibleSlots·geometry를 전달하고 frameView에 둔다.
+        3. contentSlots의 각 슬롯을 해당 틀에서 presentSlotContent에 한 번 전달한다. 같은 host는 순서대로 처리하고 다른 host의 작업은 서로 무효화하지 않는다.
+        4. 같은 조회의 전체 label과 global caption을 표시한다. syncDashboardCaption은 이 전체 작업에서 호출한다. 선택 장식은 현재 Frontend 선택으로 구성한다.
+        5. 전체 작업에 속한 완료를 모아 dashboardView를 반환한다. 선택·Backend 명령·export 작업은 실행하지 않는다. 실패한 슬롯의 원래 오류와 이 작업의 정리 규칙을 유지한다.
+    """
+    return dashboardView
+
+def applyWorkspaceTransform(projectProjection, interfaceState):
+    view = "기존 workspace의 변환 적용 결과."
+    scaleX = "현재 content 너비와 마지막 내용 렌더링 너비의 비율."
+    scaleY = "현재 content 높이와 마지막 내용 렌더링 높이의 비율."
+    """
+    Args:
+    - projectProjection:
+      현재 배치·소유 참조·기하만 가진 workspace-structure 조회 결과.
+    - interfaceState:
+      현재 선택과 확대 비율 상태.
+
+    Return:
+    - view: 현재 표시의 CSS 변환 결과.
+
+    변경:
+    - 유지되는 content의 CSS 위치·배율과 선택 장식.
+
+    처리:
+        1. 유효하지 않은 소유 연결만 해제한다. 빈 workspace host에는 supplied layout·visibleSlots·geometry로 renderDashboardFrame을 호출하여 틀만 준비한다.
+           이미 표시한 각 surface의 host와 기준 너비·높이를 그 renderer 자원에서 읽는다. 이 치수는 DOM 표시 자원의 정보이며 Project 조회·명령의 원천으로 사용하지 않는다.
+        2. 구조가 현재 틀과 호환되면 각 frame을 현재 슬롯 위치·치수에 배치한다. 현재 content 너비/기준 너비를 scaleX, 높이/기준 높이를 scaleY에 둔다. 좌상단을 원점으로 CSS translate·scale을 적용한다. 스크롤은 기존 host의 이동으로 처리한다.
+        3. 유지한 글자·선·이미지도 같은 변환으로 함께 확대·축소한다. 포인터 좌표는 현재 CSS 변환의 역변환으로 content 좌표에 대응시킨다. frame의 선택 경계·bookmark·포커스 장식은 현재 틀 치수로 표시한다.
+        4. grid/span 변경으로 기존 내용을 안전하게 배치할 수 없으면 유지 가능한 내용을 보존하고 전체 렌더링 필요를 안내한다. 자동 전체 전환을 실행하지 않는다.
+        5. 창·Sidebar·배율·단순 이동·크기 변경에서는 이 절차만 호출한다. figure/CSV 계산, Plotly.react/newPlot/resize, 이미지 재해석을 호출하지 않는다. 기존 비동기 내용 작업도 이 변환 때문에 재시작하거나 무효화하지 않는다.
+        6. 현재 workspace host를 view에 두고 반환한다. 아직 내용이 없는 틀은 비어 있는 상태로 유지한다.
+    """
+    return view
 
 
 def setSelectedSlot(slotId, direction, frontendActions):
@@ -340,7 +392,8 @@ def setSelectedSlot(slotId, direction, frontendActions):
         renderer는 slotId를 Backend에서 직접 검증하거나 interfaceFSM에 직접 주입하지 않는다.
            frontendActions.slots.select에 slotId/direction selection intent를 전달하고 Application boundary의 validated SELECT_SLOT 결과를 사용한다.
            direction을 renderer에서 누락시키거나 새 toggle 판정으로 대체하지 않는다.
-           그 뒤 반환된 final interface state와 project projection으로 graph view를 갱신하고 resize를 요청한다.
+           선택 장식·현재 선택 슬롯 표시 작업은 Application이 한 번 수행한다.
+           이 helper는 반환 결과를 전달하며 별도 내용 갱신·resize를 요청하지 않는다.
     """
     return selectionResult
 
@@ -389,7 +442,8 @@ def installSlotClickController(frontendActions):
            따라서 drag와 같은 interaction cycle에서 생긴 click은 slot selection/toggle로 해석하지 않는다.
         7. 이동은 slot swap command를 사용하고 renderable content/caption/imageSettings 전체 이동 의미는
            Backend slot-operation caption contract를 따른다. swap commit이 성공하면 Application boundary가 반환한 projectProjection과 final interfaceState를 기준으로
-           dashboard projection을 즉시 다시 생성하며 이 renderer refresh는 domain state를 다시 변경하지 않는다.
+           유효하지 않은 기존 소유 연결을 정리하고 유지되는 내용의 CSS 배치를 갱신한다.
+           새 내용 표시가 필요한 틀은 전체 렌더링 필요를 안내한다.
         8. OS file DataTransfer drop은 bookmark drag와 별도 경로이며 여기서 import하지 않고
            Mantine FastFigureDashboardFileDrop에 넘긴다.
            controller를 반환한다.
@@ -425,7 +479,7 @@ def swapSlotContents(source, target, frontendActions):
         3. row/col/span geometry는 각 GUI 위치에 유지하고 chart/image/contentType/imageSettings/caption local payload 전체를 교환한다.
         4. chart ownership은 교환된 target slot에 맞춰 1:1을 유지한다.
         5. commit 뒤 Application boundary가 Backend reconciliation query -> Frontend FSM reconciliation을 수행한다.
-        6. renderer는 반환된 projectProjection과 reconciled interfaceState로 dashboard projection만 갱신하고 swap mutation을 반복하지 않는다.
+        6. Application이 구조 정리·CSS 이동을 수행한다. renderer는 같은 swap 표시 작업과 mutation을 반복하지 않는다.
     """
     return swapResult
 
@@ -495,7 +549,7 @@ def applyUiPalette(projectProjection, notify):
     - projectProjection:
       Application이 제공한 팔레트 색상 딕셔너리.
       dispatchProjectQuery("renderer", {operation: "ui-palette"})의 반환값 또는
-      같은 작업의 전체 renderer 조회 결과에서 읽은 appearance.uiPalette다.
+      같은 작업의 선택 슬롯 또는 명시적 전체 renderer 조회 결과에서 읽은 appearance.uiPalette다.
       원본: /backend/project_state/activeProject._state.appearance.uiPalette
 
     - notify:
@@ -513,7 +567,8 @@ def applyUiPalette(projectProjection, notify):
         1. 전달받은 팔레트의 색상 필드를 CSS 변수에 적용한다.
            --ui-color=uiColor, --paper=uiBackgroundColor, --ui-subtle=uiSubtleColor,
            --ink=fontColor, --graph-bg=paperColor다.
-           그래프 갱신은 applyDashboardProjectionInvalidation이 같은 작업의 전체 renderer 조회 결과로 수행한다.
+           자동 graph 내용 갱신은 applyDashboardProjectionInvalidation이 같은 작업의 선택 슬롯 조회 결과로 수행한다.
+           다른 슬롯의 graph 색상은 전체 렌더링 버튼에서 갱신한다.
            notify가 참이면 UI_PALETTE_CHANGED를 한 번 알린다.
            MantineProvider의 전체 UI 변수 계산은 mantine_ui.FastFigureApp이 소유한다.
            paletteView를 반환한다.
@@ -521,31 +576,26 @@ def applyUiPalette(projectProjection, notify):
     return paletteView
 
 
-def applySlotStyle(projectProjection, notify):
-    styleView = "CSS 표시 결과."
+def applySlotStyle(projectProjection, interfaceState, notify):
+    styleView = "기존 화면의 CSS 변환 결과."
     """
     Args:
     - projectProjection:
-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
-
+      구조 조회 결과.
+    - interfaceState:
+      Application이 제공한 현재 Frontend 상태.
     - notify:
-      표시 변경 알림 여부인 논리값.
+      기존 표시 변경 알림 여부.
 
     Return:
-    - styleView:
-      CSS 표시 결과.
-      적용된 dashboard style projection
+    - styleView: CSS 변환 결과.
 
     변경:
-    - dashboard/caption renderer CSS projection.
-    - notify가 참이면 layout model-to-ui notification.
+    - 기존 틀과 내용의 CSS 위치·배율·장식.
 
     처리:
-        1. supplied projectProjection의 geometry·layout·visible slots와 현재 dashboard host로
-           renderDashboardFrame을 호출하여 같은 grid·slot 스타일을 갱신한다.
-           그 반환값을 styleView에 둔다. caption의 기존 표시 규칙에도 supplied geometry를 사용한다.
-        2. notify가 True이면 기존 layout model-to-ui 알림을 한 번 전달한다.
-           호출자에게 styleView를 반환한다. Project와 Frontend 선택은 유지한다.
+        1. applyWorkspaceTransform(projectProjection, interfaceState)의 결과를 styleView에 둔다. Plotly 갱신·resize를 호출하지 않는다.
+        2. notify이면 기존 알림을 한 번 전달하고 styleView를 반환한다.
     """
     return styleView
 
@@ -577,63 +627,51 @@ def resolveSelectedChart(projectProjection, interfaceState):
 
 
 def updateGraphView(projectProjection, interfaceState):
-    workspaceView = "선택 슬롯 workspace 표시 결과."
+    workspaceView = "현재 선택 장식과 선택 슬롯 내용의 표시 결과."
     """
     Args:
     - projectProjection:
-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
-
+      구조 또는 선택 슬롯 조회 결과.
     - interfaceState:
-      이번 표시 작업의 Frontend 상태 읽기 딕셔너리.
+      최종 Frontend 상태.
 
     Return:
-    - workspaceView:
-      선택 슬롯 workspace 표시 결과.
-      갱신된 workspace projection
+    - workspaceView: 선택 처리 결과.
 
     변경:
-    - 선택 slot에 대응하는 graph/image workspace renderer projection.
+    - 선택 장식·상호작용 권한과 선택 슬롯 내용.
 
     처리:
-        1. interfaceState["selectedSlotId"]와 supplied projectProjection의 resolved chart/image view를 사용한다.
-           stale UI buffer나 DOM을 project read 원천으로 사용하지 않는다.
-           workspaceView를 반환한다.
+        1. 현재 selectedSlotId로 이전 선택 강조와 상호작용 권한을 바꾼다. None이면 이전 선택 장식만 지우고 내용 표시를 생략한다.
+        2. 유효한 선택이면 renderDashboard에 supplied projection과 interfaceState를 전달하고 반환값을 workspaceView에 둔다. 선택한 슬롯 하나만 갱신한다.
+        3. host 불일치·실패는 전체 갱신 필요 안내 또는 원래 실패로 전달한다. 다른 슬롯 렌더링과 Plotly resize를 실행하지 않는다.
     """
     return workspaceView
 
 
 def startupCoreRuntime(projectProjection, interfaceState, frontendActions):
-    runtime = "Frontend controller와 renderer runtime 구성."
+    runtime = "workspace 틀과 click/drop controller의 runtime 구성."
     """
     Args:
     - projectProjection:
-      Application이 제공한 이번 표시 작업의 읽기 전용 Backend projection.
-
+      초기 workspace-structure 조회 결과.
     - interfaceState:
-      이번 표시 작업의 Frontend 상태 읽기 딕셔너리.
-
+      초기 Frontend 상태.
     - frontendActions:
-      Application이 제공한 선택·변경·조회 함수 묶음.
+      공개 action surface.
 
     Return:
-    - runtime:
-      Frontend controller와 renderer runtime 구성.
-      ready core runtime
+    - runtime: 설치한 controller와 초기 틀.
 
     변경:
-    - 기본 project runtime, renderer controller, FSM lifecycle.
+    - workspace 빈 틀·controller·초기 CSS.
 
     처리:
-        1. Backend가 제공한 initial projectProjection은 valid ProjectObject에서 파생된 renderer input이다.
-        2. dashboard zoom projection을 적용한다.
-        3. public frontendActions를 사용하는 slot click/drop controller를 설치한다.
-        4. projectProjection의 existing visible slots를 renderDashboard로 투영한다.
-        5. supplied slot style projection을 적용한다.
-        6. Frontend lifecycle ready 전환은 Application boundary가 interfaceFSM event로 수행하고 renderer가 직접 실행하지 않는다.
-        7. supplied project/reference/runtime projection contract를 audit한다.
-
-        startup은 default CSV를 생성하거나 grid slot을 domain state에 다시 만드는 초기화 side effect를 수행하지 않는다.
-           runtime를 반환한다.
+        1. workspace-structure의 layout·visibleSlots·geometry로 renderDashboardFrame을 호출하여 빈 틀을 준비한다. graph figure 계산·이미지 decode·Plotly 호출은 실행하지 않는다.
+        2. 기존 단일 slot click/drop controller를 공개 actions에 연결한다. 현재 선택 장식과 표시 배율을 CSS로 적용한다.
+        3. 처음 불러온 프로젝트의 내용도 전체 렌더링 버튼에서 표시한다. 이후 정상 선택·내용 변경은 선택 슬롯 경로를 사용한다.
+        4. 설치한 click/drop controller와 빈 틀 참조를 runtime에 두고 반환한다.
+           ready 전이는 Application이 수행한다. default CSV 생성·프로젝트 변경·자동 전체 내용 표시를 실행하지 않는다.
     """
     return runtime
 

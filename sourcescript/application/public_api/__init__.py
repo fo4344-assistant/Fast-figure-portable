@@ -65,6 +65,9 @@ def readGraphData():
 
 
 PUBLIC_API_METHODS = {
+    'workspace': {
+        'render': adapter.renderWholeWorkspace,
+    },
     'project': {
         'readName': ('query', BACKEND_QUERY_KINDS['project-api']['project.readName'], ()),
         'setName': layout_annotations.setProjectName,
@@ -200,7 +203,7 @@ def createPublicApi():
 
     Return:
     - api:
-      project·slots·images·assets·graphs·print·captions·labels·appearance·layout namespace 오브젝트.
+      workspace·project·slots·images·assets·graphs·print·captions·labels·appearance·layout namespace 오브젝트.
 
     변경:
     - 없음.
