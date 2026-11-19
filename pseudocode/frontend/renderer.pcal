@@ -2,14 +2,15 @@
 EXTENDS Naturals, Reals, Sequences
 \* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* No Backend/Application imports; supplied immutable inputs/actions only.
-\* Local surface/instance/generation/telemetry variables are Source runtime lifetime
+\* Local surface/instance/generation and status/debug variables are Source runtime
 \* bookkeeping, never mirrored Project/FSM data or mutation candidates.
 \* Await/captured original failure, measurement, DOM/Plotly/paint/bytes/resource
 \* primitives are platform-neutral; semantic branch/order/cleanup is explicit below.
-CONSTANT NoValue
+CONSTANT NoValue, DebugDataOmitted
 (* --algorithm FrontendRenderer
 variables result = NoValue,
-  uiTelemetryState = InitialUiTelemetryProjection(), debugEnabled = FALSE,
+  statusText = "", debugEnabled = FALSE, debugLines = <<>>, debugSequence = 0,
+  statusDisplay = NoValue,
   workspaceLifetime = 0, slotOperations = [], graphInstances = [], imageSurfaces = [],
   dragSource = NoValue, suppressBookmarkClick = FALSE;
 
@@ -20,18 +21,21 @@ SuppliedCaptionOnlyNoBackendQueryOrPersistentWrite:
   result := NoValue; return;
 end procedure;
 
-procedure publishUiTelemetry(patch)
+procedure setStatusDisplay(display)
 begin
-ProjectionOnly:
-  uiTelemetryState := ImmutableMergeAndIncreaseRevision(uiTelemetryState,patch);
-  NotifyUiTelemetrySubscribers(uiTelemetryState);
-  result := uiTelemetryState;
-  return;
+ConnectOrDetach:
+  statusDisplay := display;
+  if display # NoValue then
+    InvokeCallback(display.statusText,<<statusText>>);
+    InvokeCallback(display.debugEnabled,<<debugEnabled>>);
+    InvokeCallback(display.debugLines,<<DetachedReadOnlyArray(debugLines)>>);
+  end if;
+  result := NoValue; return;
 end procedure;
 
 procedure readDebugEnabled()
 begin
-RuntimeOwnerNotTelemetry:
+RuntimeOwnerRead:
   result := debugEnabled;
   \* Pure current scalar read. No publish, mirror, Project access or callback.
   return;
@@ -39,20 +43,69 @@ end procedure;
 
 procedure setDebugEnabled(enabled)
 begin
-SessionAuthorityThenProjection:
-  debugEnabled := BooleanMeaning(enabled);
-  call publishUiTelemetry([debugEnabled |-> debugEnabled]);
+SessionAuthorityThenDisplay:
+  debugEnabled := IsBooleanTrue(enabled);
+  if statusDisplay # NoValue then InvokeCallback(statusDisplay.debugEnabled,<<debugEnabled>>); end if;
+  \* Display failures propagate without reverting the owner value.
   result := debugEnabled;
   return;
 end procedure;
 
 procedure status(message)
-variables text = NormalizeStatusText(message);
+variables text = "";
 begin
 StatusNotTaskOutcome:
-  call publishUiTelemetry([status |-> text]);
-  result := text;
-  return;
+  text := IF message = NoValue THEN "" ELSE StringRepresentation(message);
+  statusText := text;
+  if statusDisplay # NoValue then InvokeCallback(statusDisplay.statusText,<<text>>); end if;
+  result := text; return;
+end procedure;
+
+procedure debugLog(event,data,level)
+variables detached = NoValue, serialization = NoValue, line = "";
+begin
+EnabledOnly:
+  if ~debugEnabled then result := NoValue; return; end if;
+  \* Omitted data is DebugDataOmitted, omitted level is "debug".
+  if data = DebugDataOmitted then detached := [];
+  elsif IsError(data) then detached := [name |-> ErrorName(data),message |-> ErrorMessage(data),stack |-> ErrorStack(data)];
+  else
+    serialization := CaptureJsonDetach(data);
+    if serialization.failed then
+      detached := [serializationError |-> ErrorMessage(serialization.error),value |-> StringRepresentation(data)];
+    else detached := serialization.value; end if;
+  end if;
+AppendAndDisplayLog:
+  debugSequence := debugSequence + 1;
+  line := JoinWithSpaces(<<ZeroPadAtLeastFourDigits(debugSequence),CurrentUtcTimeHHmmssSSS(),
+    Uppercase(level),event,SerializeJson(detached)>>);
+  InvokeConsoleLevelOrDebug(level,<<"[chart-builder]",event,detached>>);
+  debugLines := LastAtMost(Append(debugLines,line),500);
+  if statusDisplay # NoValue then InvokeCallback(statusDisplay.debugLines,<<DetachedReadOnlyArray(debugLines)>>); end if;
+  result := NoValue; return;
+end procedure;
+
+procedure clearDebugOutput()
+begin
+ClearWithoutDisabling:
+  debugSequence := 0; debugLines := <<>>;
+  if statusDisplay # NoValue then InvokeCallback(statusDisplay.debugLines,<<DetachedReadOnlyArray(debugLines)>>); end if;
+  result := NoValue; return;
+end procedure;
+
+procedure saveDebugOutput()
+variables data = NoValue, text = "", stamp = "", url = NoValue;
+begin
+ExportOwnerLog:
+  auditApp("debug:save");
+  data := [build |-> APP_BUILD,userAgent |-> CurrentUserAgent(),location |-> CurrentLocationHref()];
+  call debugLog("debugLog:save",data,"debug");
+  text := JoinWithNewlines(debugLines);
+  url := CreateTemporaryUrl(Utf8TextPlainBlob(text));
+  stamp := ReplaceColonAndDotWithHyphen(CurrentUtcIsoTimestamp());
+  RequestDownload(url,Concat("chart-builder-debug-",stamp,".log"));
+  RevokeUrlInDeferredZeroDelayCallback(url);
+  result := NoValue; return;
 end procedure;
 
 procedure applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,projectProjection)
@@ -198,7 +251,7 @@ StructureAndOwnerCleanupOnly:
   end if;
   if ~CanSafelyReuseExistingGridAndSpans(projectProjection) then
     ShowWholeRenderingRequiredWithoutChangingValidContent();
-    result := WholeRenderingRequired(); return;
+    result := CurrentDashboardHost(); return;
   end if;
   call renderDashboardFrame(CurrentDashboardHost(),projectProjection.layout,
                             projectProjection.visibleSlots,projectProjection.geometry);
@@ -363,7 +416,7 @@ UsePrepareNotToggleSelect:
   return;
 end procedure;
 
-procedure applyUiPalette(projectProjection,notify)
+procedure applyUiPalette(projectProjection)
 variables palette = projectProjection;
 \* Application supplies the ui-palette query result or whole renderer result.appearance.uiPalette.
 \* Workspace graph figures are applied only within the permitted selected or explicit whole scope.
@@ -371,18 +424,15 @@ begin
 FiveLegacyCssVariables:
   SetCssVariables(["--ui-color" |-> palette.uiColor,"--paper" |-> palette.uiBackgroundColor,
      "--ui-subtle" |-> palette.uiSubtleColor,"--ink" |-> palette.fontColor,"--graph-bg" |-> palette.paperColor]);
-  if notify then ExistingUiPaletteChangedNotification(); end if;
   result := CurrentPaletteCssProjection();
   return;
 end procedure;
 
-procedure applySlotStyle(projectProjection,interfaceState,notify)
+procedure applySlotStyle(projectProjection,interfaceState)
 variables styleView = NoValue;
 begin
 ReuseCurrentPixelsForStyleGeometry:
   call applyWorkspaceTransform(projectProjection,interfaceState); styleView := result;
-  ApplyDashboardCaptionCssFromSuppliedStyleAndGeometry(projectProjection.layout.slotStyle,projectProjection.geometry);
-  if notify then ExistingLayoutModelToUiNotification(); end if;
   result := styleView; return;
 end procedure;
 

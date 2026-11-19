@@ -168,7 +168,7 @@ NoPlanNoCommand:
   call dispatchProjectCommand("PROJECT_NODE_MOVED",[path |-> plan.source,directory |-> plan.directory,useUniqueName |-> useUniqueName]); tuple := result;
   if ~tuple[1].committed then result := NoValue; return; end if;
 ActualResultNotStalePlan:
-  path := ActualFinalCanonicalDestination(tuple[1].changed);
+  path := ActualFinalCanonicalDestination(tuple[1].changed,plan.source);
   call dispatchProjectQuery("project-api",[operation |-> "assets.isTrashed",path |-> path]); trashed := result;
   result := ImmutableCopy([path |-> path,trashed |-> trashed]);
   return;
@@ -225,7 +225,9 @@ AssetAndConnectionOneCandidate:
   call dispatchProjectCommand("ASSETS_IMPORTED",[files |-> <<CopiedFileInput(file)>>,
      directory |-> directory,choices |-> choices,targetSlotId |-> slotId]); tuple := result;
   if ~tuple[1].committed then result := tuple[1]; return; end if;
-  call dispatchProjectQuery("project-api",[operation |-> "assets.readDeletionTarget",path |-> ActualImportedAssetPath(tuple[1].changed)]); result := result.target;
+  call dispatchProjectQuery("project-api",
+    [operation |-> "assets.readDeletionTarget",path |-> tuple[1].changed.assets[1].path]);
+  result := result.target;
   return;
 end procedure;
 

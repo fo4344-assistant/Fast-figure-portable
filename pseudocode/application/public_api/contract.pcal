@@ -17,16 +17,16 @@ ActualUpdatedCsvPath(changed) == AssetPathsFor(changed,"updated","csv")[1]
 ActualImportedAssetPathsInInputOrder(changed) ==
   LET matches == SelectSeq(changed.assets, LAMBDA item : item.role = "imported")
   IN [i \in 1..Len(matches) |-> matches[i].path]
-ActualImportedAssetPath(changed) == ActualImportedAssetPathsInInputOrder(changed)[1]
-ActualCreatedDirectoryPath(changed) == changed.createdDirectoryPath
-ActualFinalCanonicalDestination(changed) == changed.movedPathTo
+ActualCreatedDirectoryPath(changed) == AssetPathsFor(changed,"created","directory")[1]
+ActualFinalCanonicalDestination(changed,source) ==
+  SelectSeq(changed.assets, LAMBDA item : item.role = "moved" /\ item.oldPath = source)[1].path
 PUBLIC_API_METHODS == [
  "workspace.render" |-> <<"wrapper","renderWholeWorkspace">>,
  "project.readName" |-> <<"query","project.readName">>,
  "project.setName" |-> <<"wrapper","setProjectName">>,
  "project.importFile" |-> <<"wrapper","importProjectFile">>,
  "project.exportFile" |-> <<"wrapper","downloadProject">>,
- "slots.readSelected" |-> <<"selected-query","slots.readSelected">>,
+ "slots.readSelected" |-> <<"wrapper","readSelectedSlot">>,
  "slots.readDisplay" |-> <<"query","slots.readDisplay">>,
  "slots.select" |-> <<"adapter","dispatchSlotSelection">>,
  "slots.setContentType" |-> <<"wrapper","setSlotContentType">>,
@@ -64,8 +64,8 @@ PUBLIC_API_METHODS == [
  "assets.selectCsv" |-> <<"wrapper","selectProjectCsv">>,
  "assets.selectImage" |-> <<"select-asset","image">>,
  "assets.download" |-> <<"wrapper","downloadProjectAsset">>,
- "graphs.readData" |-> <<"selected-query","graphs.readData">>,
- "graphs.readControls" |-> <<"selected-query","graphs.readControls">>,
+ "graphs.readData" |-> <<"wrapper","readGraphData">>,
+ "graphs.readControls" |-> <<"wrapper","readGraphControls">>,
  "graphs.readColumns" |-> <<"query","graphs.readColumns">>,
  "graphs.readLayout" |-> <<"selected-query","graphs.readLayout">>,
  "graphs.readPalette" |-> <<"selected-query","graphs.readPalette">>,
@@ -124,6 +124,37 @@ REMOVED_OR_REPLACED == {"print.readDefaults","captions.readState","captions.setS
 (* --algorithm PublicApiBoundary
 variables result = NoValue;
 
+procedure readSelectedSlot()
+begin
+SelectedSlotOnly:
+  call InterfaceStateMachine_readState();
+  call dispatchProjectQuery("project-api",[operation |-> "slots.readSelected",
+    frontendState |-> [selectedSlotId |-> result.selectedSlotId]]);
+  return;
+end procedure;
+
+procedure readGraphData()
+variables current = NoValue;
+begin
+ExplicitGraphDataInputs:
+  call InterfaceStateMachine_readState(); current := result;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readData",
+    frontendState |-> [selectedSlotId |-> current.selectedSlotId,assetSelection |-> current.assetSelection,
+      assetPath |-> current.assetPath,graphObject |-> current.graphObject,graphObjectIndex |-> current.graphObjectIndex]]);
+  return;
+end procedure;
+
+procedure readGraphControls(csvId)
+variables current = NoValue;
+begin
+ExplicitGraphControlInputs:
+  call InterfaceStateMachine_readState(); current := result;
+  call dispatchProjectQuery("project-api",[operation |-> "graphs.readControls",csvId |-> csvId,
+    frontendState |-> [selectedSlotId |-> current.selectedSlotId,assetSelection |-> current.assetSelection,
+      assetPath |-> current.assetPath,graphObjectIndex |-> current.graphObjectIndex]]);
+  return;
+end procedure;
+
 procedure createPublicApi()
 variables api = [], methods = SequenceOfSet(DOMAIN PUBLIC_API_METHODS), i = 1;
 begin
@@ -168,16 +199,13 @@ RouteWithoutReenteringLifecycle:
   elsif route[1] = "selected-query" then
     call InterfaceStateMachine_readState(); state := result;
     request := ExplicitReadArgsWithOperation(args,route[2]);
-    if method \in {"slots.readSelected","graphs.readData","graphs.readControls"} then
-      request.frontendState := CopyOnlySelectedSlotAssetPathAssetKindAndObjectIndex(state);
+    if method \in {"images.readEditor","images.readSettings","labels.readSettings"} then request.slotId := state.selectedSlotId;
     else request.selectedSlotId := state.selectedSlotId; end if;
-    if method \in {"images.readEditor","images.readSettings","labels.readSettings"} then request.slotId := state.selectedSlotId; end if;
     call dispatchProjectQuery("project-api",request);
   elsif route[1] = "select-asset" then
     call dispatchInterfaceEvent("SELECT_ASSET",[kind |-> route[2],path |-> args.path]);
   elsif route[1] = "select-object" then
-    call InterfaceStateMachine_readState(); state := result;
-    call dispatchInterfaceEvent("SELECT_GRAPH_OBJECT",[selectedSlotId |-> state.selectedSlotId,index |-> args.index,selectAsset |-> TRUE]);
+    call dispatchInterfaceEvent("SELECT_GRAPH_OBJECT",[index |-> args.index,selectAsset |-> TRUE]);
     \* Only explicit selection changes current CSV. Graph commit index hints do not.
   elsif route[1] = "graph-export" then
     call exportSelectedGraph(args.slotId,route[2]);
@@ -202,6 +230,12 @@ BindExactSourceInputs:
     call importProjectFile(args.file);
   elsif method = "project.exportFile" then
     call downloadProject();
+  elsif method = "slots.readSelected" then
+    call readSelectedSlot();
+  elsif method = "graphs.readData" then
+    call readGraphData();
+  elsif method = "graphs.readControls" then
+    call readGraphControls(OptionalArg(args,"csvId",NoValue));
   elsif method = "slots.setContentType" then
     call setSlotContentType(args.slotId,args.contentType);
   elsif method = "slots.reset" then
@@ -240,7 +274,9 @@ BindExactSourceInputs:
     call readAssetCollisionModel(args.file,args.directory,args.reservedPaths);
   elsif method = "assets.resolveImportPlan" then
     call readAssetImportPlan(args.model,args.choice,args.reservedPaths);
-  elsif method \in {"assets.selectCsv","graphs.selectCsv"} then
+  elsif method = "assets.selectCsv" then
+    call selectProjectCsv(args.path);
+  elsif method = "graphs.selectCsv" then
     call selectProjectCsv(args.path);
   elsif method = "assets.download" then
     if HasField(args,"path") then path := args.path;

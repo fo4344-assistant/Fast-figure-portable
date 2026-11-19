@@ -1,9 +1,8 @@
 ---- MODULE FastFigureApplicationAdapterR38 ----
 EXTENDS Sequences
 
-\* Direct translation: sourcescript/application/adapter.py r38, all five functions.
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
-\* Backend imports: readBackendProjection, validateFrontendIntent,
+\* Source owner: sourcescript/application/adapter.py.
+\* Backend imports: readBackendProjection, validateSlotSelection, validateAssetSelection, validateGraphObjectSelection,
 \* buildFrontendReconciliationInput, projectEFSM, PROJECT_COMMANDS.
 \* Frontend import: interfaceFSM. Qualified imported methods are written with
 \* '_' mechanically (InterfaceStateMachine_send = interfaceFSM.send, etc.).
@@ -13,7 +12,7 @@ CONSTANT NoValue, PROJECT_COMMANDS
 BACKEND_REFERENCE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "SELECT_GRAPH_OBJECT"}
 
 (* --algorithm ApplicationAdapter
-variables result = NoValue;
+variables result = NoValue, uiDisplay = NoValue;
 
 procedure ApplicationInterface_readState()
 begin
@@ -29,11 +28,11 @@ CurrentStateProperty:
   return;
 end procedure;
 
-procedure ApplicationInterface_subscribe(onStoreChange)
+procedure setUiDisplay(display)
 begin
-FrontendPublicationSubscription:
-  call InterfaceStateMachine_subscribe(onStoreChange);
-  return;
+SetMountDisplay:
+  uiDisplay := display;
+  result := NoValue; return;
 end procedure;
 
 procedure dispatchProjectQuery(query,payload)
@@ -57,24 +56,42 @@ ScopedBackendRead:
 end procedure;
 
 procedure dispatchInterfaceEvent(event, payload)
-variables validatedInput = NoValue;
+variables validatedInput = NoValue, request = [], before = NoValue, projection = NoValue;
 begin
-ValidateOnlyBackendIdentities:
-  if event \in BACKEND_REFERENCE_EVENTS then
-    call validateFrontendIntent(event, payload);
-    validatedInput := result;
+CaptureCurrentReference:
+  request := IF payload = NoValue THEN [] ELSE CopyFields(payload);
+  if event = "SELECT_GRAPH_OBJECT" then
+    call InterfaceStateMachine_readState(); before := result;
+    request.selectedSlotId := before.selectedSlotId;
+  end if;
+ValidateAndSend:
+  if event = "SELECT_SLOT" then
+    call validateSlotSelection(event,request); validatedInput := result;
+  elsif event = "SELECT_ASSET" then
+    call validateAssetSelection(event,request); validatedInput := result;
+  elsif event = "SELECT_GRAPH_OBJECT" then
+    call validateGraphObjectSelection(event,request); validatedInput := result;
   else
-    validatedInput := [event |-> event, accepted |-> TRUE, payload |-> payload];
+    validatedInput := [event |-> event,accepted |-> TRUE,payload |-> request];
   end if;
-RejectedEvent:
-  if ~validatedInput.accepted then
-    call InterfaceStateMachine_readState();
-    return;
+  call InterfaceStateMachine_send(event,validatedInput); projection := result;
+  if ~validatedInput.accepted \/ uiDisplay = NoValue then result := projection; return; end if;
+DisplayAcceptedEvent:
+  if event \in {"SELECT_ASSET","CLEAR_ASSET_SELECTION"} then
+    InvokeCallback(uiDisplay.assetSelection,<<projection>>);
+    InvokeCallback(uiDisplay.graphObject,<<projection>>);
+  elsif event \in {"SELECT_GRAPH_OBJECT","CLEAR_GRAPH_OBJECT"} then
+    InvokeCallback(uiDisplay.graphObject,<<projection>>);
+    if event = "SELECT_GRAPH_OBJECT" then
+      if projection.assetSelection # before.assetSelection \/ projection.assetPath # before.assetPath then
+        InvokeCallback(uiDisplay.assetSelection,<<projection>>);
+      end if;
+    end if;
   end if;
-SendValidatedOnly:
-  call InterfaceStateMachine_send(event, validatedInput);
-  \* SELECT_GRAPH_OBJECT selectAsset flag remains caller's explicit intent.
-  return;
+  if event \in {"TOGGLE_OVERLAY","CLOSE_OVERLAY","OUTSIDE_CLICK","ESCAPE"} then
+    InvokeCallback(uiDisplay.overlay,<<projection.overlay>>);
+  end if;
+  result := projection; return;
 end procedure;
 
 procedure dispatchSlotSelection(slotId,pendingContentType,direction)
@@ -82,7 +99,7 @@ variables validatedInput = NoValue, interfaceState = NoValue, selectionContext =
   projectResult = NoValue, rendererProjection = NoValue, commandTuple = NoValue;
 begin
 ValidateSlotBeforeAnyChange:
-  call validateFrontendIntent("SELECT_SLOT",[slotId |-> slotId,direction |-> direction]);
+  call validateSlotSelection("SELECT_SLOT",[slotId |-> slotId,direction |-> direction]);
   validatedInput := result;
   if ~validatedInput.accepted then
     call InterfaceStateMachine_readState(); result := <<result,NoValue,NoValue>>; return;
@@ -90,25 +107,25 @@ ValidateSlotBeforeAnyChange:
 ApplySlotRuntimeTransition:
   call InterfaceStateMachine_send("SELECT_SLOT",validatedInput); interfaceState := result;
   if interfaceState.selectedSlotId # NoValue /\ pendingContentType # NoValue then
-    call readBackendProjection("slot-selection-context",[slotId |-> interfaceState.selectedSlotId]);
+    call dispatchProjectQuery("slot-selection-context",[slotId |-> interfaceState.selectedSlotId]);
     selectionContext := result;
     if selectionContext # NoValue then
       if selectionContext.empty /\ selectionContext.contentType # pendingContentType then
         call dispatchProjectCommand("SLOT_TYPE_CHANGED",
-          [slotId |-> interfaceState.selectedSlotId,contentType |-> pendingContentType]);
-        commandTuple := result; projectResult := commandTuple[1];
+          [slotId |-> interfaceState.selectedSlotId,contentType |-> pendingContentType],FALSE);
+        commandTuple := result; projectResult := commandTuple[1]; interfaceState := commandTuple[2];
       end if;
     end if;
   end if;
 FinalSelectionBeforePresentation:
-  call InterfaceStateMachine_readState(); interfaceState := result;
+  if uiDisplay # NoValue then InvokeCallback(uiDisplay.selection,<<interfaceState>>); end if;
   UpdateSelectionDecorationAndInteractionOnly(interfaceState);
   if interfaceState.selectedSlotId = NoValue then
     call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]);
     result := <<interfaceState,projectResult,result>>; return;
   end if;
   if commandTuple # NoValue then
-    if commandTuple[2].selectedSlotId = interfaceState.selectedSlotId then
+    if projectResult.committed /\ commandTuple[3] # NoValue /\ commandTuple[2].selectedSlotId = interfaceState.selectedSlotId then
       result := <<interfaceState,projectResult,commandTuple[3]>>; return;
     end if;
   end if;
@@ -118,7 +135,8 @@ OneSelectedContentRead:
   result := <<interfaceState,projectResult,rendererProjection>>; return;
 end procedure;
 
-procedure dispatchProjectCommand(event,payload)
+\* Calls omitting showSelectedEditor use TRUE (Source default).
+procedure dispatchProjectCommand(event,payload,showSelectedEditor)
 variables mutationResult = NoValue, frontendBefore = NoValue, reconciliationInput = NoValue,
   interfaceState = NoValue, rendererProjection = NoValue, effect = NoValue;
 begin
@@ -129,23 +147,26 @@ OneBackendTransaction:
   if ~mutationResult.committed then result := <<mutationResult,frontendBefore,NoValue>>; return; end if;
 ActualPostCommitReferences:
   call buildFrontendReconciliationInput(event,mutationResult,frontendBefore); reconciliationInput := result;
-  call InterfaceStateMachine_reconcileProjectResult(event,reconciliationInput); interfaceState := result;
+  call InterfaceStateMachine_reconcileProjectResult(reconciliationInput); interfaceState := result;
   effect := reconciliationInput.projectionEffect;
 StructuralCommand:
   if event = "PROJECT_LOADED" then
     call clearWorkspacePresentation();
     call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
     call applyWorkspaceTransform(rendererProjection,interfaceState);
+    call refreshCommittedUi(event,payload,mutationResult,frontendBefore,interfaceState,TRUE);
     result := <<mutationResult,interfaceState,rendererProjection>>; return;
   end if;
   if event \in {"GRID_LAYOUT_CHANGED","SLOTS_MERGED","SLOTS_SPLIT","SLOTS_SWAPPED","LAYOUT_STYLE_CHANGED"} then
     call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
     call applyWorkspaceTransform(rendererProjection,interfaceState);
+    call refreshCommittedUi(event,payload,mutationResult,frontendBefore,interfaceState,showSelectedEditor);
     result := <<mutationResult,interfaceState,rendererProjection>>; return;
   end if;
 NoContentForPathOrOutputOnly:
   if (effect.pathOnly /\ ~effect.referencesRemoved) \/ event = "EXPORT_SETTINGS_CHANGED" then
     call dispatchProjectQuery("renderer",[operation |-> "workspace-structure"]); rendererProjection := result;
+    call refreshCommittedUi(event,payload,mutationResult,frontendBefore,interfaceState,showSelectedEditor);
     result := <<mutationResult,interfaceState,rendererProjection>>; return;
   end if;
 SelectedContentOnly:
@@ -153,9 +174,100 @@ SelectedContentOnly:
     [operation |-> IF interfaceState.selectedSlotId = NoValue THEN "workspace-structure" ELSE "selected-slot"]);
   rendererProjection := result;
   call applyDashboardProjectionInvalidation(event,mutationResult,interfaceState,rendererProjection);
+  call refreshCommittedUi(event,payload,mutationResult,frontendBefore,interfaceState,showSelectedEditor);
   result := <<mutationResult,interfaceState,rendererProjection>>;
   \* Commit is retained if the later query/presentation fails. Wrappers do not repeat presentation.
   return;
+end procedure;
+
+procedure refreshCommittedUi(event,payload,mutationResult,before,current,showSelectedEditor)
+variables changed = NoValue, operation = NoValue, tree = FALSE, connections = FALSE,
+  options = FALSE, csvOptions = NoValue, initialized = FALSE, palette = NoValue,
+  i = 1, asset = NoValue, listed = FALSE, selectionCalled = FALSE;
+begin
+WholeProjectDisplay:
+  if event = "PROJECT_LOADED" then
+    call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]); palette := result;
+    call applyUiPalette(palette);
+    if uiDisplay # NoValue then
+      InvokeCallback(uiDisplay.palette,<<palette>>);
+      InvokeCallback(uiDisplay.projectName,<<>>);
+      InvokeCallback(uiDisplay.assetTree,<<>>);
+      InvokeCallback(uiDisplay.slotConnections,<<>>);
+      csvOptions := InvokeCallback(uiDisplay.csvOptions,<<>>);
+      InvokeCallback(uiDisplay.selection,<<current,csvOptions,TRUE>>);
+    end if;
+    result := NoValue; return;
+  end if;
+  if uiDisplay = NoValue then result := NoValue; return; end if;
+AssetFacts:
+  changed := mutationResult.changed;
+  operation := FieldOrNoValue(payload,"operation");
+  while i <= Len(changed.assets) do
+    asset := changed.assets[i];
+    listed := asset.role \in {"created","deleted","moved"}
+      \/ (asset.role = "imported" /\ ~asset.replaced);
+    if listed then
+      tree := TRUE;
+      if asset.kind = "csv" then options := TRUE; end if;
+    elsif asset.kind = "csv" /\ (asset.role = "updated" \/ (asset.role = "imported" /\ asset.replaced)) then
+      tree := TRUE;
+    end if;
+    i := i + 1;
+  end while;
+ConnectionsAndGraphOperations:
+  if Len(changed.linkedAssetMovesOrRemovals) > 0 then connections := TRUE; end if;
+  if event \in {"GRID_LAYOUT_CHANGED","SLOTS_MERGED","SLOTS_SPLIT","SLOTS_SWAPPED","SLOT_TYPE_CHANGED",
+      "SLOTS_RESET","SLOT_IMAGE_LINKED","SLOT_DATA_CONNECTED","SLOT_IMAGE_IMPORTED","SLOT_CHART_IMPORTED",
+      "CHART_MODEL_REPLACED"} \/ (event = "ASSETS_IMPORTED" /\ FieldOrNoValue(payload,"targetSlotId") # NoValue) then
+    connections := TRUE;
+  end if;
+  if changed.targetSlotReferencesChanged \/ event = "SLOT_DATA_CONNECTED" then tree := TRUE; end if;
+  if event = "GRAPH_OBJECTS_REPLACED" then
+    if operation \in {"graphs.addObject","graphs.deleteObject"}
+        \/ (operation = "graphs.setObjectValues" /\ changed.graphObjectCsvChanged) then
+      tree := TRUE; connections := TRUE;
+    elsif operation = "graphs.moveObject" then connections := TRUE;
+    end if;
+  end if;
+ReadAffectedListsOnce:
+  if event = "PROJECT_NAME_CHANGED" then InvokeCallback(uiDisplay.projectName,<<>>); end if;
+  if tree then InvokeCallback(uiDisplay.assetTree,<<>>); end if;
+  if connections then InvokeCallback(uiDisplay.slotConnections,<<>>); end if;
+  if options then csvOptions := InvokeCallback(uiDisplay.csvOptions,<<>>); end if;
+CurrentEditor:
+  if showSelectedEditor then
+    if before.selectedSlotId # current.selectedSlotId \/ before.workspace # current.workspace then
+      selectionCalled := TRUE;
+      initialized := InvokeCallback(uiDisplay.selection,<<current,csvOptions>>);
+    elsif Member(current.selectedSlotId,changed.slotIds) then
+      initialized := InvokeCallback(uiDisplay.slot,<<current,csvOptions,event>>);
+    end if;
+    if ~selectionCalled /\ ~initialized then
+      if before.assetSelection # current.assetSelection \/ before.assetPath # current.assetPath then
+        InvokeCallback(uiDisplay.assetSelection,<<current>>);
+      end if;
+      if before.graphObjectIndex # current.graphObjectIndex then InvokeCallback(uiDisplay.graphObject,<<current>>); end if;
+      if before.overlay # current.overlay then InvokeCallback(uiDisplay.overlay,<<current.overlay>>); end if;
+    end if;
+    if ~initialized then
+      if Len(changed.chartIds) > 0 then InvokeCallback(uiDisplay.graph,
+        <<changed.chartIds,event,operation,changed.removedObjectChartIds,changed.appendedObjectChartIds>>); end if;
+      if Len(changed.imageIds) > 0 then InvokeCallback(uiDisplay.image,<<changed.imageIds>>); end if;
+      if Len(changed.csvIds) > 0 then InvokeCallback(uiDisplay.csv,<<changed.csvIds>>); end if;
+    end if;
+  end if;
+AffectedControls:
+  if event \in {"GRID_LAYOUT_CHANGED","LAYOUT_STYLE_CHANGED","SLOTS_MERGED","SLOTS_SPLIT","SLOTS_SWAPPED"} then
+    InvokeCallback(uiDisplay.layout,<<>>);
+  end if;
+  if event \in {"LABEL_SETTINGS_CHANGED","LABEL_POSITION_CHANGED"} then InvokeCallback(uiDisplay.labels,<<event>>); end if;
+  if event \in {"CAPTION_TEXT_INPUT","SLOT_CAPTIONS_INSERTED","CAPTION_SETTINGS_CHANGED"} then
+    InvokeCallback(uiDisplay.captions,<<event,changed.slotIds>>);
+  end if;
+  if event = "EXPORT_SETTINGS_CHANGED" then InvokeCallback(uiDisplay.printSettings,<<>>); end if;
+  \* setAppearanceApiPalette owns APPEARANCE_CHANGED display; failures retain the commit.
+  result := NoValue; return;
 end procedure;
 
 procedure transformWorkspace()
@@ -196,7 +308,9 @@ InvalidRequestBeforeTask:
     return;
   end if;
 PublishBusyBeforeCalling:
-  call dispatchInterfaceEvent("LIFECYCLE_START", [lifecycle |-> lifecycle, event |-> event]);
+  call dispatchInterfaceEvent("LIFECYCLE_START",[lifecycle |-> lifecycle,event |-> event]);
+  interfaceState := result;
+  if uiDisplay # NoValue then InvokeCallback(uiDisplay.lifecycle,<<interfaceState.lifecycle>>); end if;
 ExecuteTaskExactlyOnce:
   \* Invocation/completion capture is a language-neutral plumbing primitive.
   \* Does not execute in interfaceFSM, retry, or infer command success.
@@ -205,11 +319,20 @@ DistinguishThrowFromReturnedRejection:
   if taskCompletion.threw then
     call dispatchInterfaceEvent("LIFECYCLE_FAILED",
          [event |-> event, message |-> FailureMessage(taskCompletion.failure)]);
-    \* interfaceFSM publishes error -> ready before original failure propagates.
+    interfaceState := result;
+    if uiDisplay # NoValue then
+      CaptureAndDiscardDisplayFailure(uiDisplay.taskError,<<interfaceState.error>>);
+    end if;
+    call InterfaceStateMachine_recoverLifecycle(); interfaceState := result;
+    if uiDisplay # NoValue then
+      CaptureAndDiscardDisplayFailure(uiDisplay.lifecycle,<<interfaceState.lifecycle>>);
+    end if;
     PropagateOriginalFailure(taskCompletion.failure);
   else
     call dispatchInterfaceEvent("LIFECYCLE_COMPLETE",
          [event |-> event, outcome |-> taskCompletion.value]);
+    interfaceState := result;
+    if uiDisplay # NoValue then InvokeCallback(uiDisplay.lifecycle,<<interfaceState.lifecycle>>); end if;
     \* Cancel/rejected result is still a completed task, not a commit claim.
     result := taskCompletion.value;
   end if;

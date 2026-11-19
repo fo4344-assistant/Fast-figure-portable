@@ -7,23 +7,31 @@ EXTENDS Sequences
 \* activeProject below is an imported Backend binding, NOT a copied authority.
 \* projection/actions/interfaceState/result are startup-call-local values.
 \* Debug clicks synchronously read renderer-owned debugEnabled via readDebugEnabled,
-\* invert into existing setDebugEnabled, then display one-way telemetry; never invert telemetry.
+\* invert into existing setDebugEnabled, which updates the mounted display directly.
 CONSTANT NoValue
 
 (* --algorithm FastFigureSystem
 variables result = NoValue;
 
+procedure DetachFastFigureDisplays()
+begin
+BeforeRootElementCleanup:
+  call setStatusDisplay(NoValue);
+  call setUiDisplay(NoValue);
+  result := NoValue; return;
+end procedure;
+
 procedure initializeFastFigure()
 variables candidate = NoValue, projectProjection = NoValue,
           interfaceState = NoValue, frontendActions = NoValue,
-          coreRuntime = NoValue, uiMount = NoValue;
+          coreRuntime = NoValue, uiTree = NoValue, display = NoValue, uiMount = NoValue;
 begin
 RequireCoreAndHosts:
   assert RequiredRendererHostsAndStylesExist() /\ PlotlyRuntimeReady() /\ ReactMantineRuntimeReady();
 CreateValidatedInitialProject:
   call createProjectState();
   candidate := result;
-  call ProjectObject_create(candidate);
+  call ProjectObject___init__(candidate);
   \* Adopt only the successfully constructed instance; this is the imported sole binding.
   activeProject := result;
 ExposeExistingBoundary:
@@ -39,13 +47,16 @@ PrepareBoundaryInputs:
   frontendActions := PublicActionSurface(FastFigureApi);
 PrepareBlankCore:
   \* Controllers and a blank frame are prepared without content rendering.
-  \* Initial figures/images wait for the explicit workspace.render action.
+  \* Initial figures/images wait for selected-slot refresh or explicit workspace.render.
   call startupCoreRuntime(projectProjection, interfaceState, frontendActions);
   coreRuntime := result;
 ReadyThroughApplication:
   call dispatchInterfaceEvent("LIFECYCLE_COMPLETE", []);
 MountExistingUi:
-  uiMount := MountMantineProviderAndFastFigureShellAtExistingReactRoot();
+  call FastFigureApp(); uiTree := result[1]; display := result[2];
+  uiMount := MountAtExistingReactRoot(uiTree,DetachFastFigureDisplays);
+  call setUiDisplay(display);
+  call setStatusDisplay(display.statusDisplay);
 AuditStartup:
   \* Startup does not create default CSV/fake objects or reconstruct grid data.
   AuditProjectReferenceRuntimeInvariantsThroughTheirOwners();

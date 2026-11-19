@@ -108,13 +108,13 @@ SessionOnly:
   call dispatchInterfaceEvent("SET_DASHBOARD_ZOOM",[value |-> value]);
   call transformWorkspace();
   call readLayoutApiControls();
+  if uiDisplay # NoValue then InvokeCallback(uiDisplay.zoom,<<result.zoom>>); end if;
   return;
 end procedure;
 
 procedure commitLayoutApiZoom()
 begin
 CompletionNotSecondCommit:
-  call InterfaceStateMachine_notify("layout","DASHBOARD_ZOOM_CHANGED",[]);
   call readLayoutApiControls();
   return;
 end procedure;
@@ -125,6 +125,7 @@ OneResetTransition:
   call dispatchInterfaceEvent("RESET_DASHBOARD_ZOOM",[]);
   call transformWorkspace();
   call readLayoutApiControls();
+  if uiDisplay # NoValue then InvokeCallback(uiDisplay.zoom,<<result.zoom>>); end if;
   return;
 end procedure;
 
@@ -311,15 +312,16 @@ OnlyNewFormattingSettings:
 end procedure;
 
 procedure setAppearanceApiPalette(values)
-variables tuple = NoValue;
+variables tuple = NoValue, palette = NoValue;
 begin
 WholePaletteMissingDefaultsNotCurrentMerge:
   call dispatchProjectCommand("APPEARANCE_CHANGED",[palette |-> values]); tuple := result;
   if ~tuple[1].committed then result := FALSE; return; end if;
   \* dispatchProjectCommand already applied its permitted selected-slot presentation.
-  call InterfaceStateMachine_notify("ui","UI_PALETTE_CHANGED",[]);
-  call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]);
-  return;
+  call dispatchProjectQuery("project-api",[operation |-> "appearance.readPalette"]); palette := result;
+  call applyUiPalette(palette);
+  if uiDisplay # NoValue then InvokeCallback(uiDisplay.palette,<<palette>>); end if;
+  result := palette; return;
 end procedure;
 
 procedure resetAppearanceApiPalette()

@@ -267,8 +267,170 @@ SlotGeometryReturn:
   return;
 end procedure;
 
-procedure buildGridResizeCandidate(rows, cols)
-variables source = activeProject;
+procedure CalculateMergeOrSplit(candidate,event,slotIds)
+variables selected = <<>>, anchor = NoValue, owners = <<>>, rect = NoValue, cells = <<>>,
+          payload = NoValue, i = 1, j = 1, slot = NoValue;
+begin
+CurrentVisibleIdsOnly:
+  selected := ResolveDistinctVisibleSlots(candidate,slotIds);
+  if event = "SLOTS_MERGED" then
+    rect := RectangleExactlyCoveredBySelectedSlotUnion(selected);
+    Require(rect # NoValue);
+    for outside \in VisibleSlotsOutsideSelection(candidate,selected) do
+      Require(~RectanglesIntersect(rect,SlotSpanRectangle(outside)));
+    end for;
+    while i <= Len(selected) do
+      call slotHasNonDefaultLocalState(selected[i]);
+      if result then owners := Append(owners,selected[i]); end if;
+      i := i + 1;
+    end while;
+    Require(Len(owners) <= 1);
+    anchor := SlotAtCell(candidate,rect.top,rect.left);
+    if Len(owners) = 1 then payload := DeepCopy(SlotLocalPayload(owners[1]));
+    else payload := EmptySlotLocalPayload(BackendSettings.defaults.slotSettings); end if;
+    cells := AllCellsInRectangle(rect); i := 1;
+    while i <= Len(cells) do
+      slot := SlotAtCell(candidate,cells[i].row,cells[i].col);
+      if slot.id # anchor.id then
+        ReplaceSlotLocalPayloadOnly(candidate,slot.id,EmptySlotLocalPayload(BackendSettings.defaults.slotSettings));
+        CandidateSlot(candidate,slot.id).rowSpan := 1;
+        CandidateSlot(candidate,slot.id).colSpan := 1;
+        CandidateSlot(candidate,slot.id).hidden := TRUE;
+      end if;
+      i := i + 1;
+    end while;
+    ReplaceSlotLocalPayloadOnly(candidate,anchor.id,payload);
+    CandidateSlot(candidate,anchor.id).hidden := FALSE;
+    CandidateSlot(candidate,anchor.id).rowSpan := rect.height;
+    CandidateSlot(candidate,anchor.id).colSpan := rect.width;
+  else
+    while i <= Len(selected) do
+      anchor := selected[i]; Require(IsMergedVisibleAnchor(anchor));
+      cells := CoveredCells(anchor); j := 1;
+      while j <= Len(cells) do
+        slot := SlotAtCell(candidate,cells[j].row,cells[j].col);
+        if slot.id # anchor.id then
+          ReplaceSlotLocalPayloadOnly(candidate,slot.id,EmptySlotLocalPayload(BackendSettings.defaults.slotSettings));
+        end if;
+        CandidateSlot(candidate,slot.id).hidden := FALSE;
+        CandidateSlot(candidate,slot.id).rowSpan := 1; CandidateSlot(candidate,slot.id).colSpan := 1;
+        j := j + 1;
+      end while;
+      \* Anchor retains its complete local payload and chart id; no clone/merge.
+      i := i + 1;
+    end while;
+  end if;
+  result := candidate;
+  return;
+end procedure;
+
+procedure NormalizeExportEditsInAttempt(current,edits)
+variables copy = DeepCopy(current), fields = <<"width","height","dpi">>, i = 1,
+          key = "", limitKey = "", bounds = NoValue, number = NoValue;
+begin
+KeepInvalidOrMissingEnums:
+  if HasField(edits,"heightMode") then
+    if edits.heightMode \in {"auto","explicit"} then copy.heightMode := edits.heightMode; end if;
+  end if;
+  if HasField(edits,"format") then
+    if edits.format \in {"png","jpeg"} then copy.format := edits.format; end if;
+  end if;
+NumbersFromCurrentSettingsNotDefaults:
+  while i <= Len(fields) do
+    key := fields[i];
+    if HasField(edits,key) then
+      number := TryScalarNumber(edits[key]);
+      if number.valid then
+        if IsFinite(number.value) then
+          limitKey := IF key = "width" THEN "logicalWidth"
+                      ELSE IF key = "height" THEN "logicalHeight" ELSE "dpi";
+          bounds := BackendSettings.defaults.limits.export[limitKey];
+          copy[key] := Maximum(bounds[1],Minimum(bounds[2],number.value));
+        end if;
+      end if;
+    end if;
+    i := i + 1;
+  end while;
+AutoOrExplicitHeightRelation:
+  if copy.heightMode = "auto" then
+    copy.height := NoValue;
+  else
+    \* Source fallback is current explicit height, otherwise the logical lower
+    \* bound (currently 100). Missing/null is NOT a numeric zero conversion.
+    if copy.height = NoValue then
+      if current.height = NoValue then
+        copy.height := BackendSettings.defaults.limits.export.logicalHeight[1];
+      else copy.height := current.height; end if;
+    end if;
+  end if;
+ExportEditReturn:
+  result := copy;
+  return;
+end procedure;
+
+procedure buildLayoutCommandCandidate(event,payload,state)
+variables candidate = state, slot = NoValue, keys = <<>>, name = "", text = "", i = 1;
+begin
+LayoutCommandOnly:
+  if event = "GRID_LAYOUT_CHANGED" then
+    call buildGridResizeCandidate(payload.rows,payload.cols,candidate); candidate := result;
+
+  elsif event = "SLOT_CAPTIONS_INSERTED" then
+    call insertSlotCaptions(candidate,FieldOrNoValue(payload,"slotIds")); text := result;
+    candidate.annotations.captions.text := text;
+  elsif event = "CAPTION_TEXT_INPUT" then
+    if payload.target.kind = "slot" then
+      call resolveVisibleSlot(payload.target.id,candidate); slot := result;
+      if slot = NoValue then return; end if;
+      text := TextOrEmpty(payload.text);
+      CandidateSlot(candidate,slot.id).caption := IF text = "" THEN NoValue ELSE text;
+    elsif payload.target.kind = "global" then
+      candidate.annotations.captions.text := TextOrEmpty(payload.text);
+    else result := NoValue; return;
+    end if;
+  elsif event = "CAPTION_SETTINGS_CHANGED" then
+    ApplyOnlyPresentCaptionFieldsWithConfigLimits(candidate.annotations.captions,payload,
+      BackendSettings.project_object.annotations.captions,BackendSettings.defaults.limits.captions);
+  elsif event = "LABEL_SETTINGS_CHANGED" then
+    ApplyOnlyPresentLabelFieldsWithConfigLimits(candidate.annotations.labels,payload,
+      BackendSettings.project_object.annotations.labels,BackendSettings.defaults.limits.labels);
+  elsif event = "LABEL_POSITION_CHANGED" then
+    if FieldOrNoValue(payload,"reset") = TRUE then
+      candidate.annotations.labels.settings.x := BackendSettings.project_object.annotations.labels.settings.x;
+      candidate.annotations.labels.settings.y := BackendSettings.project_object.annotations.labels.settings.y;
+    else
+      Require(IsFinite(payload.x) /\ IsFinite(payload.y));
+      candidate.annotations.labels.settings.x := payload.x; candidate.annotations.labels.settings.y := payload.y;
+    end if;
+  elsif event = "APPEARANCE_CHANGED" then
+    keys := PropertyNames(BackendSettings.project_object.appearance.uiPalette);
+    while i <= Len(keys) do
+      name := keys[i];
+      if HasField(payload.palette,name) then candidate.appearance.uiPalette[name] := payload.palette[name]; end if;
+      i := i + 1;
+    end while;
+    call normalizeProjectSettings(candidate); candidate := result;
+  elsif event = "EXPORT_SETTINGS_CHANGED" then
+    call NormalizeExportEditsInAttempt(candidate.export,payload.settings);
+    candidate.export := result;
+  elsif event \in {"SLOTS_MERGED","SLOTS_SPLIT"} then
+    call CalculateMergeOrSplit(candidate,event,payload.slotIds); candidate := result;
+  elsif event = "LAYOUT_STYLE_CHANGED" then
+    keys := <<"referenceWidth","gap","outerMargin","radius","aspect">>;
+    while i <= Len(keys) do
+      name := keys[i];
+      if HasField(payload,name) then
+        candidate.layout.slotStyle[name] := NormalizeLayoutField(payload[name],candidate.layout.slotStyle[name],BackendSettings.defaults.limits.layout[name]);
+      end if;
+      i := i + 1;
+    end while;
+    if HasField(payload,"showBorders") then candidate.layout.slotStyle.showBorders := NormalizeBoolean(payload.showBorders); end if;
+  end if;
+  result := candidate; return;
+end procedure;
+
+procedure buildGridResizeCandidate(rows,cols,state)
+variables source = state;
 begin
 SourceGridContextBinding:
   call BuildGridResizeInAttempt(source,rows,cols);
@@ -315,7 +477,7 @@ KeepCoordinateAndCreateOnlyNewCells:
     col := 1;
     while col <= cols do
       if row > oldRows \/ col > oldCols then
-        call Slot_create(freshId,row,col); newSlot := result;
+        call Slot___init__(freshId,row,col); newSlot := result;
         candidate.slots := Append(candidate.slots,newSlot);
         freshId := freshId + 1;
         \* No chart/CSV/image asset or reference is synthesized.

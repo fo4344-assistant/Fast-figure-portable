@@ -3,9 +3,6 @@ EXTENDS Naturals, Reals, Sequences, FiniteSets
 \* Direct Source Script translation; Plan027 supplements current-authority display/input procedures.
 \* FastFigureApi is the supplied public action surface; no Backend import.
 \* UI drafts/resolvers/selection/geometry below live only within component lifetime.
-\* ReactUseSyncExternalStore(subscribe,getSnapshot): React registers subscribe's listener,
-\* compares getSnapshot's scalar revision with the previous revision, schedules render
-\* on a difference, and calls the returned unsubscribe on component teardown.
 \* BindComponentEvent(component,event,handler): associates a defined procedure reference
 \* with that component event, invokes it once with the event's arguments, and propagates
 \* its result/failure. BindComponentRenderRead(reader) calls reader for each render.
@@ -26,7 +23,7 @@ ComponentOwners == [
   FastFigureGraphPaletteActions |-> "object colors",
   FastFigureGraphFileActions |-> "FFSX/Plotly / editable flag",
   FastFigurePaletteActions |-> "UI palette draft/apply/reset",
-  FastFigureStatusDebug |-> "status/debug telemetry/log",
+  FastFigureStatusDebug |-> "status/debug/log display",
   FastFigureReadmeOverlay |-> "README modal",
   FastFigureLabelOverlay |-> "label settings / position",
   FastFigureCaptionOverlay |-> "global or selected-slot caption / explicit insert",
@@ -40,7 +37,7 @@ variables result = NoValue,
   collisionModel = NoValue, collisionResolver = NoValue,
   layoutSelectedSlotIds = {}, settingsOverlayHeight = NoValue,
   folding = [],
-  sidebarGeometry = InitialSessionSidebarGeometry(),
+  sidebarGeometry = InitialSessionSidebarGeometry(), lastWorkspaceSize = NoValue,
   dropMounted = FALSE, dropAllowed = FALSE, dropReceiver = NoValue;
 
 procedure readProjectAssetDisplay()
@@ -221,7 +218,8 @@ ConfirmedFiniteValueAndCurrentCompanion:
   if dimension = "rows" then rows := value; else cols := value; end if;
   result := InvokePublicApi("layout.setGrid",[rows |-> rows,cols |-> cols]);
   if result # FALSE then
-    layoutSelectedSlotIds := {}; DisplayOfficialLayout(result);
+    \* The committed command's layout display has already refreshed the UI.
+    layoutSelectedSlotIds := {};
   end if;
   \* Synchronous read/dispatch, unchanged Backend integer/validation/commit.
   \* Rejection/exception preserves the previous value and local selection.
@@ -235,54 +233,215 @@ OwnerReadNotDisplayProjection:
   call readDebugEnabled(); enabled := result;
   call setDebugEnabled(~enabled);
   \* Same synchronous click, no callback/await between read and explicit bool setter.
-  \* Setter alone writes owner then publishes; UI only displays telemetry.
+  \* Setter writes owner then calls the mounted display setter.
   return;
 end procedure;
 
-procedure subscribeAppState(onStoreChange)
+procedure bindUiDisplay(elements)
 begin
-DirectFsmExternalStore:
-  call ApplicationInterface_subscribe(onStoreChange);
-  \* Return unsubscribe. No React project store or subscription-driven Project write.
+ReturnMountElementSetters:
+  \* The supplied elements are this App's display setters, not a Project store.
+  result := [selection |-> BoundProcedure(DisplaySelection,<<elements>>),assetSelection |-> elements.assetSelection,
+    graphObject |-> elements.graphObject,overlay |-> elements.overlay,
+    lifecycle |-> elements.lifecycle,taskError |-> elements.taskError,
+    projectName |-> BoundProcedure(DisplayProjectName,<<elements>>),assetTree |-> BoundProcedure(DisplayAssetTree,<<elements>>),
+    slotConnections |-> BoundProcedure(DisplaySlotConnections,<<elements>>),csvOptions |-> BoundProcedure(DisplayCsvOptions,<<elements>>),
+    csv |-> BoundProcedure(DisplayCsv,<<elements>>),slot |-> BoundProcedure(DisplaySlot,<<elements>>),graph |-> BoundProcedure(DisplayGraph,<<elements>>),image |-> BoundProcedure(DisplayImage,<<elements>>),
+    layout |-> BoundProcedure(DisplayLayout,<<elements>>),labels |-> BoundProcedure(DisplayLabels,<<elements>>),
+    captions |-> BoundProcedure(DisplayCaptions,<<elements>>),
+    printSettings |-> BoundProcedure(DisplayPrint,<<elements>>),palette |-> elements.palette,zoom |-> elements.zoom,
+    statusDisplay |-> [statusText |-> elements.statusText,debugEnabled |-> elements.debugEnabled,
+      debugLines |-> elements.debugLines]];
+  \* Status text is shown as supplied. DebugEnabled sets label and pressed;
+  \* debugLines joins supplied lines with newlines. Both debugLines and lifecycle
+  \* recompute save/clear availability from the displayed lines and busy lifecycle.
+  \* No status/debug setter reads Project.
   return;
 end procedure;
 
-procedure getAppStateSnapshot()
+procedure DisplayProjectName(elements)
 begin
-CurrentRevisionNumber:
-  call ApplicationInterface_readState(); result := result.revision;
+ApplyOfficialRead:
+  SetProjectName(elements,InvokePublicApi("project.readName",[]));
+  result := NoValue;
   return;
 end procedure;
 
-procedure ReadControlKey(readCurrent)
-variables current = NoValue;
+procedure DisplayAssetTree(elements)
 begin
-PurposePrimitiveSnapshot:
-  current := InvokeCallback(readCurrent,<<>>);
-  result := StablePrimitiveKey(current.target,current.value,current.companions,current.ready); return;
+ApplyOfficialRead:
+  SetAssetTree(elements,InvokePublicApi("assets.readTree",[]));
+  if TrashIsOpen(elements) then SetTrash(elements,InvokePublicApi("assets.readTrash",[])); end if;
+  result := NoValue;
+  return;
 end procedure;
 
-procedure useControlSnapshot(readCurrent)
+procedure DisplaySlotConnections(elements)
 begin
-SpecificValueSubscription:
-  ReactUseSyncExternalStore(subscribeAppState,BoundProcedure(ReadControlKey,<<readCurrent>>));
-  result := InvokeCallback(readCurrent,<<>>); return;
+ApplyOfficialRead:
+  SetSlotRows(elements,InvokePublicApi("slots.readDisplay",[]));
+  result := NoValue;
+  return;
 end procedure;
 
-procedure FrontendStructureKey()
-variables state = NoValue;
+procedure DisplayCsvOptions(elements)
 begin
-StructureFieldsOnly:
-  call ApplicationInterface_readState(); state := result;
-  result := StablePrimitiveKey(state.lifecycle,state.workspace,state.overlay,state.selectedSlotId,
-    state.assetSelection,state.assetPath,state.graphObjectIndex); return;
+ApplyOfficialRead:
+  result := InvokePublicApi("assets.readList",[kind |-> "csv"]);
+  SetCsvOptions(elements,result);
+  return;
 end procedure;
 
-procedure useAppState()
+procedure DisplayLayout(elements)
 begin
-StructureSubscription:
-  ReactUseSyncExternalStore(subscribeAppState,FrontendStructureKey);
-  call ApplicationInterface_readState(); return;
+ApplyOfficialRead:
+  SetLayoutControls(elements,InvokePublicApi("layout.readControls",[]));
+  if LayoutPreviewIsOpen(elements) then SetLayoutPreview(elements,InvokePublicApi("layout.readState",[])); end if;
+  result := NoValue;
+  return;
+end procedure;
+
+procedure DisplayLabels(elements,event)
+begin
+ReadVisibleLabelControls:
+  if LabelSettingsAreShown(elements) then
+    SetLabelSettings(elements,InvokePublicApi("labels.readSettings",[]));
+  end if;
+  if LabelPositionEditorIsOpen(elements) then
+    SetLabelPositionEditor(elements,InvokePublicApi("labels.readState",[]));
+  end if;
+  result := NoValue; return;
+end procedure;
+
+procedure DisplayCaptions(elements,event,slotIds)
+variables slotId = NoValue;
+begin
+ReadVisibleCaptionTarget:
+  if CaptionEditorIsOpen(elements) then
+    if event = "CAPTION_SETTINGS_CHANGED" then
+      SetCaptionSettings(elements,InvokePublicApi("captions.readSettings",[]));
+    elsif CaptionTargetIsGlobal(elements) then
+      SetGlobalCaptionText(elements,InvokePublicApi("captions.readGlobal",[]));
+    else
+      slotId := DisplayedCaptionSlotId(elements);
+      if slotId # NoValue /\ slotId \in SequenceValues(slotIds) then
+        SetSlotCaptionText(elements,InvokePublicApi("captions.readSlot",[slotId |-> slotId]));
+      end if;
+    end if;
+  end if;
+  result := NoValue; return;
+end procedure;
+
+procedure DisplayPrint(elements)
+begin
+ApplyOfficialRead:
+  if PrintWindowIsOpen(elements) then SetPrintSettings(elements,InvokePublicApi("print.readSettings",[])); end if;
+  result := NoValue;
+  return;
+end procedure;
+
+procedure DisplaySelection(elements,current,csvOptions,force,selectedSlot)
+variables slot = NoValue, identity = NoValue;
+begin
+SelectedEditorLifetime:
+  \* Defaults: NoValue options, FALSE force, omitted slot (distinct from supplied NoValue).
+  slot := selectedSlot;
+  if slot = OmittedSlot then
+    slot := IF current.selectedSlotId = NoValue THEN NoValue ELSE InvokePublicApi("slots.readSelected",[]);
+  end if;
+  \* Identity is NoValue or (id, workspace, contentType, imageId or chart id).
+  identity := EditorIdentityOf(slot,current.workspace);
+  SetToolbarSelectionDecorationsAndWindowTargets(elements,current,slot);
+  ReadOpenLabelOrCaptionWindowIfItsSlotTargetChanged(elements,current);
+  if ~MountedEditorInitialized(elements) \/ force \/ identity # MountedEditorIdentity(elements) then
+    DisposePreviousEditorInputs(elements);
+    if identity = NoValue then ClearEditor(elements);
+    elsif identity[3] = "graph" then
+      call DisplayGraphData(elements);
+      SetGraphLayout(elements,InvokePublicApi("graphs.readLayout",[]));
+      SetGraphPalette(elements,InvokePublicApi("graphs.readPalette",[]));
+      if csvOptions = NoValue then csvOptions := InvokePublicApi("assets.readList",[kind |-> "csv"]); end if;
+      SetCsvOptions(elements,csvOptions);
+    elsif identity[3] = "image" then
+      SetImageSettings(elements,InvokePublicApi("images.readSettings",[]));
+      SetImageComponent(elements,InvokePublicApi("images.readEditor",[]));
+    end if;
+    RecordMountedEditorIdentity(elements,identity);
+    result := TRUE; return;
+  end if;
+  RefreshChangedSelectionContextOnly(elements,current);
+  result := FALSE; return;
+end procedure;
+
+procedure DisplaySlot(elements,current,csvOptions,event)
+variables slot = NoValue;
+begin
+ReuseReadSlotForIdentityChange:
+  slot := InvokePublicApi("slots.readSelected",[]);
+  if EditorIdentityOf(slot,current.workspace) # MountedEditorIdentity(elements) then
+    call DisplaySelection(elements,current,csvOptions,FALSE,slot); return;
+  end if;
+  SetToolbarSlot(elements,slot);
+  if event = "SLOT_IMAGE_SETTINGS_CHANGED" then
+    SetImageSettings(elements,InvokePublicApi("images.readSettings",[]));
+  end if;
+  result := FALSE; return;
+end procedure;
+
+procedure DisplayGraph(elements,ids,event,operation,removedObjectChartIds,appendedObjectChartIds)
+variables ownerId = NoValue, layout = NoValue;
+begin
+OnlyVisibleChangedGraph:
+  ownerId := MountedGraphEditorOwnerId(elements);
+  if ownerId = NoValue \/ ownerId \notin SequenceValues(ids) then result := NoValue; return; end if;
+  if event = "CHART_LAYOUT_CHANGED" then
+    layout := InvokePublicApi("graphs.readLayout",[]);
+    SetGraphLayout(elements,layout);
+    ReplaceDisplayedObjectTitlePrefix(elements,layout.title);
+    result := NoValue; return;
+  end if;
+  call DisplayGraphData(elements);
+  if event = "CHART_MODEL_REPLACED" then SetGraphLayout(elements,InvokePublicApi("graphs.readLayout",[])); end if;
+  if (event = "GRAPH_OBJECTS_REPLACED" /\ operation \in {"graphs.addObject","graphs.deleteObject",
+      "graphs.moveObject","graphs.setObjectValues","graphs.applyPalette"}) \/ event = "CHART_MODEL_REPLACED"
+      \/ ownerId \in SequenceValues(removedObjectChartIds) \/ ownerId \in SequenceValues(appendedObjectChartIds) then
+    SetGraphPalette(elements,InvokePublicApi("graphs.readPalette",[]));
+  end if;
+  result := NoValue; return;
+end procedure;
+
+procedure DisplayImage(elements,ids)
+begin
+OnlyVisibleChangedImage:
+  if MountedImageEditorOwnerId(elements) \in SequenceValues(ids) then
+    SetImageComponent(elements,InvokePublicApi("images.readEditor",[]));
+  end if;
+  result := NoValue; return;
+end procedure;
+
+procedure DisplayCsv(elements,ids)
+variables chartId = NoValue, currentCsvId = NoValue, objectCsvId = NoValue,
+  objectColumns = NoValue, tableColumns = NoValue;
+begin
+OnlyVisibleChangedCsv:
+  if ~GraphEditorIsOpen(elements) then result := NoValue; return; end if;
+  chartId := MountedGraphEditorOwnerId(elements);
+  currentCsvId := DisplayedCurrentCsvId(elements);
+  objectCsvId := DisplayedEditedObjectCsvId(elements);
+  if currentCsvId # NoValue /\ currentCsvId \in SequenceValues(ids) then
+    SetCurrentCsvHeaderAndRowCount(elements,InvokePublicApi("graphs.readControls",[csvId |-> currentCsvId]));
+  end if;
+  if objectCsvId # NoValue /\ objectCsvId \in SequenceValues(ids) then
+    objectColumns := InvokePublicApi("graphs.readColumns",[csvId |-> objectCsvId,chartId |-> chartId]);
+    SetEditedObjectColumns(elements,objectColumns);
+  end if;
+  if currentCsvId # NoValue /\ currentCsvId \in SequenceValues(ids) /\ CsvPreviewIsOpen(elements) then
+    if currentCsvId = objectCsvId then tableColumns := objectColumns;
+    else tableColumns := InvokePublicApi("graphs.readColumns",[csvId |-> currentCsvId,chartId |-> chartId]); end if;
+    call ReadVisibleCsvPreview(currentCsvId,TRUE);
+    SetCsvPreview(elements,tableColumns,result);
+  end if;
+  result := NoValue; return;
 end procedure;
 
 procedure addSelectedGraphObject()
@@ -387,13 +546,23 @@ DeclaredTransferFunction:
   return;
 end procedure;
 
-\* Private display expansion of FastFigureApp step 5, called on each editor render.
-procedure ReadGraphObjectOptions()
-variables editor = NoValue, options = <<>>, i = 1, object = NoValue,
+\* Private display expansion of FastFigureApp step 5; one official read.
+procedure DisplayGraphData(elements)
+variables editor = NoValue;
+begin
+ReadAndDisplaySameData:
+  editor := InvokePublicApi("graphs.readData",[]);
+  SetGraphData(elements,editor);
+  call GraphObjectOptionsFromData(editor);
+  SetGraphObjectOptions(elements,result);
+  result := NoValue; return;
+end procedure;
+
+procedure GraphObjectOptionsFromData(editor)
+variables options = <<>>, i = 1, object = NoValue,
           title = "", identity = "", label = "";
 begin
 SameOfficialChartAndObjects:
-  editor := InvokePublicApi("graphs.readData",[]);
   if editor.chart = NoValue then result := options; return; end if;
   title := editor.chart.editor.title;
   while i <= Len(editor.objects) do
@@ -531,7 +700,6 @@ OneInstancePerMountedField:
     command := result; AttachUiCommandToControl(control,command);
   end if;
   command.readCurrent := BoundProcedure(ReadNumericControl,<<group,field,axis>>);
-  BindPurposeSnapshotHook(control,BoundProcedure(useControlSnapshot,<<command.readCurrent>>));
   BindRawInputAndCompositionTo(control,command,UiCommand_input);
   BindEnterAndBlurTo(control,command,UiCommand_commit);
   BindEscapeTo(control,command,UiCommand_cancel);
@@ -588,7 +756,6 @@ ExistingActionCallbacks:
     command := result; AttachUiCommandToControl(control,command);
   end if;
   command.readCurrent := readCurrent; command.invoke := invoke;
-  BindPurposeSnapshotHook(control,BoundProcedure(useControlSnapshot,<<readCurrent>>));
   \* Re-render updates callbacks while retaining the same local command instance.
   BindActionEventToSend(control,command,UiCommand_send);
   BindTargetChangeLifecycleNotReadyAndOverlayCloseTo(control,command,UiCommand_cancel);
@@ -608,7 +775,8 @@ end procedure;
 
 procedure FastFigureApp()
 variables palette = NoValue, shades = <<>>, i = 1, channels = <<>>, linear = <<>>,
-          luminance = 0, contrast = "", theme = NoValue, css = NoValue, tree = NoValue,
+          luminance = 0, contrast = "", theme = NoValue, css = NoValue, shell = NoValue,
+          uiTree = NoValue, display = NoValue,
           controls = <<"Button","ActionIcon","Input","Select","NumberInput","ColorInput">>,
           groups = <<"global","objects","x","y","xBottom","xTop","yLeft","yRight","objectType","uiColors","debug">>;
 begin
@@ -664,11 +832,12 @@ ThemeAndCssProjection:
   \* Preserve shadow geometry. Graph paperColor != UI surface/background.
 OneExistingRoot:
   BindNumericFieldCreationAndRenderHook(BindAllNumericFields);
-  call FastFigureShell(); tree := result;
+  call FastFigureShell(); shell := result;
   \* The hook runs at each component's control creation/render, preserving its
   \* existing command instance; it is not a post-mount global control registry.
-  result := RenderMantineProviderToExistingReactRoot(theme,css,tree);
-  return;
+  uiTree := ComposeMantineProviderTree(theme,css,shell);
+  call bindUiDisplay(DisplayElementsOf(uiTree)); display := result;
+  result := <<uiTree,display>>; return;
 end procedure;
 
 procedure FastFigureShell()
@@ -680,13 +849,14 @@ NoProjectStoreInShell:
   BindComponentEvent("FastFigureGraphFileActions","fileReceived",importSelectedSlotFile);
   BindComponentEvent("FastFigureGraphFileActions","editableChanged",setSelectedGraphEditable);
   BindComponentEvent("FastFigureGraphLayoutEditor","settingsChanged",updateSelectedGraphLayout);
-  BindComponentRenderReadFor("FastFigureGraphDataEditor","objectOptions",ReadGraphObjectOptions);
   BindComponentEvent("FastFigureLayoutOverlay","previewWidthMeasured",RenderLayoutPreview);
-  BindWorkspaceSizeChangeToSuppliedTransformAction(transformWorkspace);
-  \* Size/sidebar changes only read structure and transform existing content pixels.
-  BindComponentRenderRead(useAppState);
-  BindComponentRenderReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
+  OnMountObserveOuterGraphAreaResizeOrFallbackToWindowResize(ResizeWorkspaceFromGraphArea);
+  OnUnmountRemoveWorkspaceResizeBindingAndReset(lastWorkspaceSize);
+  \* Scroll uses native layout without a query. Resize only transforms existing content pixels.
+  BindInitialComponentReadFor("FastFigureProjectDataTree","assetDisplay",readProjectAssetDisplay);
   BindComponentEvent("FastFigureStatusDebug","debugClicked",handleDebugToggle);
+  BindComponentEvent("FastFigureStatusDebug","debugSaveClicked",saveDebugOutput);
+  BindComponentEvent("FastFigureStatusDebug","debugClearClicked",clearDebugOutput);
   BindComponentPublicMethods("FastFigureToolbar",<<"slots.readSelected","workspace.render">>);
   PlaceExistingStandardButtonImmediatelyLeftOfPrint("FastFigureToolbar","렌더링","workspace.render");
   BindWholeRenderButtonReadyDisabledRunningAndKeyboardStateThroughExistingUiCommand();
@@ -700,7 +870,6 @@ NoProjectStoreInShell:
   BindComponentPublicMethods("FastFigureProjectActions",<<"project.readName","project.setName","project.importFile","project.exportFile">>);
   BindComponentPublicMethods("FastFigureGraphDataEditor",<<"graphs.readData","graphs.readControls","graphs.readColumns","graphs.selectCsv","graphs.setHeaderLines",
     "graphs.selectObject","graphs.setObjectValues","graphs.moveObject","graphs.deleteObject","assets.createEmptyCsv">>);
-  BindComponentRenderReadFor("FastFigureGraphDataEditor","csvOptions",BoundPublicRead("assets.readList",[kind |-> "csv"]));
   BindComponentRenderReadFor("FastFigureCsvPreview","page",ReadVisibleCsvPreview);
   BindColumnSelectorReadToExplicitCsvAndChartIds("FastFigureGraphDataEditor","graphs.readColumns");
   BindComponentPublicMethods("FastFigureGraphLayoutEditor",<<"graphs.readLayout">>);
@@ -718,9 +887,6 @@ NoProjectStoreInShell:
   \* target/invoke callbacks above are supplied. Public reads remain direct;
   \* folds, collision responses and Modal-local controls keep UI-only handlers.
   BindDeclaredComponentActionControls(ComponentOwners,UiCommand_bindAction);
-  BindComponentLocalPurposeSnapshotHooks(useControlSnapshot);
-  \* Each existing component supplies its required current scalar/metadata fields.
-  \* Repeated reads produce the same primitive key until those fields change.
   \* Actual column selectors/visible previews read their explicit payload only.
   \* Theme reuse is component-local display construction; no Project read is retained.
   result := ComposeExistingAppShellHeaderNavbarMainAndOverlayComponents(ComponentOwners);
@@ -732,9 +898,21 @@ begin
 SessionGeometryThenReusePixels:
   sidebarGeometry := NormalizeSessionSidebarGeometry(newGeometry);
   ApplySessionSidebarGeometryCss(sidebarGeometry);
+  call ResizeWorkspaceFromGraphArea();
+  result := NoValue; return;
+end procedure;
+
+procedure ResizeWorkspaceFromGraphArea()
+variables size = NoValue;
+begin
+OnlyChangedPositiveOuterSize:
+  size := MeasureOuterGraphAreaWidthHeightPx();
+  if size.width <= 0 \/ size.height <= 0 \/ size = lastWorkspaceSize then
+    result := NoValue; return;
+  end if;
   call transformWorkspace();
-  result := NoValue;
-  return;
+  lastWorkspaceSize := size;
+  result := NoValue; return;
 end procedure;
 
 procedure ConfigureSettingsOverlay(overlay)

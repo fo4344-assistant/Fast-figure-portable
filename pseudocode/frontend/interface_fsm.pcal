@@ -1,15 +1,8 @@
 ---- MODULE FastFigureFrontendInterfaceFSMR38 ----
 EXTENDS Naturals, Reals, Sequences
 
-\* Active direct Source r38 translation; see the translation review for scope/evidence.
-\* Only this module owns selectedSlotId/interfaceState. No Backend import/call.
-\* InterfaceStateMachine_create initializes the Source-owned runtime fields.
-\* Explicit Source initial zoom=100.
-\* Qualified method names are mechanically flattened with '_' for call notation.
-\* Source singleton interfaceFSM_* calls bind to InterfaceStateMachine_* below.
-\* Local payload.overlay denotes the named overlay intent; it does not add a
-\* persistent field or prescribe a target-language transport object layout.
-\* result is a call return channel; publishRuntime is local subscriber plumbing.
+\* Source owner: sourcescript/frontend/interface_fsm.py.
+\* Only this module owns selectedSlotId and interfaceState. No subscribers or Backend calls.
 CONSTANT NoValue
 INTERFACE_REGION_ORDER == <<"lifecycle", "workspace", "overlay", "assetSelection", "graphObject">>
 INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
@@ -18,49 +11,17 @@ INTERFACE_EVENTS == {"SELECT_SLOT", "SELECT_ASSET", "CLEAR_ASSET_SELECTION",
   "RESET_DASHBOARD_ZOOM", "LIFECYCLE_START", "LIFECYCLE_COMPLETE", "LIFECYCLE_FAILED"}
 
 (* --algorithm FrontendInterfaceFSM
-variables selectedSlotId = NoValue,
-          interfaceState = NoValue,
-          listeners = {}, result = NoValue;
+variables selectedSlotId = NoValue, interfaceState = NoValue, result = NoValue;
 
-procedure InterfaceStateMachine_create()
+procedure InterfaceStateMachine___init__()
 begin
 InitializeOwnedFrontendState:
-  listeners := {}; selectedSlotId := NoValue;
-  interfaceState := [lifecycle |-> "booting",workspace |-> "project",overlay |-> NoValue,
-    assetSelection |-> NoValue,assetPath |-> NoValue,graphObject |-> NoValue,
-    graphObjectIndex |-> NoValue,direction |-> "model-to-ui",revision |-> 0,error |-> NoValue,
+  selectedSlotId := NoValue;
+  interfaceState := [lifecycle |-> "booting",workspace |-> "project",overlay |-> "none",
+    assetSelection |-> "none",assetPath |-> NoValue,graphObject |-> "none",
+    graphObjectIndex |-> NoValue,direction |-> "model-to-ui",error |-> NoValue,
     dashboardZoomIntent |-> 100];
-  return;
-end procedure;
-
-procedure InterfaceStateMachine_subscribe(onStoreChange)
-begin
-RegisterListener:
-  listeners := listeners \cup {onStoreChange};
-  result := BoundProcedure(InterfaceStateMachine_unsubscribe,onStoreChange);
-  return;
-end procedure;
-
-procedure InterfaceStateMachine_unsubscribe(onStoreChange)
-begin
-RemoveSameListener:
-  listeners := listeners \ {onStoreChange};
-  return;
-end procedure;
-
-procedure InterfaceStateMachine_publish()
-variables projection = NoValue, notifications = <<>>, i = 1;
-begin
-PublishCompletedState:
-  interfaceState.revision := interfaceState.revision + 1;
-  call InterfaceStateMachine_readState(); projection := result;
-  notifications := SequenceOfSet(listeners);
-NotifySnapshotWithoutArguments:
-  while i <= Len(notifications) do
-    InvokeCallbackWithoutArguments(notifications[i]); i := i + 1;
-  end while;
-  result := projection;
-  return;
+  result := NoValue; return;
 end procedure;
 
 procedure InterfaceStateMachine_readState()
@@ -70,17 +31,10 @@ ImmutableRuntimeProjection:
   return;
 end procedure;
 
-procedure publishRuntime()
-begin
-PublishFrontendRevisionOnly:
-  call InterfaceStateMachine_publish();
-  return;
-end procedure;
-
 procedure InterfaceStateMachine_send(event, validatedInput)
 variables payload = NoValue, value = 100, reference = NoValue;
 begin
-RejectWithoutPublishing:
+RejectWithoutTransition:
   if ~validatedInput.accepted then
     call InterfaceStateMachine_readState();
     return;
@@ -92,13 +46,13 @@ DispatchFrontendRegionOnly:
   elsif event = "SELECT_ASSET" then goto AssetSelection;
   elsif event = "SELECT_GRAPH_OBJECT" then goto ObjectSelection;
   elsif event = "CLEAR_ASSET_SELECTION" then
-    interfaceState.assetSelection := NoValue;
+    interfaceState.assetSelection := "none";
     interfaceState.assetPath := NoValue;
-    goto PublishAndReturn;
+    goto ReadAndReturn;
   elsif event = "CLEAR_GRAPH_OBJECT" then
-    interfaceState.graphObject := NoValue;
+    interfaceState.graphObject := "none";
     interfaceState.graphObjectIndex := NoValue;
-    goto PublishAndReturn;
+    goto ReadAndReturn;
   else
     payload := validatedInput.payload;
     goto LocalRuntimeEvent;
@@ -117,26 +71,26 @@ SlotSelection:
   else
     interfaceState.workspace := validatedInput.workspaceHint;
   end if;
-  interfaceState.graphObject := NoValue;
+  interfaceState.graphObject := "none";
   interfaceState.graphObjectIndex := NoValue;
   if selectedSlotId = NoValue \/ validatedInput.selectionHint = "toggle-clear" then
-    interfaceState.assetSelection := NoValue;
+    interfaceState.assetSelection := "none";
     interfaceState.assetPath := NoValue;
   end if;
   \* Non-null model-to-fsm clear-graph-object retains independent asset selection.
-  if selectedSlotId # NoValue then interfaceState.overlay := NoValue; end if;
-  goto PublishAndReturn;
+  if reference # NoValue then interfaceState.overlay := "none"; end if;
+  goto ReadAndReturn;
 AssetSelection:
-  interfaceState.assetSelection := validatedInput.selectionHint;
+  interfaceState.assetSelection := IF validatedInput.reference = NoValue THEN "none" ELSE validatedInput.selectionHint;
   interfaceState.assetPath := validatedInput.reference;
-  interfaceState.graphObject := NoValue;
+  interfaceState.graphObject := "none";
   interfaceState.graphObjectIndex := NoValue;
   \* selectedSlotId/workspace remain unchanged.
-  goto PublishAndReturn;
+  goto ReadAndReturn;
 ObjectSelection:
   reference := validatedInput.reference;
   if reference = NoValue then
-    interfaceState.graphObject := NoValue;
+    interfaceState.graphObject := "none";
     interfaceState.graphObjectIndex := NoValue;
   else
     interfaceState.graphObject := "selected";
@@ -146,85 +100,65 @@ ObjectSelection:
       interfaceState.assetPath := validatedInput.selectionHint;
     end if;
   end if;
-  goto PublishAndReturn;
+  goto ReadAndReturn;
 LocalRuntimeEvent:
   if event = "TOGGLE_OVERLAY" then
-    if interfaceState.overlay = payload.overlay then interfaceState.overlay := NoValue;
+    if interfaceState.overlay = payload.overlay then interfaceState.overlay := "none";
     else interfaceState.overlay := payload.overlay; end if;
-    goto PublishAndReturn;
+    goto ReadAndReturn;
   elsif event \in {"CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"} then
-    interfaceState.overlay := NoValue;
-    goto PublishAndReturn;
+    interfaceState.overlay := "none";
+    goto ReadAndReturn;
   elsif event = "SET_DASHBOARD_ZOOM" then goto ZoomIntent;
   elsif event = "RESET_DASHBOARD_ZOOM" then goto ZoomReset;
   elsif event = "LIFECYCLE_START" then
     interfaceState.lifecycle := payload.lifecycle;
     interfaceState.error := NoValue;
-    goto PublishAndReturn;
+    goto ReadAndReturn;
   elsif event = "LIFECYCLE_COMPLETE" then
     interfaceState.lifecycle := "ready";
     interfaceState.error := NoValue;
     \* outcome does not become a project commit result.
-    goto PublishAndReturn;
+    goto ReadAndReturn;
   elsif event = "LIFECYCLE_FAILED" then
     interfaceState.lifecycle := "error";
-    interfaceState.error := [event |-> payload.event, message |-> payload.message];
-    call publishRuntime();
-    interfaceState.lifecycle := "ready";
-    \* Retain error projection until next START/COMPLETE, publish recovery now.
-    goto PublishAndReturn;
+    interfaceState.error := [event |-> payload.event,message |-> payload.message];
+    goto ReadAndReturn;
   end if;
-  \* All declared events are exhausted above. No unknown-event result is invented.
   assert FALSE;
 ZoomIntent:
-  if IsFiniteNumericInput(payload.value) then value := Clamp(NumericValue(payload.value), 50, 200);
+  if IsFiniteNumericInput(payload.value) then value := Clamp(NumericValue(payload.value),50,200);
   else value := 100; end if;
-  if value = interfaceState.dashboardZoomIntent then
-    call InterfaceStateMachine_readState();
-    return;
-  end if;
   interfaceState.dashboardZoomIntent := value;
-  goto PublishAndReturn;
+  goto ReadAndReturn;
 ZoomReset:
-  if interfaceState.dashboardZoomIntent = 100 then
-    call InterfaceStateMachine_readState();
-    return;
-  end if;
   interfaceState.dashboardZoomIntent := 100;
-PublishAndReturn:
-  call publishRuntime();
-  return;
+ReadAndReturn:
+  call InterfaceStateMachine_readState(); return;
 end procedure;
 
-procedure InterfaceStateMachine_reconcileProjectResult(event, reconciliationInput)
+procedure InterfaceStateMachine_reconcileProjectResult(reconciliationInput)
 begin
 ApplyOnlyBackendValidatedScalars:
   selectedSlotId := reconciliationInput.selectedSlot;
+  interfaceState.workspace := IF selectedSlotId = NoValue THEN "project" ELSE reconciliationInput.workspaceHint;
   interfaceState.assetPath := reconciliationInput.assetSelection;
-  interfaceState.assetSelection := reconciliationInput.assetKind;
+  interfaceState.assetSelection := IF interfaceState.assetPath = NoValue THEN "none" ELSE reconciliationInput.assetKind;
   interfaceState.graphObjectIndex := reconciliationInput.graphObject;
-  if reconciliationInput.graphObject = NoValue then interfaceState.graphObject := NoValue;
-  else interfaceState.graphObject := "selected"; end if;
-  interfaceState.workspace := reconciliationInput.workspaceHint;
-PublishReconciledRuntime:
+  interfaceState.graphObject := IF reconciliationInput.graphObject = NoValue THEN "none" ELSE "selected";
   interfaceState.direction := "model-to-fsm";
-  \* Backend already resolved reset/hint/map priorities. Do not store hints,
-  \* resend SELECT_GRAPH_OBJECT, re-query a chart or change Project here.
-  call publishRuntime();
-  return;
+  call InterfaceStateMachine_readState(); return;
 end procedure;
 
-procedure InterfaceStateMachine_notify(objectName, event, payload)
+procedure InterfaceStateMachine_recoverLifecycle()
 begin
-ProjectionRevisionOnly:
-  interfaceState.direction := "model-to-fsm";
-  call publishRuntime();
-  \* No persistent write, secondary data authority or Backend callback.
-  return;
+ReadyWithoutClearingError:
+  if interfaceState.lifecycle = "error" then interfaceState.lifecycle := "ready"; end if;
+  call InterfaceStateMachine_readState(); return;
 end procedure;
 
 begin
 ModuleDefinitions:
-  call InterfaceStateMachine_create();
+  call InterfaceStateMachine___init__();
 end algorithm; *)
 ====

@@ -28,6 +28,9 @@ OWNERS = {
 }
 ALIASES = {
     ('application/adapter.py', 'runLifecycleTask'): 'ApplicationAdapter_runLifecycleTask',
+    ('frontend/mantine_ui.py', 'UiCommand.__init__'): 'UiCommand_create',
+    ('frontend/mantine_ui.py', 'UiCommand._sendCurrent'): 'UiCommand_sendCurrent',
+    ('frontend/renderer.py', 'renderWholeWorkspace'): 'Renderer_renderWholeWorkspace',
     ('frontend/mantine_ui.py', 'runLifecycleTask'): 'MantineUi_runLifecycleTask',
     ('backend/layout_annotations.py', 'readLabelsApiState'): 'BackendAnnotations_readLabelsApiState',
     ('application/public_api/layout_annotations.py', 'readLabelsApiState'): 'ApplicationApi_readLabelsApiState',
@@ -39,8 +42,13 @@ ALIASES = {
 def assignment(tree, name):
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
-            return ast.literal_eval(node.value)
+            return node.value
     raise AssertionError('Missing Source assignment: ' + name)
+
+
+def key_nodes(mapping):
+    assert isinstance(mapping, ast.Dict), 'Expected Source dictionary registration'
+    return [(ast.literal_eval(key), value) for key, value in zip(mapping.keys, mapping.values)]
 
 
 def entries(tree):
@@ -80,7 +88,11 @@ def main():
             assert name in tables[target], ('Missing Source entry', source, qualified, target, name)
             params, line = tables[target][name]
             source_params = [p.arg for p in node.args.posonlyargs + node.args.args if p.arg not in ('self', 'cls')]
-            assert len(params) == len(source_params), ('Input arity mismatch', source, qualified, source_params, params)
+            # UiCommand methods receive the component-owned Python self explicitly.
+            explicit_receiver = source == 'frontend/mantine_ui.py' and qualified.startswith('UiCommand.') and not qualified.endswith('.__init__')
+            if explicit_receiver:
+                assert params and params[0] == 'command', ('Missing explicit UiCommand receiver', qualified, params)
+            assert len(params) == len(source_params) + explicit_receiver, ('Input arity mismatch', source, qualified, source_params, params)
             rows.append(f'| sourcescript/{source}:{node.lineno} `{qualified}({", ".join(source_params)})` | pseudocode/{target}:{line} `{name}({", ".join(params)})` |')
     all_names = [name for table in tables.values() for name in table]
     assert len(set(all_names)) == len(all_names), 'Cross-owner procedure collision; qualify Source owner explicitly'
@@ -94,7 +106,7 @@ def main():
                             'CompleteSingleFileCollisionChoiceUsingOfficialQueries'):
             assert placeholder not in text, ('Unexpanded domain placeholder', target, placeholder)
     methods = assignment(trees['application/public_api/__init__.py'], 'PUBLIC_API_METHODS')
-    source_api = {ns + '.' + method for ns, group in methods.items() for method in group}
+    source_api = {ns + '.' + method for ns, group in key_nodes(methods) for method, _ in key_nodes(group)}
     contract = texts['application/public_api/contract.pcal']
     routes = re.findall(r'^ "([^"]+)" \|->', contract, re.M)
     assert len(routes) == len(set(routes)) and set(routes) == source_api, ('Public API coverage mismatch', source_api ^ set(routes))
@@ -106,7 +118,7 @@ def main():
     assert set(wrapper_branches) == wrapper_routes and len(wrapper_branches) == len(wrapper_routes), 'Wrapper mapping incomplete/duplicated'
     tokens = set(re.findall(r'"([A-Z][A-Z_]+)"', '\n'.join(texts.values())))
     for source, constant in [('backend/project_efsm.py', 'PROJECT_COMMANDS'), ('frontend/interface_fsm.py', 'INTERFACE_EVENTS')]:
-        expected = set(assignment(trees[source], constant))
+        expected = {name for name, _ in key_nodes(assignment(trees[source], constant))}
         assert expected <= tokens, ('Missing event vocabulary', source, expected - tokens)
     report = '# Static Source → pseudocode entry/input trace\n\n'
     report += 'Coverage/binding only; not semantic execution, PlusCal parser or TLC evidence.\n\n'

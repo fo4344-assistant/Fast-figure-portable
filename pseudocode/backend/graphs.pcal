@@ -20,8 +20,6 @@ ValidColumn(id, columns) == id \in {columns[i].id : i \in 1..Len(columns)}
 ValidColumnPair(x, y, columns) ==
   IF Len(columns) = 0 THEN x = Empty /\ y = Empty
   ELSE ValidColumn(x,columns) /\ ValidColumn(y,columns)
-ConversionRepresentation(chart) ==
-  IF chart.editor.editable = FALSE THEN HasField(chart.editor,"conversionRows") ELSE FALSE
 IsValidIndex(index, seq) == IF IsInteger(index) THEN index >= 0 /\ index < Len(seq) ELSE FALSE
 
 NormalizeHeaderCount(value,table) ==
@@ -197,7 +195,8 @@ ExistingRealCsvOnly:
   Require(csv # NoValue);
   call graphDataSelection(csv.rows,csv.headerLines,[]); selection := result;
   call columnDefinitions(csv.rows,csv.headerLines); columns := result;
-  Require(ValidColumnPair(selection.x,selection.y,columns));
+  if Len(columns) = 0 then selection := [x |-> "",y |-> ""];
+  else Require(ValidColumnPair(selection.x,selection.y,columns)); end if;
   object.csvId := csv.id; object.x := selection.x; object.y := selection.y;
   object.color := DEFAULT_COLORS[1]; object.legendName := "";
   result := object;
@@ -230,42 +229,35 @@ CandidateReturn:
   return;
 end procedure;
 
-procedure connectDataToSlotModel(slot, data, sourceName, projectCsv)
-variables source = activeProject;
+procedure connectDataToSlotModel(slot,data,sourceName,projectCsv,state)
+variables source = state;
 begin
 SourceCommandHelperRead:
   \* Source data argument is not a substitute authority for projectCsv.rows.
+  if source = NoValue then source := activeProject._state; end if;
   call ConnectDataInsideCandidate(DeepCopy(source),slot.id,projectCsv.id,sourceName);
   return;
 end procedure;
 
-procedure graphEditorCommit(chartId, objects, index)
-variables source = activeProject;
-begin
-SourceContextBinding:
-  call GraphCommitInAttempt(source,chartId,objects,index);
-  return;
-end procedure;
-
-\* Private expansion passes the existing command-attempt reference explicitly.
-\* It adds no public parameter, mutation entry, authority or retry token.
-procedure GraphCommitInAttempt(source, chartId, objects, index)
-variables candidate = DeepCopy(source), chart = NoValue, owner = NoValue;
+procedure graphEditorCommit(chartId,objects,index,state)
+variables candidate = state, chart = NoValue, owner = NoValue;
 begin
 CommandInternalArrayOnly:
-  \* objects are computed inside EFSM; never a public projection/Frontend array.
+  \* objects were computed by buildGraphCommandCandidate in this attempt.
   chart := ResolveCandidateChart(candidate, chartId);
-  Require(chart # NoValue /\ chart.editor.editable);
+  if chart = NoValue then result := NoValue; return; end if;
+  if ~chart.editor.editable then result := NoValue; return; end if;
   call resolveOwningSlot(chart.id,candidate); owner := result;
-  Require(owner # NoValue /\ ~owner.hidden);
-  if index # NoValue then Require(IsValidIndex(index,objects)); end if;
+  if owner = NoValue then result := NoValue; return; end if;
+  if owner.hidden then result := NoValue; return; end if;
   call NormalizeCommandObjects(objects); chart.editor.objects := result;
 ValidateZeroOrMoreObjects:
   call validateChartModel(chart, candidate.assets.csvFiles);
+  if index # NoValue then Require(IsValidIndex(index,objects)); end if;
   call rebuildEditableGraph(chart,candidate); chart := result;
   ReplaceCandidateChart(candidate, chartId, chart);
-  \* No fake object when empty; no commit, selection event or current CSV write.
-  result := [candidate |-> candidate, indexHint |-> index];
+  \* Hint is computed by buildProjectMutationResult, not by this helper.
+  result := candidate;
   return;
 end procedure;
 
@@ -283,8 +275,10 @@ ChooseRequestedOrExistingCsv:
   Require(csv # NoValue);
   call columnDefinitions(csv.rows,csv.headerLines);
   columns := result;
-  call graphDataSelection(csv.rows,csv.headerLines,[]);
-  selection := result;
+  if (~ValidColumn(FieldOrNoValue(values,"x"),columns) /\ ~ValidColumn(object.x,columns)) \/
+     (~ValidColumn(FieldOrNoValue(values,"y"),columns) /\ ~ValidColumn(object.y,columns)) then
+    call graphDataSelection(csv.rows,csv.headerLines,object); selection := result;
+  end if;
 ChooseXYAndStyle:
   object.csvId := csv.id;
   if ValidColumn(FieldOrNoValue(values,"x"),columns) then object.x := values.x;
@@ -296,7 +290,7 @@ ReplaceOnlyOneObject:
   objects := DeepCopy(chart.editor.objects);
   objects[index + 1] := object;
   result := <<objects,index>>;
-  \* Private expansion of graphEditorCommit's one-object rule; no new public API.
+  \* Private expansion of buildGraphCommandCandidate's setObjectValues branch.
   return;
 end procedure;
 
@@ -409,7 +403,7 @@ variables object = NoValue, csv = NoValue, view = NoValue, calculated = <<>>,
 begin
 SameProjectChartAndOwner:
   Require(UniqueOwningSlot(chart.id,project));
-  Require(~ConversionRepresentation(chart));
+  call chartUsesConversionView(chart); Require(~result);
   Require(ResolveChart(project,chart.id) # NoValue);
 ObjectOrder:
   while i < Len(chart.editor.objects) do
@@ -641,7 +635,7 @@ LayoutReturn:
 end procedure;
 
 procedure validateChartModel(chart, csvCollection)
-variables i = 1, object = NoValue, table = <<>>, columns = <<>>, csv = NoValue;
+variables i = 1, object = NoValue, table = <<>>, columns = <<>>, csv = NoValue, conversionView = FALSE;
 begin
 ChartAndRepresentationShape:
   Require(EditorGraphRecordShape(chart));
@@ -650,7 +644,8 @@ ChartAndRepresentationShape:
   \* to validate the serialized shape; whole Project validation separately
   \* requires every registered chart id to exist, be positive and be unique.
   Require(IsBoolean(chart.editor.editable) /\ IsSequence(chart.editor.objects));
-  if ConversionRepresentation(chart) then
+  call chartUsesConversionView(chart); conversionView := result;
+  if conversionView then
     table := chart.editor.conversionRows;
     Require(IsTableIncludingEmpty(table));
     call columnDefinitions(table,ConversionTableHeaderLines(chart)); columns := result;
@@ -658,7 +653,7 @@ ChartAndRepresentationShape:
 ObjectsMayBeZero:
   while i <= Len(chart.editor.objects) do
     object := chart.editor.objects[i];
-    if ConversionRepresentation(chart) then
+    if conversionView then
       Require(ValidColumnPair(object.x,object.y,columns));
     else
       csv := ResolveCsvInCollection(csvCollection,object.csvId);
@@ -777,11 +772,139 @@ FinalizeConversionView:
   return;
 end procedure;
 
-procedure convertImportedChartToEditable(chart)
-variables source = activeProject;
+procedure convertImportedChartToEditable(chart,state)
+variables source = state;
 begin
 SourceConversionContextBinding:
   call ConvertImportedChartInAttempt(source,chart);
+  return;
+end procedure;
+
+procedure ApplyChartLayoutEdits(chart,edits)
+variables copy = DeepCopy(chart), fields = <<>>, axes = <<"xBottom","xTop","yLeft","yRight">>,
+          i = 1, j = 1, key = "", axis = "", supplied = NoValue;
+begin
+TitleOnlyWhenProvided:
+  if HasField(edits,"title") then copy.editor.title := TextOrEmpty(edits.title); end if;
+CurrentGlobalFieldsNotWholeReplacement:
+  if HasField(edits,"globalSettings") then
+    supplied := edits.globalSettings; Require(IsRecord(supplied));
+    fields := <<"showLegend","showTitle","showZeroLine","graphFontFamily","titleFontSize","legendFontSize">>;
+    while i <= Len(fields) do
+      key := fields[i]; if HasField(supplied,key) then copy.editor.globalSettings[key] := supplied[key]; end if;
+      i := i + 1;
+    end while;
+NestedAxisFieldPatch:
+    if HasField(supplied,"axes") then
+      Require(IsRecord(supplied.axes)); i := 1;
+      while i <= Len(axes) do
+        axis := axes[i];
+        if HasField(supplied.axes,axis) then
+          Require(IsRecord(supplied.axes[axis]));
+          fields := PropertyNames(copy.editor.globalSettings.axes[axis]); j := 1;
+          while j <= Len(fields) do
+            key := fields[j];
+            if HasField(supplied.axes[axis],key) then copy.editor.globalSettings.axes[axis][key] := supplied.axes[axis][key]; end if;
+            j := j + 1;
+          end while;
+        end if;
+        i := i + 1;
+      end while;
+    end if;
+  end if;
+LayoutEditReturn:
+  result := copy;
+  return;
+end procedure;
+
+procedure buildGraphCommandCandidate(event,payload,state)
+variables candidate = state, chart = NoValue, owner = NoValue, target = NoValue,
+          chartId = NoValue, csv = NoValue, objects = <<>>, moved = NoValue,
+          index = NoValue, colors = <<>>, keys = <<>>, i = 1;
+begin
+ResolveCandidateOwner:
+  if HasField(payload,"chartId") then
+    chartId := payload.chartId;
+  elsif event = "GRAPH_OBJECTS_REPLACED" /\ FieldOrNoValue(payload,"operation") = "graphs.addObject" then
+    call resolveVisibleSlot(FieldOrNoValue(payload,"slotId"),candidate); target := result;
+    if target = NoValue then result := NoValue; return; end if;
+    chartId := target.content.chart;
+  end if;
+  chart := ChartById(candidate,chartId);
+  if chart = NoValue then result := NoValue; return; end if;
+  call resolveOwningSlot(chartId,candidate); owner := result;
+  if owner = NoValue then result := NoValue; return; end if;
+  if owner.hidden then result := NoValue; return; end if;
+  if HasField(payload,"slotId") then
+    if owner.id # payload.slotId then result := NoValue; return; end if;
+  end if;
+  if event = "GRAPH_OBJECTS_REPLACED" then
+    if ~chart.editor.editable then result := NoValue; return; end if;
+    objects := DeepCopy(chart.editor.objects);
+    if payload.operation = "graphs.addObject" then
+      csv := CsvById(candidate,payload.csvId);
+      if csv = NoValue then result := NoValue; return; end if;
+      call connectDataToSlotModel(owner,csv.rows,csv.name,csv,candidate); candidate := result;
+      if candidate = NoValue then return; end if;
+      chart := ChartById(candidate,chartId);
+      objects := chart.editor.objects;
+      index := Len(objects) - 1;
+    elsif payload.operation = "graphs.moveObject" then
+      Require(IsValidIndex(payload.from,objects) /\ IsValidIndex(payload.to,objects));
+      if payload.from = payload.to then result := NoValue; return; end if;
+      moved := objects[payload.from + 1];
+      objects := RemoveSequencePosition(objects,payload.from + 1);
+      objects := InsertAtFinalPosition(objects,payload.to + 1,moved);
+      index := payload.to;
+    elsif payload.operation = "graphs.setObjectValues" then
+      call CalculateOneObjectValues(chartId,payload.index,payload.values,candidate);
+      objects := result[1]; index := result[2];
+    elsif payload.operation = "graphs.deleteObject" then
+      Require(IsValidIndex(payload.index,objects));
+      objects := RemoveSequencePosition(objects,payload.index + 1);
+    elsif payload.operation = "graphs.applyPalette" then
+      colors := ValidatedGraphPalette(payload.colors);
+      while i <= Len(objects) do
+        objects[i].color := colors[((i - 1) % Len(colors)) + 1];
+        i := i + 1;
+      end while;
+    else result := NoValue; return;
+    end if;
+    call graphEditorCommit(chartId,objects,index,candidate);
+    return;
+  elsif event = "CHART_MODEL_REPLACED" then
+    if payload.editable /\ ~chart.editor.editable then
+      call convertImportedChartToEditable(chart,candidate); candidate := result;
+    else CandidateChart(candidate,chart.id).editor.editable := payload.editable; end if;
+  elsif event = "CHART_LAYOUT_CHANGED" then
+    call ApplyChartLayoutEdits(chart,payload.settings); chart := result;
+    call normalizeGlobalSettings(chart.editor.globalSettings); chart.editor.globalSettings := result;
+    keys := <<"xBottom","xTop","yLeft","yRight">>;
+    while i <= Len(keys) do
+      call normalizeAxisSettings(chart.editor.globalSettings.axes[keys[i]],keys[i]);
+      chart.editor.globalSettings.axes[keys[i]] := result; i := i + 1;
+    end while;
+    ReplaceCandidateChart(candidate,chart.id,chart);
+  end if;
+  chart := ChartById(candidate,chart.id);
+  call validateChartModel(chart,candidate.assets.csvFiles);
+  if chart.editor.editable then
+    call rebuildEditableGraph(chart,candidate); ReplaceCandidateChart(candidate,chart.id,result);
+  end if;
+  result := candidate; return;
+end procedure;
+
+procedure chartUsesConversionView(chart)
+begin
+EditableFlagAndFieldPresence:
+  result := FALSE;
+  if chart # NoValue then
+    if HasField(chart,"editor") then
+      if chart.editor # NoValue then
+        result := FieldOrNoValue(chart.editor,"editable") = FALSE /\ HasField(chart.editor,"conversionRows");
+      end if;
+    end if;
+  end if;
   return;
 end procedure;
 

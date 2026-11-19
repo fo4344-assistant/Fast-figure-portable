@@ -44,27 +44,33 @@ ValidIndex(index, objects) ==
 (* --algorithm BackendReferenceQueries
 variables result = NoValue;
 
-procedure validateFrontendIntent(event, payload)
-variables reference = NoValue, workspaceHint = NoValue, selectionHint = NoValue,
-          slot = NoValue, chart = NoValue, csv = NoValue, object = NoValue,
-          target = NoValue, accepted = FALSE;
+procedure resolveVisibleSlot(slotId,state)
+variables i = 1, slot = NoValue;
 begin
-DeclaredReferenceEventsOnly:
-  if event = "SELECT_SLOT" then goto ValidateSlot;
-  elsif event = "SELECT_ASSET" then goto ValidateAsset;
-  elsif event = "SELECT_GRAPH_OBJECT" then goto ValidateGraphObject;
-  else goto ReturnValidatedInput;
-  end if;
+VisibleIntegerIdentity:
+  if slotId = NoValue \/ ~IsInteger(slotId) then result := NoValue; return; end if;
+  while i <= Len(state.slots) do
+    slot := state.slots[i];
+    if slot.id = slotId /\ ~slot.hidden then result := slot; return; end if;
+    i := i + 1;
+  end while;
+  result := NoValue; return;
+end procedure;
+
+procedure validateSlotSelection(event,payload)
+variables reference = NoValue, workspaceHint = NoValue, selectionHint = NoValue,
+  accepted = FALSE, slot = NoValue;
+begin
 ValidateSlot:
-  if ~HasField(payload, "slotId") then goto ReturnValidatedInput; end if;
+  if ~HasField(payload, "slotId") then goto ReturnvalidateSlotSelection; end if;
   if payload.slotId = NoValue then
     accepted := TRUE;
     workspaceHint := "project";
     selectionHint := "toggle-clear";
-    goto ReturnValidatedInput;
+    goto ReturnvalidateSlotSelection;
   end if;
-  slot := VisibleSlot(activeProject, payload.slotId);
-  if slot = NoValue then goto ReturnValidatedInput; end if;
+  call resolveVisibleSlot(payload.slotId,activeProject._state); slot := result;
+  if slot = NoValue then goto ReturnvalidateSlotSelection; end if;
   reference := slot.id;
   accepted := TRUE;
   workspaceHint := Workspace(slot);
@@ -73,32 +79,52 @@ ValidateSlot:
   else
     selectionHint := "toggle-clear";
   end if;
-  goto ReturnValidatedInput;
+  goto ReturnvalidateSlotSelection;
+ReturnvalidateSlotSelection:
+  result := ImmutableCopy([event |-> event,accepted |-> accepted,reference |-> reference,
+    workspaceHint |-> workspaceHint,selectionHint |-> selectionHint]);
+  return;
+end procedure;
+
+procedure validateAssetSelection(event,payload)
+variables reference = NoValue, workspaceHint = NoValue, selectionHint = NoValue,
+  accepted = FALSE, target = NoValue;
+begin
 ValidateAsset:
-  if ~HasField(payload, "path") then goto ReturnValidatedInput; end if;
-  if payload.path = NoValue then accepted := TRUE; goto ReturnValidatedInput; end if;
+  if ~HasField(payload, "path") then goto ReturnvalidateAssetSelection; end if;
+  if payload.path = NoValue then accepted := TRUE; goto ReturnvalidateAssetSelection; end if;
   call projectVfsResolve(payload.path, activeProject);
   target := result;
-  if target = NoValue then goto ReturnValidatedInput; end if;
-  if target.kind \notin {"csv", "image", "directory"} then goto ReturnValidatedInput; end if;
-  if target.kind # FieldOrNoValue(payload, "kind") then goto ReturnValidatedInput; end if;
+  if target = NoValue then goto ReturnvalidateAssetSelection; end if;
+  if target.kind \notin {"csv", "image", "directory"} then goto ReturnvalidateAssetSelection; end if;
+  if target.kind # FieldOrNoValue(payload, "kind") then goto ReturnvalidateAssetSelection; end if;
   accepted := TRUE;
   reference := target.canonicalPath;
   selectionHint := target.kind;
-  goto ReturnValidatedInput;
+  goto ReturnvalidateAssetSelection;
+ReturnvalidateAssetSelection:
+  result := ImmutableCopy([event |-> event,accepted |-> accepted,reference |-> reference,
+    workspaceHint |-> workspaceHint,selectionHint |-> selectionHint]);
+  return;
+end procedure;
+
+procedure validateGraphObjectSelection(event,payload)
+variables reference = NoValue, workspaceHint = NoValue, selectionHint = NoValue,
+  accepted = FALSE, slot = NoValue, chart = NoValue, csv = NoValue, object = NoValue;
+begin
 ValidateGraphObject:
-  if ~HasField(payload, "index") then goto ReturnValidatedInput; end if;
-  if payload.index = NoValue then accepted := TRUE; goto ReturnValidatedInput; end if;
-  slot := VisibleSlot(activeProject, FieldOrNoValue(payload, "selectedSlotId"));
-  if slot = NoValue then goto ReturnValidatedInput; end if;
-  if slot.content.contentType # "graph" then goto ReturnValidatedInput; end if;
+  if ~HasField(payload, "index") then goto ReturnvalidateGraphObjectSelection; end if;
+  if payload.index = NoValue then accepted := TRUE; goto ReturnvalidateGraphObjectSelection; end if;
+  call resolveVisibleSlot(FieldOrNoValue(payload, "selectedSlotId"),activeProject._state); slot := result;
+  if slot = NoValue then goto ReturnvalidateGraphObjectSelection; end if;
+  if slot.content.contentType # "graph" then goto ReturnvalidateGraphObjectSelection; end if;
   chart := ChartById(activeProject, slot.content.chart);
-  if chart = NoValue then goto ReturnValidatedInput; end if;
-  if chart.editor.editable = FALSE then goto ReturnValidatedInput; end if;
-  if ~ValidIndex(payload.index, chart.editor.objects) then goto ReturnValidatedInput; end if;
+  if chart = NoValue then goto ReturnvalidateGraphObjectSelection; end if;
+  if chart.editor.editable = FALSE then goto ReturnvalidateGraphObjectSelection; end if;
+  if ~ValidIndex(payload.index, chart.editor.objects) then goto ReturnvalidateGraphObjectSelection; end if;
   object := chart.editor.objects[payload.index + 1];
   csv := CsvById(activeProject, object.csvId);
-  if csv = NoValue then goto ReturnValidatedInput; end if;
+  if csv = NoValue then goto ReturnvalidateGraphObjectSelection; end if;
   accepted := TRUE;
   reference := payload.index;
   \* Missing/False selectAsset never changes independent current CSV selection.
@@ -108,10 +134,9 @@ ValidateGraphObject:
       selectionHint := result;
     end if;
   end if;
-ReturnValidatedInput:
-  result := ImmutableCopy([event |-> event, accepted |-> accepted,
-      reference |-> reference, workspaceHint |-> workspaceHint, selectionHint |-> selectionHint]);
-  \* Invalid identity is rejected, not silently rewritten to accepted none.
+ReturnvalidateGraphObjectSelection:
+  result := ImmutableCopy([event |-> event,accepted |-> accepted,reference |-> reference,
+    workspaceHint |-> workspaceHint,selectionHint |-> selectionHint]);
   return;
 end procedure;
 
@@ -148,7 +173,7 @@ ResetOrTransformReferences:
     end if;
   end if;
 ResolveCurrentSlot:
-  slot := VisibleSlot(activeProject, slotId);
+  call resolveVisibleSlot(slotId,activeProject._state); slot := result;
   if slot = NoValue then slotId := NoValue; else slotId := slot.id; end if;
 ResolveCurrentAsset:
   if assetPath # NoValue then
@@ -213,7 +238,7 @@ ReturnReconciliation:
   return;
 end procedure;
 
-procedure Slot_create(id,row,col)
+procedure Slot___init__(id,row,col)
 variables slot = NoValue;
 begin
 NewOwnedSlot:
@@ -244,7 +269,7 @@ CanonicalSourcePathsAndLegacyStorageOnly:
     Require(IsInteger(slot.id) /\ IsInteger(slot.row) /\ slot.row >= 1 /\
             IsInteger(slot.col) /\ slot.col >= 1 /\ IsInteger(slot.rowSpan) /\ slot.rowSpan >= 1 /\
             IsInteger(slot.colSpan) /\ slot.colSpan >= 1 /\ IsBoolean(slot.hidden));
-    call Slot_create(slot.id,slot.row,slot.col); local := result;
+    call Slot___init__(slot.id,slot.row,slot.col); local := result;
     names := PropertyNames(slot); i := 1;
     while i <= Len(names) do
       local[names[i]] := DeepCopy(slot[names[i]]); i := i + 1;
@@ -296,7 +321,7 @@ procedure slotHasNonDefaultLocalState(slot)
 variables defaults = NoValue;
 begin
 WholeLocalPayloadComparison:
-  call Slot_create(slot.id,slot.row,slot.col); defaults := result;
+  call Slot___init__(slot.id,slot.row,slot.col); defaults := result;
   result := slot.content # defaults.content \/ slot.caption # defaults.caption;
   return;
 end procedure;
@@ -446,7 +471,7 @@ EachCellEmptyNotProtectedCsv:
   while row <= candidate.layout.gridRows do
     col := 1;
     while col <= candidate.layout.gridCols do
-      call Slot_create((row - 1) * candidate.layout.gridCols + (col - 1),row,col);
+      call Slot___init__((row - 1) * candidate.layout.gridCols + (col - 1),row,col);
       slot := result;
       candidate.slots := Append(candidate.slots,slot);
       col := col + 1;
@@ -506,7 +531,7 @@ end procedure;
 
 \* Source Script ProjectObject.__init__: construct without adopting the instance.
 \* The physical value is its owned state; the caller adopts the sole Backend binding.
-procedure ProjectObject_create(source)
+procedure ProjectObject___init__(source)
 variables candidate = DeepCopy(source), i = 1;
 begin
 NormalizeNewProjectInstance:
@@ -834,7 +859,8 @@ OnlyThisSlotExpensiveInputs:
     slot.chart := DeepCopy(chart);
     call chartFigure(DeepCopy(chart),source); slot.figure := result;
     slot.csvViews := <<>>;
-    if ~ConversionRepresentation(chart) then
+    call chartUsesConversionView(chart);
+    if ~result then
       while j <= Len(chart.editor.objects) do
         csv := CsvById(source,chart.editor.objects[j].csvId);
         if csv # NoValue then
@@ -967,9 +993,9 @@ PublicReadRegisteredOperation:
     output.gridLimits := DeepCopy([gridRows |-> BackendSettings.defaults.limits.layout.gridRows,
                                   gridCols |-> BackendSettings.defaults.limits.layout.gridCols]);
   elsif operation = "assets.fileKind" then call slotFileKind(request.file); output := result;
-  elsif operation = "assets.collisionModel" then call projectAssetImportCollisionModel(request.file,request.directory,request.reservedPaths); output := result;
-  elsif operation = "assets.resolveImportPlan" then call resolveProjectAssetImportPlan(request.model,request.choice,request.reservedPaths); output := result;
-  elsif operation = "assets.planMove" then call planProjectNodeMove(request.path,request.directory); output := result;
+  elsif operation = "assets.collisionModel" then call projectAssetImportCollisionModel(request.file,request.directory,request.reservedPaths,source); output := result;
+  elsif operation = "assets.resolveImportPlan" then call resolveProjectAssetImportPlan(request.model,request.choice,request.reservedPaths,source); output := result;
+  elsif operation = "assets.planMove" then call planProjectNodeMove(request.path,request.directory,source); output := result;
   else call BuildVfsRead(source,operation,request); output := result; end if;
   goto ImmutableReturn;
 RendererRead:

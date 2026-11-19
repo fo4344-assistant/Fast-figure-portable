@@ -14,8 +14,6 @@ FIXED_DIRECTORIES == {BackendSettings.defaults.vfs.root,BackendSettings.defaults
                      BackendSettings.defaults.vfs.image,BackendSettings.defaults.vfs.trash}
 IsDescendant(path, parent) == HasCanonicalSegmentPrefix(path,parent) /\ path # parent
 InTrash(path) == path = BackendSettings.defaults.vfs.trash \/ IsDescendant(path,BackendSettings.defaults.vfs.trash)
-ConversionRepresentation(chart) ==
-  IF chart.editor.editable = FALSE THEN HasField(chart.editor,"conversionRows") ELSE FALSE
 
 DataTableEncodingExtension(path) ==
   LET ext == LowerCase(FileExtension(path))
@@ -102,7 +100,9 @@ SegmentBoundaryNotStringPrefix:
   call normalizeProjectPath(directory,TRUE); parent := result;
   nodes := CurrentProjectDirectoriesCsvAndImages(state);
   while i <= Len(nodes) do
-    if IsDescendant(CanonicalNodePath(nodes[i]),parent) then output := Append(output,nodes[i]); end if;
+    if IsDescendant(CanonicalNodePath(nodes[i]),parent) then
+      output := Append(output,CanonicalNodePath(nodes[i]));
+    end if;
     i := i + 1;
   end while;
   result := output;
@@ -156,8 +156,8 @@ DetachedProposal:
   return;
 end procedure;
 
-procedure projectAssetImportCollisionModel(file, directory, reservedPaths)
-variables source = activeProject, kind = "";
+procedure projectAssetImportCollisionModel(file,directory,reservedPaths,state)
+variables source = state, kind = "";
 begin
 RawAssetsOnly:
   call slotFileKind(file); kind := result;
@@ -193,8 +193,8 @@ ValidatedReplaceOrCurrentRename:
   return;
 end procedure;
 
-procedure resolveProjectAssetImportPlan(model, choice, reservedPaths)
-variables source = activeProject;
+procedure resolveProjectAssetImportPlan(model,choice,reservedPaths,state)
+variables source = state;
 begin
 ReadOnceNoPromptOrReservation:
   call ResolveAssetPlanInProject(source,model,choice,reservedPaths);
@@ -223,7 +223,8 @@ begin
 SameCandidateChartValues:
   while i <= Len(candidate.charts) do
     chart := candidate.charts[i]; affected := FALSE; j := 1;
-    if ~ConversionRepresentation(chart) then
+    call chartUsesConversionView(chart);
+    if ~result then
       while j <= Len(chart.editor.objects) do
         if chart.editor.objects[j].csvId \in csvIds then affected := TRUE; end if;
         j := j + 1;
@@ -236,19 +237,204 @@ SameCandidateChartValues:
   return;
 end procedure;
 
-procedure BuildAssetImportInAttempt(source, files, directory, planImport, targetSlotId)
+procedure DetachAssetReferences(candidate,csvIds,imageIds)
+variables refs = <<>>, retainedByChart = [], chart = NoValue, removed = {}, retained = <<>>,
+          originalIndices = <<>>, i = 1, j = 1, graphCount = 0, imageCount = 0;
+begin
+UseExactlySharedRepresentationScope:
+  call collectAssetReferences(csvIds,imageIds,candidate); refs := result;
+ChartByChartOriginalPositions:
+  while i <= Len(candidate.charts) do
+    chart := candidate.charts[i]; removed := {}; j := 1;
+    while j <= Len(refs) do
+      if refs[j].kind = "csv" /\ refs[j].chartId = chart.id then removed := removed \cup {refs[j].originalObjectIndex}; end if;
+      j := j + 1;
+    end while;
+    if Cardinality(removed) > 0 then
+      retained := <<>>; originalIndices := <<>>; j := 0;
+      while j < Len(chart.editor.objects) do
+        if j \notin removed then
+          retained := Append(retained,chart.editor.objects[j+1]);
+          originalIndices := Append(originalIndices,j);
+        end if;
+        j := j + 1;
+      end while;
+      chart.editor.objects := retained;
+      retainedByChart[chart.id] := originalIndices;
+      graphCount := graphCount + Cardinality(removed);
+      \* Empty chart is valid. Same shared validator scope excludes conversion views.
+      call rebuildEditableGraph(chart,candidate); candidate.charts[i] := result;
+    end if;
+    i := i + 1;
+  end while;
+OnlyImageReferenceNotSlotDisplaySettings:
+  i := 1;
+  while i <= Len(refs) do
+    if refs[i].kind = "image" then
+      CandidateSlot(candidate,refs[i].slotId).content.imageId := NoValue;
+      imageCount := imageCount + 1;
+    end if;
+    i := i + 1;
+  end while;
+DetachReturn:
+  result := [candidate |-> candidate,retainedOriginalIndicesByChart |-> retainedByChart,
+             removedGraphReferenceCount |-> graphCount,resetImageSlotCount |-> imageCount];
+  return;
+end procedure;
+
+procedure CalculateNewAsset(candidate,kind,payload)
+variables asset = NoValue, path = "", requestedId = NoValue, table = NoValue, bytes = NoValue;
+begin
+OnlyNewFieldsNotApplicationModel:
+  requestedId := FieldOrNoValue(payload,"id");
+  if HasField(payload,"bytes") then bytes := CopyBytes(payload.bytes);
+  elsif HasField(payload,"bytesBase64") then bytes := DecodeCopiedBase64Bytes(payload.bytesBase64); end if;
+  if kind = "csv" then
+    if HasField(payload,"data") then call dataTable(payload.data); table := result;
+    elsif HasField(payload,"rows") then table := DeepCopy(payload.rows);
+    else call parseProjectDataAsset(payload.name,bytes); table := result; end if;
+  end if;
+CurrentLocationAndCollisionFreeName:
+  path := FieldOrNoValue(payload,"path");
+  if path = NoValue \/ path = "" then
+    path := JoinProjectPath(BackendSettings.defaults.vfs[kind],NormalizeSingleProjectFileName(payload.name));
+  end if;
+  call normalizeProjectPath(path,FALSE); path := result;
+  Require(CurrentParentDirectoryExists(candidate,path));
+  call projectVfsUniquePath(path,candidate,{}); path := result;
+CandidateAssetIdAndMetadata:
+  if kind = "csv" then
+    if bytes = NoValue then call encodeTableAssetBytes(table,path); bytes := result; end if;
+  end if;
+  call BuildAssetMetadata(kind,path,payload.mime,bytes); asset := result;
+  asset.id := IF requestedId = NoValue THEN candidate.nextId[kind] ELSE requestedId;
+  \* An explicitly invalid/duplicate id is rejected by whole validation, not silently renamed.
+  if kind = "csv" then
+    asset.rows := table;
+    call normalizeCsvHeaderLines(FieldOrNoValue(payload,"headerLines"),Len(table),HasField(payload,"headerLines"));
+    asset.headerLines := result;
+  end if;
+  AppendAssetOfKind(candidate,kind,asset);
+  AdvanceOnlyCorrespondingNextIdAboveAssignedId(candidate,kind,asset.id);
+  if kind = "csv" then call RebuildCsvChartsInCandidate(candidate,{asset.id}); candidate := result; end if;
+  \* Asset bytes/data live in Project instance, never BackendSettings.
+  result := [candidate |-> candidate,createdAsset |-> [kind |-> kind,id |-> asset.id,path |-> path]];
+  return;
+end procedure;
+
+procedure buildAssetCommandCandidate(event,payload,state,assetFacts)
+variables candidate = state, calculation = NoValue, name = "", image = NoValue,
+          plan = NoValue, node = NoValue, movedNodes = <<>>, oldPath = "", newPath = "",
+          descendantPaths = <<>>, directoryPaths = {}, text = "", i = 1,
+          csvIds = {}, imageIds = {};
+begin
+AssetCommandOnly:
+  if event = "PROJECT_LOADED" then
+    call ffpxReadProject(payload.file); calculation := result;
+    call buildProjectObject(calculation,FileName(payload.file)); candidate := result._state;
+  elsif event = "PROJECT_NAME_CHANGED" then
+    name := ScalarText(payload.value);
+    if FieldOrNoValue(payload,"trim") = TRUE then name := Trim(name); end if;
+    candidate.meta.projectName := FirstTextUnits(name,BackendSettings.defaults.naming.projectNameMaxLength);
+
+  elsif event = "ASSETS_IMPORTED" then
+    call buildProjectAssetImportCandidate(payload.files,payload.directory,payload.choices,FieldOrNoValue(payload,"targetSlotId"),candidate,assetFacts);
+    candidate := result;
+  elsif event \in {"DATA_OBJECT_CREATED","IMAGE_OBJECT_CREATED"} then
+    name := IF event = "DATA_OBJECT_CREATED" THEN "csv" ELSE "image";
+    call CalculateNewAsset(candidate,name,payload); candidate := result.candidate;
+  elsif event \in {"DATA_OBJECT_REPLACED","IMAGE_OBJECT_REPLACED"} then
+    name := IF event = "DATA_OBJECT_REPLACED" THEN "csv" ELSE "image";
+    image := ResolveCurrentSameKindAssetAndRequestedIdentity(state,name,payload);
+    ReplaceOnlyNewAssetDataFieldsPreservingIdentityPathAndReferences(candidate,name,image,payload);
+    if event = "DATA_OBJECT_REPLACED" then
+      if HasField(payload,"headerLines") then
+        call normalizeCsvHeaderLines(payload.headerLines,Len(CandidateCsv(candidate,image.id).rows),TRUE);
+        CandidateCsv(candidate,image.id).headerLines := result;
+      end if;
+      call RebuildCsvChartsInCandidate(candidate,{image.id}); candidate := result;
+    end if;
+  elsif event \in {"DATA_OBJECT_DELETED","IMAGE_OBJECT_DELETED"} then
+    name := IF event = "DATA_OBJECT_DELETED" THEN "csv" ELSE "image";
+    image := ResolveExactCurrentAssetTarget(state,payload.target);
+    if image = NoValue then result := <<NoValue,[]>>; return; end if;
+    Require(AssetKind(image) = name /\ IdentityKindIdPathAllMatch(payload.target,image));
+    call DetachAssetReferences(candidate,IF name = "csv" THEN {image.id} ELSE {},IF name = "image" THEN {image.id} ELSE {});
+    calculation := result; candidate := result.candidate;
+    RemoveExactAsset(candidate,name,image.id);
+  elsif event = "PROJECT_TRASH_EMPTIED" then
+    call projectVfsDescendants(BackendSettings.defaults.vfs.trash,candidate); descendantPaths := result;
+    while i <= Len(descendantPaths) do
+      call projectVfsResolve(descendantPaths[i],candidate); node := result;
+      if node.kind = "csv" then csvIds := csvIds \cup {node.id};
+      elsif node.kind = "image" then imageIds := imageIds \cup {node.id};
+      else directoryPaths := directoryPaths \cup {descendantPaths[i]}; end if;
+      i := i + 1;
+    end while;
+    call DetachAssetReferences(candidate,csvIds,imageIds); calculation := result; candidate := result.candidate;
+    RemoveAssetsByIds(candidate,csvIds,imageIds);
+    RemoveOnlyNonFixedDirectoryPaths(candidate,directoryPaths);
+  elsif event = "PROJECT_NODE_MOVED" then
+    call planProjectNodeMove(payload.path,payload.directory,candidate); plan := result;
+    if plan = NoValue then result := <<NoValue,[]>>; return; end if;
+    name := plan.destination;
+    if plan.collision then
+      if ~payload.useUniqueName then result := <<NoValue,[]>>; return; end if;
+      call projectVfsUniquePath(name,candidate,{}); name := result;
+    end if;
+    call projectVfsResolve(plan.path,candidate); node := result;
+    movedNodes := <<[path |-> plan.path,node |-> node]>>;
+    if node.kind = "directory" then
+      call projectVfsDescendants(plan.path,candidate); descendantPaths := result;
+      while i <= Len(descendantPaths) do
+        call projectVfsResolve(descendantPaths[i],candidate);
+        movedNodes := Append(movedNodes,[path |-> descendantPaths[i],node |-> result]);
+        i := i + 1;
+      end while;
+    end if;
+    i := 1;
+    while i <= Len(movedNodes) do
+      oldPath := movedNodes[i].path; node := movedNodes[i].node;
+      newPath := name \o RelativeSubtreeSuffix(oldPath,plan.path);
+      if node.kind = "directory" then
+        ReplaceExactDirectoryPath(candidate,oldPath,newPath);
+      else
+        SetExactAssetNameAndDirectory(candidate,node.kind,node.id,Basename(newPath),CanonicalParent(newPath));
+        if ~InTrashSubtree(oldPath,BackendSettings.defaults.vfs.trash) /\ InTrashSubtree(newPath,BackendSettings.defaults.vfs.trash) then
+          if node.kind = "csv" then csvIds := csvIds \cup {node.id}; else imageIds := imageIds \cup {node.id}; end if;
+        end if;
+      end if;
+      if assetFacts # NoValue then
+        AppendToSuppliedMutableArray(assetFacts,[kind |-> node.kind,id |-> IF node.kind = "directory" THEN NoValue ELSE node.id,
+                                        oldPath |-> oldPath,path |-> newPath,role |-> "moved"]);
+      end if;
+      i := i + 1;
+    end while;
+    call DetachAssetReferences(candidate,csvIds,imageIds); calculation := result; candidate := result.candidate;
+  elsif event = "PROJECT_DIRECTORY_CREATED" then
+    call normalizeProjectPath(payload.parent,TRUE); name := result;
+    Require(CurrentDirectoryExists(candidate,name));
+    text := NormalizeSingleProjectFileName(payload.name);
+    call normalizeProjectPath(JoinProjectPath(name,text),TRUE); name := result;
+    Require(~CurrentVfsPathExists(candidate,name));
+    AppendDirectoryInstance(candidate,name);
+  end if;
+  result := <<candidate,FieldOrEmptyRecord(calculation,"retainedOriginalIndicesByChart")>>;
+  return;
+end procedure;
+
+procedure buildProjectAssetImportCandidate(files,directory,planImport,targetSlotId,state,assetFacts)
 variables candidate = NoValue, target = NoValue, parent = NoValue, canonicalPath = "",
-          i = 1, kind = "", parsed = NoValue, plan = NoValue, asset = NoValue, reserved = {},
-          current = NoValue, facts = <<>>, outcome = NoValue;
+          i = 1, kind = "", rows = NoValue, plan = NoValue, asset = NoValue, reserved = {},
+          current = NoValue, input = NoValue, event = "", outcome = NoValue, prefix = "";
 begin
 CommandContextAndCurrentTarget:
-  Require(InsideAssetsImportedCommand());
-  Require(ValidDirectoryInProject(directory,source));
+  candidate := DeepCopy(IF state = NoValue THEN activeProject ELSE state);
+  Require(ValidDirectoryInProject(directory,candidate));
   if targetSlotId # NoValue then
-    target := ResolveVisibleSlot(source,targetSlotId);
-    Require(target # NoValue);
+    call resolveVisibleSlot(targetSlotId,candidate);
+    Require(result # NoValue);
   end if;
-  candidate := DeepCopy(source);
 NoBackendUiCallback:
   Require(CompletedCollisionChoicesNotCallback(planImport));
   Require(Len(files) > 0 /\ Len(files) = Len(planImport));
@@ -258,7 +444,8 @@ FileOrderWithinOneCandidate:
     Require(kind \in {"data","image"});
     \* Application supplies the completed {path,replaceId} result.
     plan := planImport[i];
-    Require(ValidFinalImportPlanShape(plan));
+    Require(IsString(plan.path) /\ (plan.replaceId = NoValue \/
+      (IsInteger(plan.replaceId) /\ ~IsBoolean(plan.replaceId) /\ plan.replaceId > 0)));
     call normalizeProjectPath(plan.path,FALSE); canonicalPath := result;
     Require(canonicalPath = plan.path /\ CanonicalParent(canonicalPath) = directory);
     call projectVfsResolve(directory,candidate); parent := result;
@@ -270,63 +457,43 @@ FileOrderWithinOneCandidate:
       Require(current # NoValue /\ AssetKindEqualsFileKind(current,kind));
       Require(current.id = plan.replaceId);
     else Require(current = NoValue /\ plan.path \notin reserved); end if;
+    input := [path |-> plan.path,id |-> plan.replaceId,name |-> files[i].name,
+              mime |-> FileMime(files[i]),bytes |-> CopyBytes(files[i])];
     if kind = "data" then
-      call parseProjectDataAsset(files[i].name,CopyBytes(files[i])); parsed := result;
-    else parsed := CopyImageBytesAndMetadata(files[i]); end if;
-    \* EFSM rechecks current authority before the single whole-candidate commit.
-    call BuildAssetMetadata(AssetSequenceKind(kind),plan.path,FileMime(files[i]),CopyBytes(files[i])); asset := result;
-    if kind = "data" then
-      asset.rows := parsed;
-      if plan.replaceId # NoValue then
-        asset.headerLines := NormalizeHeaderCount(CsvById(candidate,plan.replaceId).headerLines,parsed);
-      else asset.headerLines := NormalizeHeaderCount(1,parsed); end if;
+      call parseProjectDataAsset(input.name,input.bytes); rows := result;
+      input.rows := rows; prefix := "DATA_OBJECT";
+    else prefix := "IMAGE_OBJECT"; end if;
+    event := prefix \o (IF plan.replaceId = NoValue THEN "_CREATED" ELSE "_REPLACED");
+    call buildAssetCommandCandidate(event,input,candidate,NoValue); outcome := result;
+    candidate := outcome[1];
+    if candidate = NoValue then result := NoValue; return; end if;
+    call projectVfsResolve(plan.path,candidate); asset := result;
+    if assetFacts # NoValue then
+      AppendToSuppliedMutableArray(assetFacts,[role |-> "imported",kind |-> AssetSequenceKind(kind),
+                                         id |-> asset.id,path |-> plan.path,replaced |-> plan.replaceId # NoValue]);
     end if;
-    if plan.replaceId # NoValue then
-      asset.id := current.id;
-      ReplaceSameKindAssetAtId(candidate,AssetSequenceKind(kind),current.id,asset);
-      \* Referencing graph objects/image slots retain this id; no detach/relink.
-    else
-      asset.id := candidate.nextId[AssetSequenceKind(kind)];
-      AppendAssetOfKind(candidate,AssetSequenceKind(kind),asset);
-      candidate.nextId[AssetSequenceKind(kind)] := asset.id + 1;
-    end if;
-    if kind = "data" then call RebuildCsvChartsInCandidate(candidate,{asset.id}); candidate := result; end if;
-    reserved := reserved \cup {plan.path};
-    if target # NoValue then
+    if targetSlotId # NoValue then
+      call resolveVisibleSlot(targetSlotId,candidate); target := result;
+      Require(target # NoValue);
       if kind = "data" then
-        call ConnectDataInsideCandidate(candidate,targetSlotId,asset.id,asset.name);
+        current := CsvById(candidate,asset.id);
+        call connectDataToSlotModel(target,current.rows,current.name,current,candidate);
         candidate := result;
       else
-        target := ResolveVisibleSlot(candidate,targetSlotId);
-        Require(target # NoValue);
         RemoveOnlyChartOwnedBySlot(candidate,targetSlotId);
-        CandidateSlot(candidate,targetSlotId).content.chart := NoValue;
-        CandidateSlot(candidate,targetSlotId).content.contentType := "image";
-        CandidateSlot(candidate,targetSlotId).content.imageId := asset.id;
+        target.content.chart := NoValue;
+        target.content.contentType := "image";
+        target.content.imageId := asset.id;
       end if;
     end if;
-    facts := Append(facts,[kind |-> AssetSequenceKind(kind),id |-> asset.id,path |-> plan.path]);
+    reserved := reserved \cup {plan.path};
     i := i + 1;
   end while;
-WholeCandidateOrReject:
-  call validateProjectObjectState(candidate,TRUE);
-  result := [candidate |-> candidate,importedAssets |-> facts];
-  \* Call-local actual facts preserve file order, never another persistent registry.
-  \* Caller EFSM rechecks authority and commits ONCE; retry discards candidate+facts.
-  return;
+  result := candidate; return;
 end procedure;
 
-procedure buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId)
-variables source = activeProject;
-begin
-SourceCandidateOnlyReturn:
-  call BuildAssetImportInAttempt(source,files,directory,planImport,targetSlotId);
-  result := result.candidate;
-  return;
-end procedure;
-
-procedure planProjectNodeMove(path, directory)
-variables readProject = activeProject, source = NoValue, target = NoValue, destination = "", references = NoValue;
+procedure planProjectNodeMove(path,directory,state)
+variables readProject = state, source = NoValue, target = NoValue, destination = "", references = NoValue;
 begin
 CurrentSourceIncludingTrash:
   call projectVfsResolve(path,readProject); source := result;
@@ -340,7 +507,7 @@ CurrentSourceIncludingTrash:
   Require(IsDirectory(target));
   destination := JoinDirectoryAndName(CanonicalNodePath(target),NodeName(source));
   references := ReferencesForExactNodeOrSubtree(source,readProject);
-  result := [source |-> CanonicalNodePath(source),kind |-> NodeKind(source),
+  result := [path |-> CanonicalNodePath(source),kind |-> NodeKind(source),
      directory |-> CanonicalNodePath(target),destination |-> destination,
      collision |-> CurrentCollisionAt(destination),uniqueName |-> CurrentUniqueSiblingName(destination),
      enteringTrash |-> ~InTrash(CanonicalNodePath(source)) /\ InTrash(destination),
@@ -442,7 +609,8 @@ begin
 ChartOriginalPositionsNotEqualityRematch:
   while ci <= Len(state.charts) do
     chart := state.charts[ci];
-    if ~ConversionRepresentation(chart) then
+    call chartUsesConversionView(chart);
+    if ~result then
       oi := 1;
       while oi <= Len(chart.editor.objects) do
         object := chart.editor.objects[oi];
@@ -565,7 +733,8 @@ procedure ReferencedProjectCsvIds(chart)
 variables ids = <<>>, seen = {}, i = 1;
 begin
 SharedRepresentationScope:
-  if ~ConversionRepresentation(chart) then
+  call chartUsesConversionView(chart);
+  if ~result then
     while i <= Len(chart.editor.objects) do
       if chart.editor.objects[i].csvId \notin seen then
         ids := Append(ids,chart.editor.objects[i].csvId);
@@ -583,7 +752,8 @@ procedure RemapRealProjectCsvIds(chart,mapping)
 variables copy = DeepCopy(chart), i = 1;
 begin
 NoImportedConversionRewrite:
-  if ~ConversionRepresentation(copy) then
+  call chartUsesConversionView(copy);
+  if ~result then
     while i <= Len(copy.editor.objects) do
       Require(HasField(mapping,copy.editor.objects[i].csvId));
       copy.editor.objects[i].csvId := mapping[copy.editor.objects[i].csvId];
@@ -1339,12 +1509,12 @@ RecomputeIdsAndWholeValidate:
                        image |-> MaximumIdOrZero(candidate.assets.images) + 1,
                        chart |-> MaximumIdOrZero(candidate.charts) + 1];
   call validateProjectObjectState(candidate,TRUE);
-  call ProjectObject_create(candidate);
+  call ProjectObject___init__(candidate);
   return;
 end procedure;
 
-procedure applyFfsxSlot(slotPayload, targetSlot)
-variables source = activeProject;
+procedure applyFfsxSlot(slotPayload,targetSlot,state)
+variables source = state;
 begin
 SourceSlotImportContextBinding:
   call ApplyFfsxInAttempt(source,slotPayload,targetSlot);
