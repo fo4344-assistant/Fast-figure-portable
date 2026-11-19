@@ -338,7 +338,7 @@ def readBackendProjection(kind, request):
         23. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.movable"]이면: current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음
         24. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.draggableAsset"]이면: 존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별
         25. assets.readDeletionTarget은 explicit canonical path의 자산을 찾아 target={kind,id,path,name}, referenceCount, references를 반환한다.
-           references에는 삭제 확인에 사용하는 kind/slotId/chartId/objectIndex만 담는다. 대상이 없으면 None이다.
+           references에는 삭제 확인에 사용하는 kind/slotId/chartId/objectIndex만 담고, CSV의 objectIndex에는 원래 originalObjectIndex를 넣는다. 대상이 없으면 None이다.
            한 번의 collectAssetReferences로 해당 자산의 참조만 고르고 자산 rows/bytes/figure를 구성하지 않는다.
            생성 wrapper의 성공 반환도 이 target 메타데이터로 맞춘다. 원본은 assets.download, CSV 값은 readPreview/readControls에서 명시적으로 읽는다.
         26. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.moveOptions"]이면: current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy
@@ -547,7 +547,8 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
            hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
            이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
 
-        5. projectionEffect는 기존 result 안의 referencesRemoved/pathOnly 두 사실만 담는다. visible slot/chart/image reference와 visible ordinary chart object가 참조하는 CSV별 개수의 pre/post 차이에서 제거를 계산한다. index move는 참조 수를 유지한다. pathOnly는 metadata/VFS/asset command이며 실제 dashboard 입력이 같을 때만 true다. dashboard 입력은 layout/annotations/appearance, visible slot geometry/content, 그 slot의 chart editor/graph, 실제 참조 CSV의 rows/headerLines 및 image bytes/mime다. dashboard 비교에는 표시 입력 필드를 사용한다. 참조 중인 bytes/rows가 바뀌면 pathOnly=False다. 이 call-local 비교 결과는 immutable commit delta이며 일반 read store나 mutation input으로 승격하지 않는다.
+        5. projectionEffect에는 projectEFSM이 result에 제공한 referencesRemoved/pathOnly를 복사한다.
+           이 조회에서 이전 프로젝트 상태나 자산별 참조 수를 다시 읽거나 표시 효과를 재계산하지 않는다.
         6. selectedSlot/assetSelection/assetKind/graphObject에 resolved scalar를 반환한다. workspaceHint는 none이면 project,
            visible image slot이면 slot.image, 그 외 slot.graph다. projectionEffect는 committed result의 실제 reference 제거/targeted 변경 정보로
            Application이 Frontend renderer effect를 결정할 수 있는 값이며 Backend는 Frontend state write를 수행하지 않는다.

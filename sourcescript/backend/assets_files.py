@@ -291,7 +291,7 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths, state=None):
     return plan
 
 
-def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None, state=None):
+def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None, state=None, assetFacts=None):
     candidate = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
     reservedPaths = "이번 작업에서 사용한 canonical 경로 문자열의 집합."
     plan = "최종 경로 path와 교체 대상 replaceId를 가진 딕셔너리."
@@ -313,13 +313,16 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
 
     - planImport:
       files와 같은 순서의 확정된 경로 딕셔너리 배열. 각 원소는 canonical path와 replaceId를 담는다.
-      replaceId는 새 파일이면 None, 교체이면 해당 자산의 양의 정수 id다.
+      replaceId는 새 파일이면 None, 교체이면 해당 자산의 유효 정수 id다.
 
     - targetSlotId:
       연결할 visible Slot의 정수 id 또는 None.
 
     - state:
       이번 명령의 프로젝트 상태 딕셔너리 또는 None. 원형: /backend/project_state/ProjectObject._state
+
+    - assetFacts:
+      이번 시도의 자산 결과 항목 배열 또는 None.
 
     Return:
     - candidate:
@@ -336,12 +339,12 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
            확정한 path·replaceId를 planImport에 넣고, 취소이면 명령을 호출하기 전에 None을 반환한다.
            files와 planImport가 비어 있거나 개수가 다르면 거부한다.
            directory의 canonical 경로와 현재 후보의 디렉터리 존재 여부를 검사한다.
-           targetSlotId가 있으면 같은 후보에서 visible Slot을 확인한다. 없으면 거부한다.
+           targetSlotId가 None이 아니면 같은 후보에서 visible Slot을 확인하고, 해당 Slot이 없으면 거부한다.
            파일 파싱·경로·참조·전체 후보 검증 실패는 후보 거부로 전달하고 반영을 수행하지 않는다.
 
         2. reservedPaths를 빈 집합으로 둔다. files를 입력 순서로 처리하며
            planImport의 같은 순번 원소를 plan에 둔다. 각 plan의 path 문자열과
-           replaceId의 None 또는 양의 정수 형식을 검사한다.
+           replaceId가 None이거나 boolean이 아닌 양의 정수인지 검사한다.
            path가 canonical 형식이고 부모가 directory와 같으며 reservedPaths에 없어야 한다.
            파일 종류는 slotFileKind(file)로 확인하여 data 또는 image를 허용한다.
            projectVfsResolve(plan["path"],candidate)를 target에 둔다.
@@ -351,7 +354,10 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
            CSV이면 parseProjectDataAsset에 file의 name·bytes를 전달하여 rows에 둔다.
            plan이 교체이면 종류별 REPLACED를, 생성이면 CREATED를 event에 둔다.
            plan의 경로·교체 id와 파일의 name·MIME·bytes, CSV의 rows로 input을 구성하고
-           buildAssetCommandCandidate(event,input,candidate)의 후보를 candidate에 둔다.
+           buildAssetCommandCandidate(event,input,candidate)의 첫 반환값을 candidate에 둔다.
+           후보가 None이면 이 batch를 거부한다. projectVfsResolve(plan["path"],candidate)로 실제 생성·교체된
+           자산을 읽고 assetFacts가 있으면 kind, id, path, role=imported와
+           replaced=(plan["replaceId"] is not None)을 입력 순서로 추가한다.
            targetSlotId를 명시한 경우에 다음 Slot 연결을 수행한다.
            resolveVisibleSlot(targetSlotId,candidate)의 결과를 slot에 둔다.
            slot이 없으면 거부한다. CSV는 projectVfsResolve(plan["path"],candidate)의 target을 csv에 두고
@@ -389,12 +395,18 @@ def planProjectNodeMove(path, directory, state=None):
     - 없음.
 
     처리:
-        1. state가 None이면 activeProject._state를 사용한다. projectVfsResolve(path,state)로 source를 resolve하고 fixed directory이면 move 불가로 판정한다.
-        2. trash membership 자체는 source move 금지 조건으로 사용하지 않는다.
-        3. target directory, destination, collision, trash 진입 여부와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
-
-        4. 고정 directory의 유일한 값 원천은 backend.defaults.vfs의 root/csv/image/trash다. 삭제 또는 이동 대상으로 취급하지 않는다.
-        5. movePlan를 반환한다.
+        1. state가 None이면 activeProject._state를 사용한다. projectVfsResolve(path,state)에서 종류와
+           canonical source 경로를 얻는다. 대상 부재 또는 backend.defaults.vfs의 고정 root/csv/image/trash면 거부한다.
+        2. directory를 canonical 디렉터리 경로로 정규화한다. fileSystem.directories에 없거나,
+           source가 디렉터리이고 directory가 자신 또는 하위 경로이면 거부한다.
+        3. directory에 source basename을 붙여 종류에 맞게 정규화한 값을 destination에 둔다.
+           destination=source이면 None을 반환한다. projectVfsResolve(destination,state)의 존재 여부를
+           collision에 둔다. 충돌이면 projectVfsUniquePath(destination,state,빈 집합)의 basename을,
+           아니면 destination의 basename을 uniqueName으로 사용한다.
+        4. source가 휴지통 밖이고 destination이 휴지통 안이면 enteringTrash=True다. 휴지통 membership만으로
+           이동을 금지하지 않는다. source 또는 그 subtree의 CSV/image id를 모아 collectAssetReferences에
+           전달하고 반환 배열 길이를 확인용 referenceCount에 둔다.
+        5. {path: source, kind, directory, destination, collision, uniqueName, enteringTrash, referenceCount}의 읽기 전용 복사본을 반환한다.
     """
     return movePlan
 
@@ -682,7 +694,7 @@ def parseProjectDataAsset(name, bytes):
 
 
 def collectAssetReferences(csvIds, imageIds, state):
-    references = "asset별 참조 count·slot·chart 정보를 가진 딕셔너리."
+    references = "실제 자산 참조를 하나씩 담은 배열."
     """
     Args:
     - csvIds:
@@ -696,14 +708,16 @@ def collectAssetReferences(csvIds, imageIds, state):
 
     Return:
     - references:
-      asset별 참조 count·slot·chart 정보를 가진 딕셔너리.
-      CSV별 graph-object reference와 image별 slot reference를 실제 object 단위로 나열한 read-only 결과.
+      CSV object별 {kind: csv, assetId, chartId, originalObjectIndex, object},
+      이미지 슬롯별 {kind: image, assetId, slotId, slot}의 배열. 항목은 전달받은 상태의 참조다.
 
     변경:
     - 없음.
 
     처리:
-        1. validateChartModel과 같은 representation 판정으로 실제 project object.csvId만 수집한다. 편집을 잠시 끈 일반 chart도 포함한다.
+        1. 각 chart에서 graphs.chartUsesConversionView(chart)가 True이면 건너뛴다.
+           그 외 chart의 editor.objects를 원래 순번으로 순회해 csvId가 csvIds에 속하는 object만 추가한다.
+           전체 Slot을 순회해 content.imageId가 imageIds에 속하는 Slot을 추가한다. 편집을 잠시 끈 일반 chart도 포함한다.
            non-editable conversion rows/object는 project CSV reference가 아니므로 포함하지 않는다.
            같은 chart 안에서 같은 실제 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
            image는 참조하는 slot마다 하나의 reference로 센다.
@@ -855,10 +869,10 @@ def applyFfsxSlot(slotPayload, targetSlot, state=None):
     return candidate
 
 
-def buildAssetCommandCandidate(event, payload, state):
+def buildAssetCommandCandidate(event, payload, state, assetFacts=None):
     candidateState = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
     retainedOriginalIndicesByChart = "chart id를 키로, 유지할 원래 object index 배열을 값으로 가진 딕셔너리."
-    references = "asset별 graph object·Slot 참조 딕셔너리."
+    references = "실제 graph object·Slot 참조 배열."
     descendants = "canonical VFS 경로 문자열의 배열."
     loaded = "ProjectObject 인스턴스. 원형: /backend/project_state/ProjectObject"
     csvIds = "이번 명령의 CSV id 집합."
@@ -875,6 +889,9 @@ def buildAssetCommandCandidate(event, payload, state):
     - state:
       send가 이번 명령에 분리 복사한 프로젝트 상태 딕셔너리.
         원형: /backend/project_state/ProjectObject._state
+
+    - assetFacts:
+      send가 이번 후보에 만든 빈 배열 또는 None. 이동·raw import 분기가 실제 처리 항목을 추가한다.
 
     Return:
     - candidateState, retainedOriginalIndicesByChart:
@@ -898,10 +915,15 @@ def buildAssetCommandCandidate(event, payload, state):
            부모 directory와 요청 경로의 부재를 확인한다. 검증한 canonical 경로를
            candidateState["fileSystem"]["directories"]에 한 번 추가한다.
         5. PROJECT_NODE_MOVED이면 planProjectNodeMove에 path·directory·candidateState를 전달한다.
-           고정 directory, 부모 부재, 자기 하위로의 이동, 충돌을 검사한다.
-           최종 경로로 대상의 directory/name과 하위 directory·asset 경로를 바꾼다.
-           경로의 segment 경계를 사용하며 하위 항목의 상대 경로를 보존한다.
-           trash 바깥에서 안으로 이동하는 subtree의 CSV/image id를 모은다.
+           계획이 None이면 미반영으로 반환한다. destination을 새 루트로 사용한다.
+           collision=True이면 payload.useUniqueName이 거짓일 때 거부하고, 참이면
+           projectVfsUniquePath(destination,state,빈 집합)을 새 루트로 사용한다.
+           루트와 디렉터리인 경우 그 하위 directory·asset의 기존 canonical 경로를 oldPath에 둔다.
+           oldPath에서 plan.path를 뗀 suffix(루트는 빈 문자열)를 새 루트 뒤에 붙여 path에 둔다.
+           directory에는 directory 경로를, asset에는 path의 부모와 basename을 적용한다.
+           assetFacts가 None이 아니면 이 루프에서 {kind, id, path, oldPath, role: "moved"}를
+           각 변경마다 한 번 추가한다. directory는 id=None이고 CSV/image는 실제 id다.
+           trash 바깥에서 안으로 이동하는 subtree의 CSV/image id를 참조 해제용 집합에 모은다.
         6. PROJECT_TRASH_EMPTIED이면 projectVfsDescendants(PROJECT_TRASH_DIRECTORY,
            candidateState)로 descendants를 얻고 그 안의 CSV/image id를 모은다.
            고정 trash directory를 유지하고 제거할 하위 directory·asset 경로를 descendants에 둔다.
@@ -916,8 +938,9 @@ def buildAssetCommandCandidate(event, payload, state):
            image 참조는 해당 Slot.content["imageId"]를 None으로 바꾼다.
            참조 해제 뒤 삭제 명령과 trash 비우기의 해당 asset을 컬렉션에서 제거한다.
            trash 비우기는 descendants의 하위 directory도 제거한다.
-        8. ASSETS_IMPORTED이면 payload의 files·directory·choices·targetSlotId와 candidateState를
-           buildProjectAssetImportCandidate에 전달한다. 반환한 전체 후보를 candidateState로 둔다.
+        8. ASSETS_IMPORTED이면 payload의 files·directory·choices·선택적 targetSlotId와
+           candidateState·assetFacts를 이 순서로
+           buildProjectAssetImportCandidate에 전달하고 반환한 전체 후보를 candidateState로 둔다.
            생성 asset과 Slot/chart 연결은 같은 후보에 적용한다.
         9. DATA_OBJECT_CREATED 또는 IMAGE_OBJECT_CREATED이면 명시한 id의 정수형·중복을 검사한다.
            id가 생략되거나 None이면 종류별 nextId를 사용하고, nextId는 할당한 id보다 큰 값으로 유지한다. 현재 VFS·부모·예약 경로를 검사하여 최종 canonical 경로를 정한다.
@@ -934,7 +957,8 @@ def buildAssetCommandCandidate(event, payload, state):
             명시된 bytes·bytesBase64·MIME만 교체한다. 바이트 입력은 base64 표현으로 저장한다.
             headerLines가 명시되면 현재 후보 rows 길이로 normalizeCsvHeaderLines를 호출한다.
             생략한 필드는 기존 값을 유지한다.
-            IMAGE_OBJECT_REPLACED이면 현재 image의 id·경로를 유지하고 명시한 bytes·MIME을 교체한다.
+            별도로 IMAGE_OBJECT_REPLACED이면 현재 image의 id·경로를 유지하고 명시한 bytes·MIME을 교체한다.
+            raw import의 CSV/image REPLACED 입력에는 검증한 기존 id를, CREATED 입력에는 canonical path를 넣는다.
         11. CSV 생성·교체에서는 해당 id를 csvIds에 둔다. 실제 object의 csvId가 csvIds에
             속하거나 7번에서 object가 제거된 chart는 같은 candidateState를 project 인자로
             graphs.rebuildEditableGraph에 전달한다. 반환 chart를 candidateState의 같은 chart id에 넣는다.

@@ -8,6 +8,12 @@ Python 문법으로 작성한 구현 명세다.
 from sourcescript.backend.project_state import activeProject, getProjectCsv, getChart
 
 
+def chartUsesConversionView(chart):
+    """editor의 editable이 False이고 editor에 conversionRows 키가 있으면 True, 아니면 False를 반환한다."""
+    editor = chart.get("editor") if chart is not None else None
+    return editor is not None and editor.get("editable") is False and "conversionRows" in editor
+
+
 # Graph trace의 기본 색상 배열.
 DEFAULT_COLORS = "config reference: backend.defaults.graphColors (read-only sequence)"
 

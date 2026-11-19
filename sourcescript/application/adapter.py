@@ -239,37 +239,48 @@ def dispatchProjectCommand(event, payload, showSelectedEditor=True):
            interfaceFSM.reconcileProjectResult(reconciliationInput)의 결과를 interfaceState에 둔다.
         4. PROJECT_LOADED이면 renderer.clearWorkspacePresentation()으로 이전 workspace 자원을 정리한다.
            workspace-structure 조회를 renderer.applyWorkspaceTransform에 전달해 새 빈 틀과 선택 장식만 준비한다.
-           이 구조 조회를 rendererProjection에 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, True)를 호출한다.
+           이 구조 조회를 rendererProjection에 둔다.
+           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, True)를 호출한다.
            전체 내용은 렌더링 버튼에서 표시한다.
            (result, interfaceState, rendererProjection)을 반환한다.
         5. GRID_LAYOUT_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED·LAYOUT_STYLE_CHANGED이면
            workspace-structure를 조회한다. 사라진 소유 연결만 정리하고 유지되는 내용은 CSS로 이동·확대·축소한다.
            틀이 안전하게 호환되지 않으면 전체 렌더링 필요를 안내한다.
-           rendererProjection에 이 구조 조회를 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
+           rendererProjection에 이 구조 조회를 둔다.
+           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
            (result, interfaceState, rendererProjection)을 반환한다.
         6. reconciliationInput["projectionEffect"]의 pathOnly가 참이고 referencesRemoved가 거짓이면 구조·참조 정리만 수행한다.
            EXPORT_SETTINGS_CHANGED는 파일 출력 설정만 변경하므로 workspace 내용 갱신을 생략한다.
            이 두 경우에는 workspace-structure 조회를 rendererProjection에 두고
-           refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
+           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
            (result, interfaceState, rendererProjection)을 반환한다.
            그 외에는 selected-slot을 조회한다. 선택 None이면 구조 조회로 바꾸고 내용 계산을 생략한다.
            renderer.applyDashboardProjectionInvalidation에 event, result, interfaceState, 조회 결과를 한 번 전달한다.
            전체 palette/CSV/labels/captions 변경의 다른 슬롯 표시는 전체 렌더링 버튼에서 반영한다.
            전역 dashboard caption도 전체 버튼에서 갱신한다. Sidebar의 공식 값 읽기는 계속 허용한다.
-        7. rendererProjection에 이번 조회 결과를 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고 튜플을 반환한다.
+        7. rendererProjection에 이번 조회 결과를 둔다.
+           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고 튜플을 반환한다.
            wrapper는 이 명령의 표시 작업을 중복 실행하지 않는다.
            조회·표시 오류는 원래 실패로 전달하며 이미 완료한 commit은 유지한다.
     """
     return result, interfaceState, rendererProjection
 
 
-def refreshCommittedUi(event, result, before, current, showSelectedEditor):
-    changed = "이번 명령의 반영 전후 차이. 원형: /backend/project_efsm/ProjectMutationResult의 changed."
+def refreshCommittedUi(event, payload, result, before, current, showSelectedEditor):
+    changed = "이번 명령의 반영 사실. 원형: /backend/project_efsm/ProjectMutationResult의 changed."
+    operation = "이번 명령의 operation 또는 None."
+    tree = "이번 명령에서 자산 트리를 읽을지 여부."
+    connections = "이번 명령에서 슬롯 연결 행을 읽을지 여부."
+    options = "이번 명령에서 CSV 옵션을 읽을지 여부."
+    csvOptions = "이번 호출의 assets.readList('csv') 결과 또는 조회하지 않았음을 뜻하는 None."
+    initialized = "이번 호출에서 편집기를 새로 표시했는지 여부."
     palette = "새 프로젝트의 UI 팔레트. 원형: /backend/project_state/activeProject._state.appearance.uiPalette."
     """
     Args:
     - event:
       반영된 PROJECT_COMMANDS의 이름.
+    - payload:
+      반영한 명령의 인자 딕셔너리. operation과 targetSlotId는 이 명령에서 정의한 경우에만 사용한다.
     - result:
       이번 명령 결과. 원형: /backend/project_efsm/ProjectMutationResult.
     - before, current:
@@ -285,27 +296,43 @@ def refreshCommittedUi(event, result, before, current, showSelectedEditor):
 
     처리:
         1. PROJECT_LOADED이면 dispatchProjectQuery("project-api", {operation: "appearance.readPalette"})의 결과를 palette에 둔다.
-           renderer.applyUiPalette(palette)로 CSS 색상을 적용한다. uiDisplay가 연결되어 있으면 uiDisplay.palette(palette),
-           projectName(), assetTree(), slotConnections(), csvOptions(), selection(current)을 호출한다. 이 분기를 종료한다.
-        2. uiDisplay가 None이면 종료한다. result["changed"]를 changed에 둔다.
-        3. 슬롯 선택이나 workspace가 달라지면 selection(current)을 호출한다.
-           슬롯 선택과 workspace가 유지되면 자산 종류·경로가 달라졌을 때 assetSelection(current), 객체 순번이 달라졌을 때
-           graphObject(current), 열린 창이 달라졌을 때 overlay(current["overlay"])를 호출한다.
-        4. PROJECT_NAME_CHANGED이면 projectName()을 호출한다.
-           자산 생성·제거·이동, 디렉터리 생성·이동·휴지통 비우기, changed["assetReferenceChanges"]에 항목이 있는 경우,
-           또는 changed["csvIds"]에 항목이 있는 경우 assetTree()를 한 번 호출한다. CSV 교체·가져오기·헤더 변경 후 트리의 행 수도 이때 읽는다.
-           CSV 목록의 id·이름·경로가 바뀌었으면 csvOptions()를 호출한다.
-        5. 슬롯 교환·병합·분할·그리드 변경으로 연결 행의 배치가 달라지거나, 슬롯·그래프의 자산 연결 또는 연결 자산의 이름·경로가 달라지면 slotConnections()를 호출한다.
-           참조 총수가 같은 슬롯 교환도 해당한다.
-           3번에서 새 편집기를 구성했으면 그 표시를 사용한다. 같은 편집기를 유지하면 changed의 비어 있지 않은 csvIds를 csv에 전달한다.
-           같은 편집기를 유지하고 showSelectedEditor가 참이면 비어 있지 않은 slotIds·chartIds·imageIds를 각각 slot·graph·image에 전달한다.
-           csv는 현재 CSV의 헤더·행 수와 해당 CSV를 쓰는 열 입력 및 열린 표에 적용한다.
-           graph는 명령에 따라 객체 목록·입력, 축·제목, 팔레트 중 바뀐 부분을 갱신하도록 event도 전달한다.
-        6. GRID_LAYOUT_CHANGED·LAYOUT_STYLE_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED이면 layout()을 호출한다.
+           renderer.applyUiPalette(palette)로 CSS 색상을 적용한다. uiDisplay가 연결되어 있으면
+           uiDisplay.palette(palette), projectName(), assetTree(), slotConnections() 순으로 호출하고
+           csvOptions()의 반환 배열을 selection(current, csvOptions, force=True)에 전달한다. 이 분기를 종료한다.
+        2. uiDisplay가 None이면 종료한다. result["changed"]를 changed에, payload.get("operation")을 operation에 둔다.
+           tree, connections, options를 모두 False로 둔다.
+        3. changed["assets"]의 각 항목에서 role이 created/deleted/moved이거나
+           role=imported이고 replaced=False이면 tree=True로 둔다. 같은 조건이고 kind가 csv이면
+           options=True로 둔다. role=updated 또는 role=imported이며 replaced=True인 CSV는
+           tree=True만 둔다. changed["linkedAssetMovesOrRemovals"]에 항목이 있으면 connections=True로 둔다.
+        4. event가 GRID_LAYOUT_CHANGED, SLOTS_MERGED, SLOTS_SPLIT, SLOTS_SWAPPED, SLOT_TYPE_CHANGED,
+           SLOTS_RESET, SLOT_IMAGE_LINKED, SLOT_DATA_CONNECTED, SLOT_IMAGE_IMPORTED, SLOT_CHART_IMPORTED,
+           CHART_MODEL_REPLACED 중 하나이면 connections=True로 둔다.
+           ASSETS_IMPORTED이고 payload.get("targetSlotId")가 None이 아니어도 connections=True로 둔다.
+           changed["targetSlotReferencesChanged"]가 True이거나 SLOT_DATA_CONNECTED이면 tree=True로 둔다.
+        5. GRAPH_OBJECTS_REPLACED이면 operation이 graphs.addObject/graphs.deleteObject일 때 tree와
+           connections를 True로 둔다. graphs.moveObject는 connections만 True로 둔다.
+           graphs.setObjectValues는 changed["graphObjectCsvChanged"]가 True일 때만 tree와 connections를 True로 둔다.
+           graphs.applyPalette와 CHART_LAYOUT_CHANGED는 이 세 플래그를 설정하지 않는다.
+        6. PROJECT_NAME_CHANGED이면 projectName()을 호출한다. tree, connections, options 각각이 True일 때
+           assetTree(), slotConnections(), csvOptions()를 이 순서대로 한 번 호출한다.
+           csvOptions의 반환 배열은 이 호출의 csvOptions에 둔다. options=False이면 이 변수는 None이다.
+        7. showSelectedEditor가 False이면 9번으로 간다. initialized를 False로 둔다.
+           before/current의 selectedSlotId 또는 workspace가 다르면 selection(current,csvOptions)의 반환값을
+           initialized에 둔다. 같고 current["selectedSlotId"]가 changed["slotIds"]에 있으면
+           slot(current,csvOptions,event)의 반환값을 initialized에 둔다.
+        8. 7번에서 selection을 호출했거나 initialized가 참이면 아래 선택 표시를 반복하지 않는다. 그 외에는
+           before/current의 assetSelection 또는 assetPath가 다르면 assetSelection(current), graphObjectIndex가
+           다르면 graphObject(current), overlay가 다르면 overlay(current["overlay"])를 호출한다.
+           initialized가 거짓일 때만 다음 편집기 갱신을 수행한다.
+           비어 있지 않은 chartIds와 event·operation·removedObjectChartIds·appendedObjectChartIds를 graph에,
+           비어 있지 않은 imageIds를 image에, 비어 있지 않은 csvIds를 csv에 전달한다.
+           각 함수는 현재 표시 대상 id의 포함 여부를 검사한다.
+        9. GRID_LAYOUT_CHANGED·LAYOUT_STYLE_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED이면 layout()을 호출한다.
            LABEL_SETTINGS_CHANGED·LABEL_POSITION_CHANGED이면 labels(event), CAPTION_TEXT_INPUT·SLOT_CAPTIONS_INSERTED·
            CAPTION_SETTINGS_CHANGED이면 captions(event, changed["slotIds"])를 호출한다.
-           EXPORT_SETTINGS_CHANGED이면 printSettings()를 호출한다. UI 팔레트 적용과 반환은 setAppearanceApiPalette에서 처리한다.
-        7. 같은 요소의 같은 표시값이 여러 조건을 충족하면 이 호출에서 한 번 읽는다.
+           EXPORT_SETTINGS_CHANGED이면 printSettings()를 호출한다. APPEARANCE_CHANGED의 UI 팔레트 적용은
+           setAppearanceApiPalette에서 처리한다. 이 단계를 마치고 반환한다.
            표시 오류가 발생해도 이미 완료한 프로젝트 반영은 유지한다.
     """
 

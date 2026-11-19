@@ -68,41 +68,31 @@ RENDERER_HOSTS = {
 }
 
 
-uiTelemetryState = {
-    "revision": "telemetry projection revision",
-    "status": "사용자에게 표시하는 최신 status text",
-    "debugEnabled": "debug runtime authority를 UI에 투영한 boolean",
-    "debugLines": "현재 session debug log line projection",
-}
+statusText = ""  # 현재 세션의 최신 상태 문자열.
+debugEnabled = False  # 현재 세션의 디버그 기록 활성 여부.
+debugLines = []  # 최근 500개 로그 문자열을 발생 순서대로 보관.
+debugSequence = 0  # 마지막으로 부여한 로그 순번.
+statusDisplay = None  # 현재 mount의 표시 setter 세 개 또는 None.
 
 
-debugEnabled = '현재 세션의 debug 기록 활성 여부인 논리값.'
-
-
-
-
-
-def publishUiTelemetry(patch):
-    telemetry = "UI telemetry 딕셔너리."
+def setStatusDisplay(display):
     """
     Args:
-    - patch:
-      telemetry의 이번 변경 필드 딕셔너리.
+    - display:
+      /frontend/mantine_ui/bindUiDisplay가 반환한 statusDisplay 또는 None.
 
     Return:
-    - telemetry:
-      UI telemetry 딕셔너리.
-      revision이 증가한 새 immutable telemetry projection.
+    - 없음.
 
     변경:
-    - uiTelemetryState와 표시 revision. 등록된 표시 구독자에게 알린다.
+    - renderer의 statusDisplay. 연결하는 경우 현재 mount의 세 표시값.
 
     처리:
-        1. patch의 명시된 필드만 uiTelemetryState의 같은 필드에 반영한다. 생략된 필드는 유지한다.
-        2. telemetry revision을 한 번 증가시키고 변경 후 읽기 전용 telemetry를 구성한다.
-        3. 등록된 표시 구독자에게 알린 뒤 telemetry를 반환한다.
+        1. display를 statusDisplay에 대입한다. None이면 반환한다.
+        2. display["statusText"](statusText), display["debugEnabled"](debugEnabled),
+           display["debugLines"](debugLines의 분리된 읽기 전용 배열)을 순서대로 호출한다.
+           세 값의 Source of Truth는 이 모듈의 동명 세션 값이다. 프로젝트 값은 읽지 않는다.
     """
-    return telemetry
 
 
 def readDebugEnabled():
@@ -139,13 +129,14 @@ def setDebugEnabled(enabled):
       최종 debugEnabled
 
     변경:
-    - Frontend runtime debugEnabled와 UI telemetry projection.
+    - Frontend runtime debugEnabled와 현재 mount의 토글 표시값.
 
     처리:
-        1. 입력을 boolean 의미로 정규화해 debugEnabled에 먼저 반영하고 그 실제 값을 projection으로 즉시 publish한다.
-           명시 bool 설정 계약을 유지하며 UI projection을 현재 runtime 값 대신 읽지 않는다.
-           publish 오류는 전파하고 이미 수행한 runtime 변경을 숨은 rollback으로 되돌리거나 성공으로 위장하지 않는다.
-           enabledResult를 반환한다.
+        1. enabled가 논리값 True이면 True, 그 외에는 False를 enabledResult에 대입한다.
+           enabledResult를 이 모듈의 debugEnabled에 대입한다.
+        2. statusDisplay가 None이 아니면 statusDisplay["debugEnabled"](enabledResult)를 호출한다.
+           표시 오류는 전파하며 debugEnabled를 되돌리지 않는다.
+        3. enabledResult를 반환한다.
     """
     return enabledResult
 
@@ -163,14 +154,81 @@ def status(message):
       표시한 status 문자열.
 
     변경:
-    - uiTelemetryState의 status와 표시 revision.
+    - renderer의 statusText와 현재 mount의 상태 문자열 표시.
 
     처리:
-        1. message 문자열을 text에 둔다.
-        2. publishUiTelemetry({"status": text})로 최신 상태 표시를 발행한다.
+        1. message가 None이면 빈 문자열, 그 외에는 message의 문자열 표현을 text에 둔다.
+           text를 이 모듈의 statusText에 대입한다.
+        2. statusDisplay가 None이 아니면 statusDisplay["statusText"](text)를 호출한다.
         3. text를 반환한다.
     """
     return text
+
+
+_DEBUG_DATA_OMITTED = object()
+
+
+def debugLog(event, data=_DEBUG_DATA_OMITTED, level="debug"):
+    """
+    Args:
+    - event, data, level:
+      호출자가 넘긴 로그 이름, 기록할 값, 로그 수준 문자열. data 생략이면 빈 딕셔너리, 명시적인 None은 JSON null이다.
+
+    Return:
+    - 없음.
+
+    변경:
+    - 활성 상태에서 renderer의 debugSequence, debugLines, 콘솔 및 현재 mount의 로그 표시.
+
+    처리:
+        1. 이 모듈의 debugEnabled가 False이면 반환한다.
+        2. data가 _DEBUG_DATA_OMITTED이면 빈 딕셔너리를 사용한다. data가 오류이면 name/message/stack을 담는다.
+           그 외에는 JSON 직렬화 가능한 분리 값을 만든다.
+           직렬화 실패 시 serializationError에 오류 메시지, value에 data의 문자열 표현을 담는다.
+        3. debugSequence를 1 증가시킨다. 순번(최소 네 자리, 0 채움), UTC 시각(HH:mm:ss.SSS),
+           대문자 level, event, 직렬화한 data를 공백으로 이어 한 줄을 만든다.
+           level에 맞는 콘솔 함수 또는 기본 debug 함수에 "[chart-builder]", event, 분리 값을 순서대로 전달한다.
+        4. 기존 debugLines 뒤에 이 줄을 추가하고 마지막 500줄을 debugLines에 대입한다.
+           statusDisplay가 None이 아니면 statusDisplay["debugLines"]에 그 배열의 분리된 읽기 전용 복사본을 전달한다.
+    """
+
+
+def clearDebugOutput():
+    """
+    Args:
+    - 없음.
+
+    Return:
+    - 없음.
+
+    변경:
+    - renderer의 debugSequence와 debugLines 및 현재 mount의 로그 표시.
+
+    처리:
+        1. debugSequence에 0, debugLines에 빈 배열을 대입한다. debugEnabled는 유지한다.
+        2. statusDisplay가 None이 아니면 statusDisplay["debugLines"]에 빈 읽기 전용 배열을 전달한다.
+    """
+
+
+def saveDebugOutput():
+    """
+    Args:
+    - 없음.
+
+    Return:
+    - 없음.
+
+    변경:
+    - 디버그 감사 및 다운로드 작업. 디버그가 활성일 때 debugLog의 세션 로그 변경을 포함한다.
+
+    처리:
+        1. auditApp("debug:save")를 호출한다. {build: APP_BUILD, userAgent: navigator.userAgent,
+           location: location.href}를 data에 두고 debugLog("debugLog:save", data)를 호출한다.
+        2. 이 모듈의 debugLines를 줄바꿈으로 연결한다. UI 표시 배열을 읽지 않는다.
+        3. UTF-8 text/plain Blob과 임시 URL을 만든다. 현재 UTC ISO 시각의 ':'와 '.'을 '-'로 바꾼
+           문자열을 stamp에 넣고 chart-builder-debug-{stamp}.log 이름으로 다운로드를 요청한다.
+           다운로드 클릭 후 setTimeout의 0ms callback에서 임시 URL을 해제한다.
+    """
 
 
 
@@ -296,7 +354,12 @@ def presentSlotContent(slot, interfaceState, geometry):
     - 그 슬롯의 graph/image surface와 슬롯별 비동기 작업.
 
     처리:
-        1. 현재 slot id의 host·종류·chart/image 소유 연결을 확인한다. 연결이 바뀌었으면 이전 자원을 정리한다. 같은 연결이면 기존 surface를 사용한다.
+        1. 이번 틀에서 slot.id의 content host를 찾고, slot의 contentType과 graph의 chart id 또는
+           image의 image id를 읽는다. 연결 id가 없으면 None을 사용한다.
+           현재 workspace의 slot.id별 자원 기록에서 이전 surface를 찾는다. 이전 surface가 있고
+           host DOM 인스턴스, contentType, 연결 id가 각각 같으면 surface를 재사용한다.
+           하나라도 다르면 이전 surface가 소유한 자원만 해제한다. 빈 슬롯이면 새 surface를
+           만들지 않고, 내용이 있으면 이번 세 값으로 새 surface를 해당 슬롯 기록에 둔다.
         2. 이 슬롯의 작업 순번을 한 번 증가시켜 operation에 둔다. 같은 host의 기존 pending 뒤에 이번 작업을 연결한다. 다른 슬롯의 작업 순번과 pending은 변경하지 않는다.
         3. 실행 직전과 완료 시 슬롯 작업 순번·workspace 수명·host 연결·slot/chart/image 식별값을 확인한다. 교체되었거나 더 최신 같은 슬롯 작업이 있으면 결과를 버리고 이 작업의 임시 자원만 해제한다.
         4. graph이면 supplied figure만 현재 host의 Plotly 내용 갱신에 전달한다. Backend CSV/figure를 Frontend에서 다시 계산하지 않는다. 실제 내용 렌더링의 새 기준 너비·높이를 surface에 둔다.

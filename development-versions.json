@@ -9,13 +9,13 @@
   "authority_rule": "Source Script is the highest semantic authority. pseudocode (implemented in PlusCal) is the complete language-neutral translation layer. The optional verification model derives from pseudocode, and any TLC result is recorded separately without gating source code implementation or current status.",
   "layers": {
     "source-script": {
-      "revision": 59,
+      "revision": 60,
       "status": "current",
       "path_rule": "sourcescript/**/*.py + sourcescript/backend/settings.json",
-      "fingerprint": "sha256:3335b8e5832a22a65adc359a594a6e8bfd0877c60e59b5868354d1c0fc37b618",
+      "fingerprint": "sha256:50ad732dcd16a4780da1c65b488c0d12745b5b4e71079365dd630e04c1d571a0",
       "derived_from": null,
-      "closure": "open",
-      "closure_review": null
+      "closure": "closed",
+      "closure_review": "agent_space/reviews/review-20261119-014-plan048-source-script-closure.md"
     },
     "verification-model": {
       "revision": 26,

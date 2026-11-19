@@ -356,8 +356,8 @@ def moveProjectNode(plan, useUniqueName):
            collectAssetReferences로 구해 같은 candidate에서 해제한다. 휴지통 밖 이동은 경로를 옮긴다.
         3. Backend가 candidate 전체를 검증하고 한 번 반영한 명령 결과를 result에 둔다.
            실제 해제된 참조 수와 graph index 대응은 같은 명령의 ProjectMutationResult에 포함한다.
-        4. result["committed"]가 False이면 None을 반환한다. result["changed"]에 기록된
-           실제 최종 canonical 목적 경로를 path에 둔다.
+        4. result["committed"]가 False이면 None을 반환한다. result["changed"]["assets"]의 role=moved, oldPath=plan의 canonical source 경로인
+           한 항목에서 path를 읽는다. 첫 자손 항목을 이동 루트로 취급하지 않는다.
         5. assets.isTrashed 공식 조회에 path를 전달한 논리값을 trashed에 둔다.
         6. path와 trashed로 outcome을 구성하고 분리된 읽기 결과로 반환한다. 조회·명령 오류를 전파한다.
     """
@@ -411,7 +411,7 @@ def createProjectDirectory(parent, name):
     처리:
         1. parent와 name을 PROJECT_DIRECTORY_CREATED에 전달한다. Backend가 현재 부모와 이름·충돌을
            검사하고 디렉터리 candidate를 검증하여 한 번 반영한 명령 결과를 result에 둔다.
-        2. result["committed"]가 False이면 None을 반환한다. result["changed"]의 실제 생성 경로를 path에 둔다.
+        2. result["committed"]가 False이면 None을 반환한다. result["changed"]["assets"]의 role=created, kind=directory인 한 항목의 path를 사용한다.
         3. dispatchInterfaceEvent에 SELECT_ASSET과 kind=directory, path를 전달한다.
            Backend 참조 검증을 통과하면 그 경로를 선택하고, 거부되면 이전 선택을 유지한다.
         4. path를 outcome에 두고 반환한다. 생성 성공 경로는 뒤의 선택 거부에도 유지한다.
@@ -481,14 +481,17 @@ def importProjectFileToSlot(file, slotId, planImport):
     - raw CSV/image asset과 target slot/chart candidate.
 
     처리:
-        1. explicit visible slotId를 current query로 검증한 뒤 공식 fileKind를 읽는다. slot이면 collision choice 없이
-           importSelectedGraphFile(slotId, file)의 FFSX 경로로 반환하고, unknown이면 command 없이 오류를 전파한다.
-           data/image만 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
-           취소면 command 없이 None을 반환한다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
-           current asset와 target slot/chart를 한 candidate로 만든다. asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
-
-        2. target slot은 공식 query로 먼저 검증한다. data/image 파일의 chooser directory는 Backend PROJECT_ASSET_DIRECTORIES의 kind별 root다. planImport(file,directory,reservedPaths=empty)를 한 번 기다리며 완료된 path/replaceId만 command로 보낸다. slot package는 별도 FFSX 경로이므로 collision chooser를 호출하지 않는다. cancel은 command 전에 None을 반환한다. chooser는 Application/UI에서 공식 collision/resolve query를 사용한다. 이후 command는 final plan을 current candidate에서 재검증하며 slot의 directory나 current asset selection/파일의 local filesystem path를 새 authority로 만들지 않는다.
-        3. asset를 반환한다.
+        1. 공식 조회로 explicit visible slotId를 검증한다. 0은 유효하다. 공식 fileKind가 slot이면
+           collision choice 없이 importSelectedGraphFile(slotId, file)의 FFSX 결과를 반환한다.
+           unknown이면 명령을 실행하지 않고 오류를 전파한다.
+        2. data/image의 directory는 Backend PROJECT_ASSET_DIRECTORIES의 종류별 root다.
+           importProjectFilesToDirectory와 같은 방식으로 파일 입력을 분리 복사하고,
+           planImport(file,directory,reservedPaths=empty)를 한 번 기다린다. 취소면 None을 반환한다.
+        3. dispatchProjectCommand("ASSETS_IMPORTED", {files: [복사한 파일], directory,
+           choices: [{path, replaceId}], targetSlotId: slotId})를 한 번 호출한다.
+           Backend가 현재 경로·충돌·대상 슬롯을 재검증하고 자산과 슬롯 연결을 한 후보로 반영한다.
+           미반영이면 result를 그대로 반환한다. 반영이면 result["changed"]["assets"][0]["path"]로
+           assets.readDeletionTarget을 조회하여 그 target을 반환한다.
     """
     return asset
 

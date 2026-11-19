@@ -1,0 +1,961 @@
+diff --git a/sourcescript/application/adapter.py b/sourcescript/application/adapter.py
+index b2925c5..a52d1e7 100644
+--- a/sourcescript/application/adapter.py
++++ b/sourcescript/application/adapter.py
+@@ -239,37 +239,48 @@ def dispatchProjectCommand(event, payload, showSelectedEditor=True):
+            interfaceFSM.reconcileProjectResult(reconciliationInput)의 결과를 interfaceState에 둔다.
+         4. PROJECT_LOADED이면 renderer.clearWorkspacePresentation()으로 이전 workspace 자원을 정리한다.
+            workspace-structure 조회를 renderer.applyWorkspaceTransform에 전달해 새 빈 틀과 선택 장식만 준비한다.
+-           이 구조 조회를 rendererProjection에 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, True)를 호출한다.
++           이 구조 조회를 rendererProjection에 둔다.
++           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, True)를 호출한다.
+            전체 내용은 렌더링 버튼에서 표시한다.
+            (result, interfaceState, rendererProjection)을 반환한다.
+         5. GRID_LAYOUT_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED·LAYOUT_STYLE_CHANGED이면
+            workspace-structure를 조회한다. 사라진 소유 연결만 정리하고 유지되는 내용은 CSS로 이동·확대·축소한다.
+            틀이 안전하게 호환되지 않으면 전체 렌더링 필요를 안내한다.
+-           rendererProjection에 이 구조 조회를 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
++           rendererProjection에 이 구조 조회를 둔다.
++           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
+            (result, interfaceState, rendererProjection)을 반환한다.
+         6. reconciliationInput["projectionEffect"]의 pathOnly가 참이고 referencesRemoved가 거짓이면 구조·참조 정리만 수행한다.
+            EXPORT_SETTINGS_CHANGED는 파일 출력 설정만 변경하므로 workspace 내용 갱신을 생략한다.
+            이 두 경우에는 workspace-structure 조회를 rendererProjection에 두고
+-           refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
++           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
+            (result, interfaceState, rendererProjection)을 반환한다.
+            그 외에는 selected-slot을 조회한다. 선택 None이면 구조 조회로 바꾸고 내용 계산을 생략한다.
+            renderer.applyDashboardProjectionInvalidation에 event, result, interfaceState, 조회 결과를 한 번 전달한다.
+            전체 palette/CSV/labels/captions 변경의 다른 슬롯 표시는 전체 렌더링 버튼에서 반영한다.
+            전역 dashboard caption도 전체 버튼에서 갱신한다. Sidebar의 공식 값 읽기는 계속 허용한다.
+-        7. rendererProjection에 이번 조회 결과를 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고 튜플을 반환한다.
++        7. rendererProjection에 이번 조회 결과를 둔다.
++           refreshCommittedUi(event, payload, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고 튜플을 반환한다.
+            wrapper는 이 명령의 표시 작업을 중복 실행하지 않는다.
+            조회·표시 오류는 원래 실패로 전달하며 이미 완료한 commit은 유지한다.
+     """
+     return result, interfaceState, rendererProjection
+ 
+ 
+-def refreshCommittedUi(event, result, before, current, showSelectedEditor):
+-    changed = "이번 명령의 반영 전후 차이. 원형: /backend/project_efsm/ProjectMutationResult의 changed."
++def refreshCommittedUi(event, payload, result, before, current, showSelectedEditor):
++    changed = "이번 명령의 반영 사실. 원형: /backend/project_efsm/ProjectMutationResult의 changed."
++    operation = "이번 명령의 operation 또는 None."
++    tree = "이번 명령에서 자산 트리를 읽을지 여부."
++    connections = "이번 명령에서 슬롯 연결 행을 읽을지 여부."
++    options = "이번 명령에서 CSV 옵션을 읽을지 여부."
++    csvOptions = "이번 호출의 assets.readList('csv') 결과 또는 조회하지 않았음을 뜻하는 None."
++    initialized = "이번 호출에서 편집기를 새로 표시했는지 여부."
+     palette = "새 프로젝트의 UI 팔레트. 원형: /backend/project_state/activeProject._state.appearance.uiPalette."
+     """
+     Args:
+     - event:
+       반영된 PROJECT_COMMANDS의 이름.
++    - payload:
++      반영한 명령의 인자 딕셔너리. operation과 targetSlotId는 이 명령에서 정의한 경우에만 사용한다.
+     - result:
+       이번 명령 결과. 원형: /backend/project_efsm/ProjectMutationResult.
+     - before, current:
+@@ -285,27 +296,43 @@ def refreshCommittedUi(event, result, before, current, showSelectedEditor):
+ 
+     처리:
+         1. PROJECT_LOADED이면 dispatchProjectQuery("project-api", {operation: "appearance.readPalette"})의 결과를 palette에 둔다.
+-           renderer.applyUiPalette(palette)로 CSS 색상을 적용한다. uiDisplay가 연결되어 있으면 uiDisplay.palette(palette),
+-           projectName(), assetTree(), slotConnections(), csvOptions(), selection(current)을 호출한다. 이 분기를 종료한다.
+-        2. uiDisplay가 None이면 종료한다. result["changed"]를 changed에 둔다.
+-        3. 슬롯 선택이나 workspace가 달라지면 selection(current)을 호출한다.
+-           슬롯 선택과 workspace가 유지되면 자산 종류·경로가 달라졌을 때 assetSelection(current), 객체 순번이 달라졌을 때
+-           graphObject(current), 열린 창이 달라졌을 때 overlay(current["overlay"])를 호출한다.
+-        4. PROJECT_NAME_CHANGED이면 projectName()을 호출한다.
+-           자산 생성·제거·이동, 디렉터리 생성·이동·휴지통 비우기, changed["assetReferenceChanges"]에 항목이 있는 경우,
+-           또는 changed["csvIds"]에 항목이 있는 경우 assetTree()를 한 번 호출한다. CSV 교체·가져오기·헤더 변경 후 트리의 행 수도 이때 읽는다.
+-           CSV 목록의 id·이름·경로가 바뀌었으면 csvOptions()를 호출한다.
+-        5. 슬롯 교환·병합·분할·그리드 변경으로 연결 행의 배치가 달라지거나, 슬롯·그래프의 자산 연결 또는 연결 자산의 이름·경로가 달라지면 slotConnections()를 호출한다.
+-           참조 총수가 같은 슬롯 교환도 해당한다.
+-           3번에서 새 편집기를 구성했으면 그 표시를 사용한다. 같은 편집기를 유지하면 changed의 비어 있지 않은 csvIds를 csv에 전달한다.
+-           같은 편집기를 유지하고 showSelectedEditor가 참이면 비어 있지 않은 slotIds·chartIds·imageIds를 각각 slot·graph·image에 전달한다.
+-           csv는 현재 CSV의 헤더·행 수와 해당 CSV를 쓰는 열 입력 및 열린 표에 적용한다.
+-           graph는 명령에 따라 객체 목록·입력, 축·제목, 팔레트 중 바뀐 부분을 갱신하도록 event도 전달한다.
+-        6. GRID_LAYOUT_CHANGED·LAYOUT_STYLE_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED이면 layout()을 호출한다.
++           renderer.applyUiPalette(palette)로 CSS 색상을 적용한다. uiDisplay가 연결되어 있으면
++           uiDisplay.palette(palette), projectName(), assetTree(), slotConnections() 순으로 호출하고
++           csvOptions()의 반환 배열을 selection(current, csvOptions, force=True)에 전달한다. 이 분기를 종료한다.
++        2. uiDisplay가 None이면 종료한다. result["changed"]를 changed에, payload.get("operation")을 operation에 둔다.
++           tree, connections, options를 모두 False로 둔다.
++        3. changed["assets"]의 각 항목에서 role이 created/deleted/moved이거나
++           role=imported이고 replaced=False이면 tree=True로 둔다. 같은 조건이고 kind가 csv이면
++           options=True로 둔다. role=updated 또는 role=imported이며 replaced=True인 CSV는
++           tree=True만 둔다. changed["linkedAssetMovesOrRemovals"]에 항목이 있으면 connections=True로 둔다.
++        4. event가 GRID_LAYOUT_CHANGED, SLOTS_MERGED, SLOTS_SPLIT, SLOTS_SWAPPED, SLOT_TYPE_CHANGED,
++           SLOTS_RESET, SLOT_IMAGE_LINKED, SLOT_DATA_CONNECTED, SLOT_IMAGE_IMPORTED, SLOT_CHART_IMPORTED,
++           CHART_MODEL_REPLACED 중 하나이면 connections=True로 둔다.
++           ASSETS_IMPORTED이고 payload.get("targetSlotId")가 None이 아니어도 connections=True로 둔다.
++           changed["targetSlotReferencesChanged"]가 True이거나 SLOT_DATA_CONNECTED이면 tree=True로 둔다.
++        5. GRAPH_OBJECTS_REPLACED이면 operation이 graphs.addObject/graphs.deleteObject일 때 tree와
++           connections를 True로 둔다. graphs.moveObject는 connections만 True로 둔다.
++           graphs.setObjectValues는 changed["graphObjectCsvChanged"]가 True일 때만 tree와 connections를 True로 둔다.
++           graphs.applyPalette와 CHART_LAYOUT_CHANGED는 이 세 플래그를 설정하지 않는다.
++        6. PROJECT_NAME_CHANGED이면 projectName()을 호출한다. tree, connections, options 각각이 True일 때
++           assetTree(), slotConnections(), csvOptions()를 이 순서대로 한 번 호출한다.
++           csvOptions의 반환 배열은 이 호출의 csvOptions에 둔다. options=False이면 이 변수는 None이다.
++        7. showSelectedEditor가 False이면 9번으로 간다. initialized를 False로 둔다.
++           before/current의 selectedSlotId 또는 workspace가 다르면 selection(current,csvOptions)의 반환값을
++           initialized에 둔다. 같고 current["selectedSlotId"]가 changed["slotIds"]에 있으면
++           slot(current,csvOptions,event)의 반환값을 initialized에 둔다.
++        8. 7번에서 selection을 호출했거나 initialized가 참이면 아래 선택 표시를 반복하지 않는다. 그 외에는
++           before/current의 assetSelection 또는 assetPath가 다르면 assetSelection(current), graphObjectIndex가
++           다르면 graphObject(current), overlay가 다르면 overlay(current["overlay"])를 호출한다.
++           initialized가 거짓일 때만 다음 편집기 갱신을 수행한다.
++           비어 있지 않은 chartIds와 event·operation·removedObjectChartIds·appendedObjectChartIds를 graph에,
++           비어 있지 않은 imageIds를 image에, 비어 있지 않은 csvIds를 csv에 전달한다.
++           각 함수는 현재 표시 대상 id의 포함 여부를 검사한다.
++        9. GRID_LAYOUT_CHANGED·LAYOUT_STYLE_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED이면 layout()을 호출한다.
+            LABEL_SETTINGS_CHANGED·LABEL_POSITION_CHANGED이면 labels(event), CAPTION_TEXT_INPUT·SLOT_CAPTIONS_INSERTED·
+            CAPTION_SETTINGS_CHANGED이면 captions(event, changed["slotIds"])를 호출한다.
+-           EXPORT_SETTINGS_CHANGED이면 printSettings()를 호출한다. UI 팔레트 적용과 반환은 setAppearanceApiPalette에서 처리한다.
+-        7. 같은 요소의 같은 표시값이 여러 조건을 충족하면 이 호출에서 한 번 읽는다.
++           EXPORT_SETTINGS_CHANGED이면 printSettings()를 호출한다. APPEARANCE_CHANGED의 UI 팔레트 적용은
++           setAppearanceApiPalette에서 처리한다. 이 단계를 마치고 반환한다.
+            표시 오류가 발생해도 이미 완료한 프로젝트 반영은 유지한다.
+     """
+ 
+diff --git a/sourcescript/application/public_api/assets.py b/sourcescript/application/public_api/assets.py
+index 48f51f0..59cb21f 100644
+--- a/sourcescript/application/public_api/assets.py
++++ b/sourcescript/application/public_api/assets.py
+@@ -356,8 +356,8 @@ def moveProjectNode(plan, useUniqueName):
+            collectAssetReferences로 구해 같은 candidate에서 해제한다. 휴지통 밖 이동은 경로를 옮긴다.
+         3. Backend가 candidate 전체를 검증하고 한 번 반영한 명령 결과를 result에 둔다.
+            실제 해제된 참조 수와 graph index 대응은 같은 명령의 ProjectMutationResult에 포함한다.
+-        4. result["committed"]가 False이면 None을 반환한다. result["changed"]에 기록된
+-           실제 최종 canonical 목적 경로를 path에 둔다.
++        4. result["committed"]가 False이면 None을 반환한다. result["changed"]["assets"]의 role=moved, oldPath=plan의 canonical source 경로인
++           한 항목에서 path를 읽는다. 첫 자손 항목을 이동 루트로 취급하지 않는다.
+         5. assets.isTrashed 공식 조회에 path를 전달한 논리값을 trashed에 둔다.
+         6. path와 trashed로 outcome을 구성하고 분리된 읽기 결과로 반환한다. 조회·명령 오류를 전파한다.
+     """
+@@ -411,7 +411,7 @@ def createProjectDirectory(parent, name):
+     처리:
+         1. parent와 name을 PROJECT_DIRECTORY_CREATED에 전달한다. Backend가 현재 부모와 이름·충돌을
+            검사하고 디렉터리 candidate를 검증하여 한 번 반영한 명령 결과를 result에 둔다.
+-        2. result["committed"]가 False이면 None을 반환한다. result["changed"]의 실제 생성 경로를 path에 둔다.
++        2. result["committed"]가 False이면 None을 반환한다. result["changed"]["assets"]의 role=created, kind=directory인 한 항목의 path를 사용한다.
+         3. dispatchInterfaceEvent에 SELECT_ASSET과 kind=directory, path를 전달한다.
+            Backend 참조 검증을 통과하면 그 경로를 선택하고, 거부되면 이전 선택을 유지한다.
+         4. path를 outcome에 두고 반환한다. 생성 성공 경로는 뒤의 선택 거부에도 유지한다.
+@@ -481,14 +481,17 @@ def importProjectFileToSlot(file, slotId, planImport):
+     - raw CSV/image asset과 target slot/chart candidate.
+ 
+     처리:
+-        1. explicit visible slotId를 current query로 검증한 뒤 공식 fileKind를 읽는다. slot이면 collision choice 없이
+-           importSelectedGraphFile(slotId, file)의 FFSX 경로로 반환하고, unknown이면 command 없이 오류를 전파한다.
+-           data/image만 importProjectFilesToDirectory와 같은 pure file input/명시적 collision choice 수집을 수행한다.
+-           취소면 command 없이 None을 반환한다. Backend ASSETS_IMPORTED가 buildProjectAssetImportCandidate의 targetSlotId 경로로
+-           current asset와 target slot/chart를 한 candidate로 만든다. asset 생성과 slot 연결을 별도 commit으로 쪼개지 않는다.
+-
+-        2. target slot은 공식 query로 먼저 검증한다. data/image 파일의 chooser directory는 Backend PROJECT_ASSET_DIRECTORIES의 kind별 root다. planImport(file,directory,reservedPaths=empty)를 한 번 기다리며 완료된 path/replaceId만 command로 보낸다. slot package는 별도 FFSX 경로이므로 collision chooser를 호출하지 않는다. cancel은 command 전에 None을 반환한다. chooser는 Application/UI에서 공식 collision/resolve query를 사용한다. 이후 command는 final plan을 current candidate에서 재검증하며 slot의 directory나 current asset selection/파일의 local filesystem path를 새 authority로 만들지 않는다.
+-        3. asset를 반환한다.
++        1. 공식 조회로 explicit visible slotId를 검증한다. 0은 유효하다. 공식 fileKind가 slot이면
++           collision choice 없이 importSelectedGraphFile(slotId, file)의 FFSX 결과를 반환한다.
++           unknown이면 명령을 실행하지 않고 오류를 전파한다.
++        2. data/image의 directory는 Backend PROJECT_ASSET_DIRECTORIES의 종류별 root다.
++           importProjectFilesToDirectory와 같은 방식으로 파일 입력을 분리 복사하고,
++           planImport(file,directory,reservedPaths=empty)를 한 번 기다린다. 취소면 None을 반환한다.
++        3. dispatchProjectCommand("ASSETS_IMPORTED", {files: [복사한 파일], directory,
++           choices: [{path, replaceId}], targetSlotId: slotId})를 한 번 호출한다.
++           Backend가 현재 경로·충돌·대상 슬롯을 재검증하고 자산과 슬롯 연결을 한 후보로 반영한다.
++           미반영이면 result를 그대로 반환한다. 반영이면 result["changed"]["assets"][0]["path"]로
++           assets.readDeletionTarget을 조회하여 그 target을 반환한다.
+     """
+     return asset
+ 
+diff --git a/sourcescript/backend/assets_files.py b/sourcescript/backend/assets_files.py
+index 6af73f0..7c07030 100644
+--- a/sourcescript/backend/assets_files.py
++++ b/sourcescript/backend/assets_files.py
+@@ -291,7 +291,7 @@ def resolveProjectAssetImportPlan(model, choice, reservedPaths, state=None):
+     return plan
+ 
+ 
+-def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None, state=None):
++def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=None, state=None, assetFacts=None):
+     candidate = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
+     reservedPaths = "이번 작업에서 사용한 canonical 경로 문자열의 집합."
+     plan = "최종 경로 path와 교체 대상 replaceId를 가진 딕셔너리."
+@@ -313,7 +313,7 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+ 
+     - planImport:
+       files와 같은 순서의 확정된 경로 딕셔너리 배열. 각 원소는 canonical path와 replaceId를 담는다.
+-      replaceId는 새 파일이면 None, 교체이면 해당 자산의 양의 정수 id다.
++      replaceId는 새 파일이면 None, 교체이면 해당 자산의 유효 정수 id다.
+ 
+     - targetSlotId:
+       연결할 visible Slot의 정수 id 또는 None.
+@@ -321,6 +321,9 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+     - state:
+       이번 명령의 프로젝트 상태 딕셔너리 또는 None. 원형: /backend/project_state/ProjectObject._state
+ 
++    - assetFacts:
++      이번 시도의 자산 결과 항목 배열 또는 None.
++
+     Return:
+     - candidate:
+       프로젝트 변경 딕셔너리.
+@@ -336,12 +339,12 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+            확정한 path·replaceId를 planImport에 넣고, 취소이면 명령을 호출하기 전에 None을 반환한다.
+            files와 planImport가 비어 있거나 개수가 다르면 거부한다.
+            directory의 canonical 경로와 현재 후보의 디렉터리 존재 여부를 검사한다.
+-           targetSlotId가 있으면 같은 후보에서 visible Slot을 확인한다. 없으면 거부한다.
++           targetSlotId가 None이 아니면 같은 후보에서 visible Slot을 확인하고, 해당 Slot이 없으면 거부한다.
+            파일 파싱·경로·참조·전체 후보 검증 실패는 후보 거부로 전달하고 반영을 수행하지 않는다.
+ 
+         2. reservedPaths를 빈 집합으로 둔다. files를 입력 순서로 처리하며
+            planImport의 같은 순번 원소를 plan에 둔다. 각 plan의 path 문자열과
+-           replaceId의 None 또는 양의 정수 형식을 검사한다.
++           replaceId가 None이거나 boolean이 아닌 양의 정수인지 검사한다.
+            path가 canonical 형식이고 부모가 directory와 같으며 reservedPaths에 없어야 한다.
+            파일 종류는 slotFileKind(file)로 확인하여 data 또는 image를 허용한다.
+            projectVfsResolve(plan["path"],candidate)를 target에 둔다.
+@@ -351,7 +354,10 @@ def buildProjectAssetImportCandidate(files, directory, planImport, targetSlotId=
+            CSV이면 parseProjectDataAsset에 file의 name·bytes를 전달하여 rows에 둔다.
+            plan이 교체이면 종류별 REPLACED를, 생성이면 CREATED를 event에 둔다.
+            plan의 경로·교체 id와 파일의 name·MIME·bytes, CSV의 rows로 input을 구성하고
+-           buildAssetCommandCandidate(event,input,candidate)의 후보를 candidate에 둔다.
++           buildAssetCommandCandidate(event,input,candidate)의 첫 반환값을 candidate에 둔다.
++           후보가 None이면 이 batch를 거부한다. projectVfsResolve(plan["path"],candidate)로 실제 생성·교체된
++           자산을 읽고 assetFacts가 있으면 kind, id, path, role=imported와
++           replaced=(plan["replaceId"] is not None)을 입력 순서로 추가한다.
+            targetSlotId를 명시한 경우에 다음 Slot 연결을 수행한다.
+            resolveVisibleSlot(targetSlotId,candidate)의 결과를 slot에 둔다.
+            slot이 없으면 거부한다. CSV는 projectVfsResolve(plan["path"],candidate)의 target을 csv에 두고
+@@ -389,12 +395,18 @@ def planProjectNodeMove(path, directory, state=None):
+     - 없음.
+ 
+     처리:
+-        1. state가 None이면 activeProject._state를 사용한다. projectVfsResolve(path,state)로 source를 resolve하고 fixed directory이면 move 불가로 판정한다.
+-        2. trash membership 자체는 source move 금지 조건으로 사용하지 않는다.
+-        3. target directory, destination, collision, trash 진입 여부와 reference 상태를 읽어 UI confirmation에 필요한 값을 계산한다.
+-
+-        4. 고정 directory의 유일한 값 원천은 backend.defaults.vfs의 root/csv/image/trash다. 삭제 또는 이동 대상으로 취급하지 않는다.
+-        5. movePlan를 반환한다.
++        1. state가 None이면 activeProject._state를 사용한다. projectVfsResolve(path,state)에서 종류와
++           canonical source 경로를 얻는다. 대상 부재 또는 backend.defaults.vfs의 고정 root/csv/image/trash면 거부한다.
++        2. directory를 canonical 디렉터리 경로로 정규화한다. fileSystem.directories에 없거나,
++           source가 디렉터리이고 directory가 자신 또는 하위 경로이면 거부한다.
++        3. directory에 source basename을 붙여 종류에 맞게 정규화한 값을 destination에 둔다.
++           destination=source이면 None을 반환한다. projectVfsResolve(destination,state)의 존재 여부를
++           collision에 둔다. 충돌이면 projectVfsUniquePath(destination,state,빈 집합)의 basename을,
++           아니면 destination의 basename을 uniqueName으로 사용한다.
++        4. source가 휴지통 밖이고 destination이 휴지통 안이면 enteringTrash=True다. 휴지통 membership만으로
++           이동을 금지하지 않는다. source 또는 그 subtree의 CSV/image id를 모아 collectAssetReferences에
++           전달하고 반환 배열 길이를 확인용 referenceCount에 둔다.
++        5. {path: source, kind, directory, destination, collision, uniqueName, enteringTrash, referenceCount}의 읽기 전용 복사본을 반환한다.
+     """
+     return movePlan
+ 
+@@ -682,7 +694,7 @@ def parseProjectDataAsset(name, bytes):
+ 
+ 
+ def collectAssetReferences(csvIds, imageIds, state):
+-    references = "asset별 참조 count·slot·chart 정보를 가진 딕셔너리."
++    references = "실제 자산 참조를 하나씩 담은 배열."
+     """
+     Args:
+     - csvIds:
+@@ -696,14 +708,16 @@ def collectAssetReferences(csvIds, imageIds, state):
+ 
+     Return:
+     - references:
+-      asset별 참조 count·slot·chart 정보를 가진 딕셔너리.
+-      CSV별 graph-object reference와 image별 slot reference를 실제 object 단위로 나열한 read-only 결과.
++      CSV object별 {kind: csv, assetId, chartId, originalObjectIndex, object},
++      이미지 슬롯별 {kind: image, assetId, slotId, slot}의 배열. 항목은 전달받은 상태의 참조다.
+ 
+     변경:
+     - 없음.
+ 
+     처리:
+-        1. validateChartModel과 같은 representation 판정으로 실제 project object.csvId만 수집한다. 편집을 잠시 끈 일반 chart도 포함한다.
++        1. 각 chart에서 graphs.chartUsesConversionView(chart)가 True이면 건너뛴다.
++           그 외 chart의 editor.objects를 원래 순번으로 순회해 csvId가 csvIds에 속하는 object만 추가한다.
++           전체 Slot을 순회해 content.imageId가 imageIds에 속하는 Slot을 추가한다. 편집을 잠시 끈 일반 chart도 포함한다.
+            non-editable conversion rows/object는 project CSV reference가 아니므로 포함하지 않는다.
+            같은 chart 안에서 같은 실제 CSV를 여러 graph object가 참조하면 각각 별도 reference로 센다.
+            image는 참조하는 slot마다 하나의 reference로 센다.
+@@ -855,10 +869,10 @@ def applyFfsxSlot(slotPayload, targetSlot, state=None):
+     return candidate
+ 
+ 
+-def buildAssetCommandCandidate(event, payload, state):
++def buildAssetCommandCandidate(event, payload, state, assetFacts=None):
+     candidateState = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
+     retainedOriginalIndicesByChart = "chart id를 키로, 유지할 원래 object index 배열을 값으로 가진 딕셔너리."
+-    references = "asset별 graph object·Slot 참조 딕셔너리."
++    references = "실제 graph object·Slot 참조 배열."
+     descendants = "canonical VFS 경로 문자열의 배열."
+     loaded = "ProjectObject 인스턴스. 원형: /backend/project_state/ProjectObject"
+     csvIds = "이번 명령의 CSV id 집합."
+@@ -876,6 +890,9 @@ def buildAssetCommandCandidate(event, payload, state):
+       send가 이번 명령에 분리 복사한 프로젝트 상태 딕셔너리.
+         원형: /backend/project_state/ProjectObject._state
+ 
++    - assetFacts:
++      send가 이번 후보에 만든 빈 배열 또는 None. 이동·raw import 분기가 실제 처리 항목을 추가한다.
++
+     Return:
+     - candidateState, retainedOriginalIndicesByChart:
+       후보 상태와 chart별 원래 index 배열의 쌍. 거부·취소 시 후보 상태는 None이다.
+@@ -898,10 +915,15 @@ def buildAssetCommandCandidate(event, payload, state):
+            부모 directory와 요청 경로의 부재를 확인한다. 검증한 canonical 경로를
+            candidateState["fileSystem"]["directories"]에 한 번 추가한다.
+         5. PROJECT_NODE_MOVED이면 planProjectNodeMove에 path·directory·candidateState를 전달한다.
+-           고정 directory, 부모 부재, 자기 하위로의 이동, 충돌을 검사한다.
+-           최종 경로로 대상의 directory/name과 하위 directory·asset 경로를 바꾼다.
+-           경로의 segment 경계를 사용하며 하위 항목의 상대 경로를 보존한다.
+-           trash 바깥에서 안으로 이동하는 subtree의 CSV/image id를 모은다.
++           계획이 None이면 미반영으로 반환한다. destination을 새 루트로 사용한다.
++           collision=True이면 payload.useUniqueName이 거짓일 때 거부하고, 참이면
++           projectVfsUniquePath(destination,state,빈 집합)을 새 루트로 사용한다.
++           루트와 디렉터리인 경우 그 하위 directory·asset의 기존 canonical 경로를 oldPath에 둔다.
++           oldPath에서 plan.path를 뗀 suffix(루트는 빈 문자열)를 새 루트 뒤에 붙여 path에 둔다.
++           directory에는 directory 경로를, asset에는 path의 부모와 basename을 적용한다.
++           assetFacts가 None이 아니면 이 루프에서 {kind, id, path, oldPath, role: "moved"}를
++           각 변경마다 한 번 추가한다. directory는 id=None이고 CSV/image는 실제 id다.
++           trash 바깥에서 안으로 이동하는 subtree의 CSV/image id를 참조 해제용 집합에 모은다.
+         6. PROJECT_TRASH_EMPTIED이면 projectVfsDescendants(PROJECT_TRASH_DIRECTORY,
+            candidateState)로 descendants를 얻고 그 안의 CSV/image id를 모은다.
+            고정 trash directory를 유지하고 제거할 하위 directory·asset 경로를 descendants에 둔다.
+@@ -916,8 +938,9 @@ def buildAssetCommandCandidate(event, payload, state):
+            image 참조는 해당 Slot.content["imageId"]를 None으로 바꾼다.
+            참조 해제 뒤 삭제 명령과 trash 비우기의 해당 asset을 컬렉션에서 제거한다.
+            trash 비우기는 descendants의 하위 directory도 제거한다.
+-        8. ASSETS_IMPORTED이면 payload의 files·directory·choices·targetSlotId와 candidateState를
+-           buildProjectAssetImportCandidate에 전달한다. 반환한 전체 후보를 candidateState로 둔다.
++        8. ASSETS_IMPORTED이면 payload의 files·directory·choices·선택적 targetSlotId와
++           candidateState·assetFacts를 이 순서로
++           buildProjectAssetImportCandidate에 전달하고 반환한 전체 후보를 candidateState로 둔다.
+            생성 asset과 Slot/chart 연결은 같은 후보에 적용한다.
+         9. DATA_OBJECT_CREATED 또는 IMAGE_OBJECT_CREATED이면 명시한 id의 정수형·중복을 검사한다.
+            id가 생략되거나 None이면 종류별 nextId를 사용하고, nextId는 할당한 id보다 큰 값으로 유지한다. 현재 VFS·부모·예약 경로를 검사하여 최종 canonical 경로를 정한다.
+@@ -934,7 +957,8 @@ def buildAssetCommandCandidate(event, payload, state):
+             명시된 bytes·bytesBase64·MIME만 교체한다. 바이트 입력은 base64 표현으로 저장한다.
+             headerLines가 명시되면 현재 후보 rows 길이로 normalizeCsvHeaderLines를 호출한다.
+             생략한 필드는 기존 값을 유지한다.
+-            IMAGE_OBJECT_REPLACED이면 현재 image의 id·경로를 유지하고 명시한 bytes·MIME을 교체한다.
++            별도로 IMAGE_OBJECT_REPLACED이면 현재 image의 id·경로를 유지하고 명시한 bytes·MIME을 교체한다.
++            raw import의 CSV/image REPLACED 입력에는 검증한 기존 id를, CREATED 입력에는 canonical path를 넣는다.
+         11. CSV 생성·교체에서는 해당 id를 csvIds에 둔다. 실제 object의 csvId가 csvIds에
+             속하거나 7번에서 object가 제거된 chart는 같은 candidateState를 project 인자로
+             graphs.rebuildEditableGraph에 전달한다. 반환 chart를 candidateState의 같은 chart id에 넣는다.
+diff --git a/sourcescript/backend/graphs.py b/sourcescript/backend/graphs.py
+index 9c1852b..ebaad57 100644
+--- a/sourcescript/backend/graphs.py
++++ b/sourcescript/backend/graphs.py
+@@ -8,6 +8,12 @@ Python 문법으로 작성한 구현 명세다.
+ from sourcescript.backend.project_state import activeProject, getProjectCsv, getChart
+ 
+ 
++def chartUsesConversionView(chart):
++    """editor의 editable이 False이고 editor에 conversionRows 키가 있으면 True, 아니면 False를 반환한다."""
++    editor = chart.get("editor") if chart is not None else None
++    return editor is not None and editor.get("editable") is False and "conversionRows" in editor
++
++
+ # Graph trace의 기본 색상 배열.
+ DEFAULT_COLORS = "config reference: backend.defaults.graphColors (read-only sequence)"
+ 
+diff --git a/sourcescript/backend/project_efsm.py b/sourcescript/backend/project_efsm.py
+index 56c7f8c..4427107 100644
+--- a/sourcescript/backend/project_efsm.py
++++ b/sourcescript/backend/project_efsm.py
+@@ -16,8 +16,12 @@ ProjectMutationResult = {'event': '프로젝트 명령 이름 문자열.',
+      'chartIds': '반영 전후 값이 달라진 그래프 id 배열.',
+      'csvIds': '반영 전후 값이 달라진 CSV id 배열.',
+      'imageIds': '반영 전후 값이 달라진 이미지 id 배열.',
+-     'assets': '반영한 자산의 종류·id·canonical 경로·소유 관계와 처리 종류를 담은 배열.',
+-     'assetReferenceChanges': '참조 수가 달라진 자산의 kind와 id를 담은 배열. 같은 자산은 한 번 기록한다.',
++     'assets': '이번 작업의 kind, id, path, role(created/deleted/moved/updated/imported) 및 필요시 oldPath, replaced와 소유 관계를 담은 배열.',
++     'linkedAssetMovesOrRemovals': '이동·제거한 자산 중 명령 직전에 실제 참조가 있던 (kind,id)의 배열.',
++     'targetSlotReferencesChanged': '슬롯·모델 변경 명령의 대상에서 실제 자산 연결이 추가·제거·교체됐는지 여부.',
++     'graphObjectCsvChanged': 'graphs.setObjectValues에서 기존 object와 최종 object의 csvId가 다른지 여부.',
++     'removedObjectChartIds': '자산 cascade에서 실제 object를 제거했고 반영 후에도 남은 chart의 id 배열.',
++     'appendedObjectChartIds': 'raw import로 기존 chart에 object를 추가한 chart의 id 배열.',
+  },
+  'removedGraphReferenceCount': '실제 제거한 graph-object CSV reference 수',
+  'resetImageSlotCount': '실제 image reference를 비운 slot 수',
+@@ -75,8 +79,11 @@ def buildSlotCommandCandidate(event, payload, state):
+            그 외 기존 chart는 editable 조건을 확인한다. Slot·CSV rows·name·CSV와 candidateState를
+            graphs.connectDataToSlotModel에 전달하고 반환 후보를 candidateState로 둔다.
+         7. SLOT_IMAGE_IMPORTED이면 현재 visible image Slot을 확인하고 payload의 name·MIME·bytes로
+-           assets_files.buildAssetCommandCandidate의 IMAGE_OBJECT_CREATED 계산을 수행한다.
+-           후보의 새 image id를 Slot.content["imageId"]에 연결하고 소유 chart를 제거한다.
++           IMAGE_OBJECT_CREATED의 입력을 구성한다. id가 생략된 생성이므로 호출 전
++           candidateState["nextId"]["image"]를 imageId에 둔다. assets_files.buildAssetCommandCandidate에
++           "IMAGE_OBJECT_CREATED", 입력, candidateState를 전달하고 반환 쌍의 첫 값을 candidateState에 둔다.
++           후보가 None이면 거부한다. 후보에서 visible Slot을 다시 찾아 Slot.content["imageId"]에
++           imageId를 연결하고 기존 소유 chart를 제거한다.
+            Slot.content["chart"]를 None으로 둔다. 기존 image·CSV asset, 배치·caption·imageSettings를 보존한다.
+            images.insertEmpty의 1600×900 SVG는 public 호출이 전달한 bytes를 사용한다.
+         8. SLOT_CHART_IMPORTED이면 같은 파일 입력을 해석한다. FFSX는 assets_files.ffsxReadSlot 결과를 imported에 두고
+@@ -91,7 +98,33 @@ def buildSlotCommandCandidate(event, payload, state):
+     return candidateState
+ 
+ 
+-def buildProjectMutationResult(event, payload, beforeState, afterState, retainedOriginalIndicesByChart):
++def collectTargetSlotAssetLinks(slotIds, state):
++    links = "정렬된 (kind,id) 쌍 배열. 중복 유지."
++    """
++    Args:
++    - slotIds: 이번 명령이 바꾼 슬롯 및 대상 chart 소유 슬롯의 id 집합.
++    - state: 비교할 commit 직전 또는 직후의 ProjectObject._state.
++
++    Return:
++    - links: 대상 슬롯의 실제 자산 연결만 담은 배열.
++
++    변경:
++    - 없음.
++
++    처리:
++        1. links를 빈 배열로 둔다. 각 id를 resolveVisibleSlot(id,state)로 찾고 없으면 건너뛴다.
++        2. 각 슬롯의 content.imageId가 None이 아니면 (image,id)를 추가한다.
++           content.chart가 None이 아니면 state["charts"]의 같은 id에서 editor를 얻는다.
++           graphs.chartUsesConversionView(chart)가 True이면 CSV를 추가하지 않는다.
++           그 외 editor.objects의 각 실제 csvId에 (csv,id)를 한 항목씩 추가한다.
++           collectAssetReferences와 같은 실제 참조 판정을 사용한다. contentType만 바뀌어도
++           보존된 imageId/chart는 실제 연결로 남는다. id의 진릿값으로 존재를 판정하지 않는다.
++        3. kind, id 순으로 정렬해 반환한다. 집합 변환은 하지 않는다.
++    """
++    return links
++
++
++def buildProjectMutationResult(event, payload, beforeState, afterState, retainedOriginalIndicesByChart, assetFacts):
+     result = "ProjectMutationResult 딕셔너리."
+     graphObjectIndexMaps = "chartId와 indices를 가진 딕셔너리의 배열."
+     selectionHints = "id·경로·chartId·선택 index·순번 대응표의 딕셔너리."
+@@ -118,6 +151,9 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
+     - retainedOriginalIndicesByChart:
+       참조 해제 계산이 남긴 chart id별 원래 object 순번 배열 딕셔너리.
+ 
++    - assetFacts:
++      PROJECT_NODE_MOVED의 경로 재작성 또는 ASSETS_IMPORTED의 입력 처리 루프가 기록한 이번 시도의 실제 자산 항목 배열.
++
+     Return:
+     - result:
+       이번 반영의 읽기 전용 ProjectMutationResult.
+@@ -129,16 +165,54 @@ def buildProjectMutationResult(event, payload, beforeState, afterState, retained
+         1. result의 event에 event, committed에 True를 둔다.
+            기존 반영 전후 비교 결과에서 값이 달라진 슬롯·그래프·CSV·이미지의 식별자를 changed의
+            slotIds·chartIds·csvIds·imageIds에 각각 둔다. 생성·제거된 식별자도 포함한다.
+-           두 상태의 asset id·canonical 경로와 소유 관계에서 실제 생성·교체·이동·제거 항목을 changed의 assets에 둔다.
+-           생성·가져오기 asset은 입력 순서를 유지한다. DATA_OBJECT_REPLACED는 실제 CSV 경로,
+-           directory 생성·이동은 최종 canonical 경로를 기록한다.
+-        2. 두 상태의 collectAssetReferences 결과를 비교하여 실제 제거 graph-object CSV 참조 수와
+-           image 참조를 비운 Slot 수를 각각 removedGraphReferenceCount와 resetImageSlotCount에 둔다.
+-           같은 CSV의 여러 object 참조는 각각 센다. 같은 반영 전후 참조 결과에서 kind와 id별 참조 수를 비교하여
+-           수가 달라진 자산을 changed의 assetReferenceChanges에 두고, 자산별 식별자는 한 번씩 넣는다.
+-           제거된 참조와 변경된 표시 입력으로 projectionEffect를 구성한다.
++           PROJECT_NODE_MOVED와 ASSETS_IMPORTED는 assetFacts를 changed["assets"]에 복사한다.
++           PROJECT_LOADED는 전체 교체이므로 개별 자산 결과는 비워 둔다.
++           그 외 명령에서는 CSV/image를 종류별 id로 대조해 직후에만 있으면 role=created로 직후의
++           kind/id/canonical path를, 직전에만 있으면 role=deleted로 직전의 kind/id/path/name을 기록한다.
++           DATA_OBJECT_REPLACED·IMAGE_OBJECT_REPLACED는 검증된 대상 id의 직후 path와 role=updated를 기록한다.
++           fileSystem.directories의 직후에만 있는 canonical 경로는 created, 직전에만 있는 경로는 deleted로
++           kind=directory와 id=None을 기록한다. FFSX/이미지 가져오기와 chart 변환의 새 자산도 누락하지 않는다.
++           deleted가 아닌 CSV/image 항목의 owners에는 직후 참조를 사용한다. CSV는 해당 csvId를 쓰는 실제
++           graph object의 소유 chart마다 {slotId,chartId}를 한 번 넣고, image는 연결 Slot마다
++           {slotId,chartId: None}을 한 번 넣는다. 디렉터리에는 owners를 넣지 않는다.
++        2. 각 상태에서 collectAssetReferences에 그 상태의 CSV/image id 집합을 전달한다.
++           (kind, chartId 또는 slotId, assetId)별로 실제 참조의 중복을 세고 직전 수에서 직후 수를
++           뺀 양수만 kind별로 합산하여 removedGraphReferenceCount와 resetImageSlotCount에 각각 둔다.
++           결과 수와 renderer의 projectionEffect는 목록 갱신 조건에 쓰지 않는다.
++           projectionEffect를 위해 두 상태의 visible Slot을 각각 순회한다. slot id, graph 슬롯의
++           (slot id, chart id), 그 chart의 실제 (chart id, csv id) 각 object, image 슬롯의
++           (slot id, image id)를 종류별로 구분하여 수집한다. 종류와 식별값이 같은 항목별로 개수를 비교한다.
++           하나라도 직전보다 직후 개수가 적으면 referencesRemoved=True, 아니면 False다.
++           dashboard 입력은 layout/annotations/appearance,
++           visible Slot, 해당 chart와 실제 참조 CSV의 id/rows/headerLines 및 image의 id/bytesBase64/mime다.
++           PROJECT_NAME_CHANGED, PROJECT_DIRECTORY_CREATED, PROJECT_NODE_MOVED, PROJECT_TRASH_EMPTIED,
++           ASSETS_IMPORTED, DATA_OBJECT_CREATED/REPLACED/DELETED, IMAGE_OBJECT_CREATED/REPLACED/DELETED 중
++           하나이고, 위 dashboard 입력의 값이 전후 같을 때만 pathOnly=True다. 두 값을 result에 둔다.
++        2a. changed["assets"]에서 role이 moved/deleted이고 kind가 csv/image인 항목을
++            kind별 id 집합에 둔다. 두 집합이 모두 비었으면 linkedAssetMovesOrRemovals는 빈 배열이다.
++            그 외에는 collectAssetReferences(csvIds,imageIds,beforeState)를 한 번 호출한다.
++            해당 항목에 직전 실제 object 또는 슬롯 참조가 하나라도 있으면 (kind,id)를 결과에 넣는다.
++            이 판정은 이동·제거 대상만 읽으며 다른 자산과 전후 참조 수를 비교하지 않는다.
++        2b. targetSlotReferencesChanged를 False로 둔다. SLOT_TYPE_CHANGED, SLOTS_RESET,
++            SLOT_IMAGE_LINKED, SLOT_IMAGE_IMPORTED, SLOT_CHART_IMPORTED, CHART_MODEL_REPLACED,
++            SLOTS_MERGED, SLOTS_SPLIT, GRID_LAYOUT_CHANGED 또는 targetSlotId가 None이 아닌
++            ASSETS_IMPORTED이면 changed["slotIds"]를 id 집합에 둔다. 명시한 slotId 또는
++            targetSlotId가 None이 아니면 추가한다. CHART_MODEL_REPLACED에서는 해당 chartId의
++            직전과 직후 소유 슬롯 id도 추가한다. 같은 집합으로 두 상태에 collectTargetSlotAssetLinks를
++            호출한다. 정렬된 두 배열이 다르면 targetSlotReferencesChanged=True로 둔다.
++        2c. graphObjectCsvChanged를 False로 둔다. GRAPH_OBJECTS_REPLACED의 graphs.setObjectValues이면
++            검증된 payload["chartId"]의 직전·직후 chart를 찾고 payload["index"]의 두 object에서
++            csvId를 읽는다. 다르면 True를 둔다. 요청 values의 csvId를 이 비교에 사용하지 않는다.
++        2d. retainedOriginalIndicesByChart의 키 중 afterState의 charts에 남은 id를
++            removedObjectChartIds에 둔다. 이 딕셔너리는 실제 object 제거가 있을 때만 기록된다.
++        2e. appendedObjectChartIds를 빈 배열로 둔다. ASSETS_IMPORTED이고 targetSlotId가 None이
++            아니면 그 id의 직전·직후 visible Slot을 찾는다. 양쪽에 같은 None 아닌 content.chart가
++            있으면 그 chart id로 양쪽 editor.objects 길이를 비교한다. 직후 길이가 더 크면 그 id를
++            추가한다. 같은 chart를 재계산한 CSV 교체만으로는 추가하지 않는다.
+         3. afterState의 실제 id·경로·chart 소유 관계에서 selectionHints를 구성하고
+-           result["selectionHints"]에 둔다.
++           result["selectionHints"]에 둔다. PROJECT_NODE_MOVED이면 changed.assets의 role=moved이고
++           oldPath가 payload.path인 루트 항목의 oldPath와 path를 movedPathFrom과 movedPathTo에 넣는다.
++           이전 경로는 휴지통 밖이고 새 경로는 휴지통 안일 때만 enteringTrash=True를 넣는다.
+            직접 graph add는 마지막 순번, setObjectValues는 같은 index를
+            selectedIndexHint로 둔다. delete는 명시적 None을 둔다. 해당 owning chartId를 함께 기록한다.
+            graphs.moveObject는 selectedIndexHint를 생략한다.
+@@ -212,6 +286,7 @@ class ProjectStateMachine:
+         sourceState = "프로젝트 상태 딕셔너리. 원형: /backend/project_state/ProjectObject._state"
+         candidateState = "프로젝트 상태 딕셔너리 또는 None."
+         retainedOriginalIndicesByChart = "chart id별 원래 object 순번 배열 딕셔너리."
++        assetFacts = "이번 후보의 실제 이동·raw import 항목 배열."
+         result = "ProjectMutationResult 딕셔너리."
+         handler = "후보 상태를 계산하는 함수 참조."
+         """
+@@ -235,12 +310,12 @@ class ProjectStateMachine:
+                명령 거부·취소·변경 없음은 event·committed=False와 빈 변경 사실의 result를 반환한다.
+                성공 selection hint는 생략한다. 입력과 파일 해석 오류는 호출자에게 전달한다.
+             2. sourceState의 딕셔너리·배열·Slot·중첩 content를 분리 복사하여 candidateState에 둔다.
+-               retainedOriginalIndicesByChart를 빈 딕셔너리로 둔다.
++               retainedOriginalIndicesByChart를 빈 딕셔너리로, assetFacts를 빈 배열로 둔다.
+             3. PROJECT_COMMANDS에서 event 키에 연결된 함수를 handler에 둔다.
+-               handler(event,payload,candidateState)를 한 번 호출한다.
+-               handler가 assets_files.buildAssetCommandCandidate이면 반환 쌍의 상태와
++               handler가 assets_files.buildAssetCommandCandidate이면
++               handler(event,payload,candidateState,assetFacts)를 한 번 호출한다. 반환 쌍의 상태와
+                순번 대응 자료를 candidateState와 retainedOriginalIndicesByChart에 각각 둔다.
+-               그 외 담당 함수의 반환 상태를 candidateState에 둔다.
++               그 외에는 handler(event,payload,candidateState)를 한 번 호출하여 반환 상태를 candidateState에 둔다.
+             4. 파일 대기 뒤 현재 activeProject와 그 _state가 source·sourceState와 달라졌으면
+                1번으로 돌아간다. 같을 때 후보가 None이면 1번의 미반영 결과를 반환한다.
+                directory·target·참조·충돌·next-id와 최종 choice의 replace id/path를 sourceState에서 재검사한다.
+@@ -250,13 +325,13 @@ class ProjectStateMachine:
+                달라졌으면 1번으로 돌아가 같은 새 입력·choice로 계산한다.
+                최종 choice가 다른 대상에 대응하면 미반영 결과를 반환한다.
+                같으면 activeProject.initialize(candidateState)를 한 번 호출한다.
+-            6. sourceState·반영 직후 activeProject._state·retainedOriginalIndicesByChart를
+-               event·payload와 함께 buildProjectMutationResult에 전달하여 result에 둔다.
++            6. buildProjectMutationResult(event,payload,sourceState,activeProject._state,
++               retainedOriginalIndicesByChart,assetFacts)의 결과를 result에 둔다.
+                move의 payload는 graphs.buildGraphCommandCandidate가 현재 sourceState의 소유 chart에서
+                검증한 같은 chartId·from·to다. 이동 계산부터 결과 구성까지 동기적으로 처리하며
+                중간에 사용자 callback이나 다른 명령을 실행하지 않는다.
+                후보 거부·동일 위치 이동·검증 실패에서는 성공 대응표를 만들지 않는다.
+-               계산 도중 거부·취소된 후보는 버리고, 재시도에서는 순번 배열도 새로 계산한다.
++               계산 도중 거부·취소된 후보는 버리고, 재시도에서는 순번 배열과 자산 항목을 새로 계산한다.
+             7. result를 반환한다. Application은 반환 결과와 현재 Frontend 참조로
+                buildFrontendReconciliationInput을 호출한다.
+         """
+diff --git a/sourcescript/backend/project_state.py b/sourcescript/backend/project_state.py
+index ccf18ee..a9564b5 100644
+--- a/sourcescript/backend/project_state.py
++++ b/sourcescript/backend/project_state.py
+@@ -338,7 +338,7 @@ def readBackendProjection(kind, request):
+         23. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.movable"]이면: current VFS source 존재와 fixed-root 규칙으로 계산한 boolean; trash 소속만으로 거부하지 않음
+         24. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.draggableAsset"]이면: 존재하는 non-trash csv/image의 kind/id/path/name copy 또는 none; slot 연결용이며 tree move와 구별
+         25. assets.readDeletionTarget은 explicit canonical path의 자산을 찾아 target={kind,id,path,name}, referenceCount, references를 반환한다.
+-           references에는 삭제 확인에 사용하는 kind/slotId/chartId/objectIndex만 담는다. 대상이 없으면 None이다.
++           references에는 삭제 확인에 사용하는 kind/slotId/chartId/objectIndex만 담고, CSV의 objectIndex에는 원래 originalObjectIndex를 넣는다. 대상이 없으면 None이다.
+            한 번의 collectAssetReferences로 해당 자산의 참조만 고르고 자산 rows/bytes/figure를 구성하지 않는다.
+            생성 wrapper의 성공 반환도 이 target 메타데이터로 맞춘다. 원본은 assets.download, CSV 값은 readPreview/readControls에서 명시적으로 읽는다.
+         26. request의 operation이 BACKEND_QUERY_KINDS["project-api"]["assets.moveOptions"]이면: current directories와 기존 move eligibility 규칙에서 계산한 destination 후보 copy
+@@ -547,7 +547,8 @@ def buildFrontendReconciliationInput(event, mutationResult, frontendReferences):
+            hint는 command의 계산 결과로서 post-commit object 배열에 대해 검증한다. graph object를 ensure/normalize하지 않는다.
+            이 index-only 갱신은 asset selection/path를 변경하지 않는다. 별도 SELECT_GRAPH_OBJECT 전이나 사후 hint 적용은 없다.
+ 
+-        5. projectionEffect는 기존 result 안의 referencesRemoved/pathOnly 두 사실만 담는다. visible slot/chart/image reference와 visible ordinary chart object가 참조하는 CSV별 개수의 pre/post 차이에서 제거를 계산한다. index move는 참조 수를 유지한다. pathOnly는 metadata/VFS/asset command이며 실제 dashboard 입력이 같을 때만 true다. dashboard 입력은 layout/annotations/appearance, visible slot geometry/content, 그 slot의 chart editor/graph, 실제 참조 CSV의 rows/headerLines 및 image bytes/mime다. dashboard 비교에는 표시 입력 필드를 사용한다. 참조 중인 bytes/rows가 바뀌면 pathOnly=False다. 이 call-local 비교 결과는 immutable commit delta이며 일반 read store나 mutation input으로 승격하지 않는다.
++        5. projectionEffect에는 projectEFSM이 result에 제공한 referencesRemoved/pathOnly를 복사한다.
++           이 조회에서 이전 프로젝트 상태나 자산별 참조 수를 다시 읽거나 표시 효과를 재계산하지 않는다.
+         6. selectedSlot/assetSelection/assetKind/graphObject에 resolved scalar를 반환한다. workspaceHint는 none이면 project,
+            visible image slot이면 slot.image, 그 외 slot.graph다. projectionEffect는 committed result의 실제 reference 제거/targeted 변경 정보로
+            Application이 Frontend renderer effect를 결정할 수 있는 값이며 Backend는 Frontend state write를 수행하지 않는다.
+diff --git a/sourcescript/frontend/mantine_ui.py b/sourcescript/frontend/mantine_ui.py
+index 6850739..ae4b4a9 100644
+--- a/sourcescript/frontend/mantine_ui.py
++++ b/sourcescript/frontend/mantine_ui.py
+@@ -385,7 +385,8 @@ def changeLayoutGridDimension(dimension, value, companion=None):
+         3. rows이면 value와 현재 gridCols, cols이면 현재 gridRows와 value를 구성한다.
+         4. 같은 동기 처리에서 layout.setGrid(rows, cols)의 결과를 outcome에 둔다.
+            동기 read부터 명령 진입까지 대기·외부 callback을 삽입하지 않는다.
+-        5. 성공 결과로 현재 layout을 표시하고 grid shape 변경의 기존 local selection 정리 규칙을 적용한다.
++        5. 성공하면 grid shape 변경의 기존 local selection 정리 규칙만 적용한다. layout 표시는
++           반영 후 Application이 호출한 layout()이 담당하므로 이 입력 처리기는 다시 읽지 않는다.
+            거부이면 False를 반환하고 예외는 전파한다. 이때 기존 layout과 local selection을 유지한다.
+         6. outcome을 반환한다.
+     """
+@@ -409,9 +410,8 @@ def handleDebugToggle():
+     처리:
+         1. 클릭 이벤트 시 renderer runtime owner의 readDebugEnabled()로 현재 boolean을 읽고,
+            await/외부 callback 없이 그 반전을 기존 setDebugEnabled(value)에 전달한다.
+-           telemetry는 버튼의 label/pressed 표시를 담당한다.
+-           setDebugEnabled가 owner를 변경한 뒤 telemetry를 publish하며 UI는 그 단방향 projection을 표시한다.
+-           별도 debug mirror, Project mutation, toggle command/API 또는 두 번째 publish를 만들지 않는다.
++           setDebugEnabled가 runtime 값을 변경한 뒤 현재 mount의 debugEnabled 표시 함수에 그 값을 전달한다.
++           표시값을 다시 읽어 다음 토글을 계산하지 않으며 Project mutation이나 별도 toggle API를 만들지 않는다.
+            명시 bool setter를 직접 사용하는 다른 caller의 계약을 바꾸지 않는다. 원래 오류는 caller에 전파한다.
+            outcome를 반환한다.
+     """
+@@ -435,29 +435,60 @@ def bindUiDisplay(elements):
+     처리:
+         1. 아래 함수를 구성하여 이름별로 display에 둔다. 조회가 필요한 함수는 현재 표시 중인 요소만 읽는다.
+            조회 결과는 해당 요소의 React 표시값에 둔다. 최초 표시에도 같은 조회 절차를 사용한다.
+-        2. selection(current): 도구 모음, 자산·객체의 선택 표시와 창을 current에 맞추고 새 슬롯의 편집기를 표시한다.
++        2. selection(current, csvOptions=None, force=False, selectedSlot 생략 가능):
+            current의 원형은 /frontend/interface_fsm/InterfaceStateMachine.readState의 반환값이다.
++           selectedSlot 인수가 생략됐으면 selectedSlotId가 None일 때 None을, 그 외에는 slots.readSelected
++           결과를 selectedSlot에 둔다. 이미 읽은 Slot 또는 None이 전달되면 다시 읽지 않는다.
++           도구 모음·자산/객체 선택 장식·창을 current에 맞춘다. 장식 갱신은 편집기 데이터 조회를 하지 않는다.
+            열린 레이블 창의 기준 슬롯이나 캡션 창의 슬롯 본문 대상이 바뀌면 그 창에서 새 대상의 값을 읽는다.
++           selectedSlot에서 편집기 표시 identity를 구성한다. Slot이 없으면 None, 있으면
++           (id, current.workspace, contentType, ownerId)다. ownerId는 image면 imageId, graph면 chart다.
++           이를 현재 mount의 편집기 identity와 비교한다. 최초 표시, force=True 또는 identity가 다르면
++           이전 편집기의 입력을 dispose하고 새 종류에 해당하는 입력을 초기화한다.
++           graph면 그래프 데이터·레이아웃·팔레트를 각 공식 조회로 표시한다. 전달된 csvOptions가 None이
++           아니면 빈 배열도 그대로 사용하고, None일 때만 assets.readList('csv')를 읽는다.
++           image면 images.readSettings와 표시 component의 images.readEditor를 읽는다. None이면 편집기를 비운다.
++           초기화를 마친 identity를 편집기 수명에만 보관하고 True를 반환한다.
++           identity가 같고 force=False면 편집기를 유지하고 False를 반환한다. selection 장식 호출에서는
++           기존 선택 context가 바뀐 경우에만 해당 CSV/객체 표시를 갱신하며 새 편집기 조회와 중복하지 않는다.
+            assetSelection(current)은 트리의 선택 표시와 현재 CSV 표시를 갱신한다. graphObject(current)는 해당 객체 입력을 갱신한다.
+            overlay(name)는 지정된 창을 표시하고 닫힌 창의 미확정 입력을 정리한다.
+            lifecycle(value)는 버튼과 입력의 조작 가능 여부를 갱신하고 taskError(error)는 오류를 표시한다.
+         3. projectName()은 project.readName을 읽는다. assetTree()는 assets.readTree를 읽고 휴지통이 열려 있으면 assets.readTrash를 읽는다.
+            slotConnections()는 slots.readDisplay로 슬롯별 연결 자산 행을 갱신한다.
+-           csvOptions()는 assets.readList('csv')를 읽는다. csv(ids)는 현재 CSV와 편집 객체가 각각 사용하는 CSV id 중
+-           ids에 있는 대상을 갱신한다. FastFigureApp의 그래프 데이터 표시 절차에 따라 열린 표에만 행을 읽는다.
+-        4. slot(ids)은 선택 슬롯 id가 ids에 있을 때 slots.readSelected 결과를 표시한다.
+-           graph(ids, event)는 표시 중인 chart가 ids에 있을 때 graphs.readData로 객체 목록·제목을,
+-           CHART_LAYOUT_CHANGED 또는 CHART_MODEL_REPLACED에서는 graphs.readLayout으로 현재 설정을 갱신한다.
+-           객체 변경이나 chart 교체가 팔레트 표시에 영향을 주면 graphs.readPalette를 읽는다.
+-           image(ids)는 표시 이미지가 ids에 있으면 images.readSettings를 읽고 실제 이미지 표시에는 images.readEditor를 사용한다.
+-           slot(ids)으로 표시 이미지 연결이 바뀐 경우에도 새 이미지 입력과 미리보기를 같은 절차로 표시한다.
++           csvOptions()는 assets.readList('csv')를 읽어 현재 옵션 표시를 갱신하고 배열을 반환한다.
++           반환 배열은 이번 호출의 초기화 인수로만 재사용하며, 다음 조회의 cache나 자산의 원천으로 보관하지 않는다.
++           csv(ids)는 그래프 편집기가 열려 있을 때 현재 CSV와 편집 객체가 각각 사용하는 CSV id 중 ids에 있는
++           대상만 갱신한다. 현재 CSV의 헤더·행 수, 해당 객체의 열 입력 및 열린 표에 필요한 값을 읽는다.
++           열린 표에만 행을 읽고 같은 CSV의 같은 열 정의는 이번 표시에서 한 번만 읽는다.
++        4. slot(current,csvOptions,event)는 호출자가 선택 id가 changed.slotIds에 있음을 확인한 뒤 호출한다.
++           slots.readSelected를 한 번 읽는다. 2번과 같은 identity가 아니면
++           selection(current,csvOptions,selectedSlot=이번 Slot)에 도구 모음 표시까지 맡기고 그 반환값을 반환한다.
++           identity가 같으면 이번 Slot을 도구 모음에 표시하고 SLOT_IMAGE_SETTINGS_CHANGED에서만 images.readSettings로 표시 중인
++           image의 입력을 갱신하고 False를 반환한다. 이 설정 경로는 이미지 바이트를 다시 읽지 않는다.
++           graph(ids,event,operation,removedObjectChartIds,appendedObjectChartIds)는 현재 graph 편집기의
++           ownerId가 ids에 없으면 조회 없이 반환한다. CHART_LAYOUT_CHANGED에서는 graphs.readLayout만 읽어
++           축·설정·제목을 갱신하고, 이미 표시된 object 목록의 제목 접두부를 그 title로 바꾼 뒤 반환한다.
++           그 외에는 graphs.readData로 객체 목록·제목을 갱신한다. CHART_MODEL_REPLACED이면
++           graphs.readLayout도 읽는다. event=GRAPH_OBJECTS_REPLACED이고 operation이 graphs.addObject,
++           graphs.deleteObject, graphs.moveObject, graphs.setObjectValues, graphs.applyPalette 중 하나이거나,
++           event=CHART_MODEL_REPLACED이거나, 현재 ownerId가 removedObjectChartIds 또는
++           appendedObjectChartIds에 있으면 graphs.readPalette를 한 번 읽는다.
++           image(ids)는 현재 image 편집기의 ownerId가 ids에 있으면 실제 이미지 표시 component에서
++           images.readEditor로 갱신한다. image asset의 bytes/MIME 교체는 slot-local 설정을 바꾸지 않는다.
+         5. layout()은 layout.readControls를 읽고 열린 미리보기에서만 layout.readState를 읽는다.
+            labels(event)는 레이블 설정 및 열린 위치 편집기의 해당 표시를 읽는다.
+            captions(event, slotIds)는 캡션 설정 또는 본문을 읽는다. 슬롯 본문은 표시 슬롯 id가 slotIds에 있을 때 읽는다.
+            printSettings()는 열린 프린트 창에 print.readSettings를 표시한다.
+            palette(value)는 /backend/project_state/activeProject._state.appearance.uiPalette 원형의 공식 읽기 결과를 받아 색상 입력과 theme을 갱신한다.
+            zoom(value)는 전달받은 배율을 현재 배율 입력에 표시한다.
+-        6. display를 반환한다.
++        6. display["statusDisplay"]에 StatusDebug의 다음 세 함수를 담은 딕셔너리를 대입한다.
++           statusText(text)는 상태 문자열을 표시한다. debugEnabled(enabled)는 토글의 label과 pressed를
++           enabled에 맞춰 설정한다. debugLines(lines)는 배열을 줄바꿈으로 연결해 로그를 표시하고,
++           로그가 비었거나 lifecycle이 busy이면 저장·지우기 버튼을 비활성화한다.
++           lifecycle(value)에서도 현재 표시하는 배열과 새 lifecycle로 같은 버튼 사용 가능 여부를 설정한다.
++           세 함수는 renderer가 넘긴 값만 사용하며 프로젝트를 조회하지 않는다.
++        7. display를 반환한다.
+     """
+     return display
+ 
+@@ -665,7 +696,7 @@ def runLifecycleTask(lifecycle, eventName, task):
+     처리:
+         1. Mantine Frontend는 task callback을 interfaceFSM에 직접 넘기지 않고 runApplicationLifecycleTask에 위임한다.
+            Application boundary가 LIFECYCLE_START -> task -> COMPLETE/FAILED 순서를 소유한다.
+-           UI layer는 error를 debug telemetry에 기록할 수 있지만 별도 domain rollback 규칙을 만들지 않는다.
++           UI layer는 error를 renderer.debugLog에 전달할 수 있지만 별도 domain rollback 규칙을 만들지 않는다.
+            runApplicationLifecycleTask(lifecycle, eventName, task)를 반환한다.
+     """
+     return outcome
+@@ -740,8 +771,9 @@ def FastFigureApp():
+            slot 연결 drag는 assets.draggableAsset가 승인한 trash 밖 CSV/image에만 허용하여
+            assets.connectToSlot에 path·kind·대상 slotId를 전달한다.
+         5. project actions에는 project.readName/setName/importFile/exportFile을 연결한다.
+-           GraphDataEditor는 graphs.readData의 currentCsv 메타데이터와 편집 objects만 표시한다.
+-           CSV 선택 옵션은 assets.readList('csv')로 읽는다. 객체의 열 선택 입력에는 그 객체의 CSV id로
++           GraphDataEditor는 bindUiDisplay의 selection/graph/csv가 갱신한 currentCsv 메타데이터와 편집 objects를 표시한다.
++           CSV 선택 옵션은 selection 또는 csvOptions에서 읽고, component mount/render가 따로 읽지 않는다.
++           객체의 열 선택 입력에는 그 객체의 CSV id로
+            graphs.readColumns를 호출한다. 변환 데이터의 열은 CSV id에 None을 주고 chart id를 전달한다.
+            표 미리보기에 열기·닫기 버튼을 두고, 펼친 상태에서 현재 CSV가 있을 때 그 CSV의 열과
+            assets.readPreview(csvId, 0, 30)의 행을 읽는다. 같은 표시에서 두 열 조회의 입력이 같으면 반환 배열을 함께 사용한다.
+@@ -758,8 +790,9 @@ def FastFigureApp():
+            접근성 이름에는 전체 제목·식별 문자열을 제공한다.
+            제목 변경·추가·이동·프로젝트 불러오기 후에도 이번 공식 조회로 표시를 다시 구성한다.
+            chart가 없으면 빈 목록이다. 이 표시는 object·title·trace 범례·저장 필드를 변경하지 않는다.
+-        6. GraphLayoutEditor는 graphs.readLayout을 표시하고 updateSelectedGraphLayout을 호출한다.
+-           GraphPaletteActions는 graphs.readPalette를 표시하고 graphs.applyPalette를 호출한다.
++        6. GraphLayoutEditor는 bindUiDisplay의 selection/graph에서 받은 graphs.readLayout 결과를 표시하고
++           updateSelectedGraphLayout을 호출한다. GraphPaletteActions는 같은 표시 경로에서 받은
++           graphs.readPalette 결과를 표시하고 graphs.applyPalette를 호출한다.
+            버튼의 chart id·editable 판정은 graphs.readControls 한 번으로 읽는다.
+            GraphFileActions는 importSelectedSlotFile·setSelectedGraphEditable와
+            graphs.exportFfsx/exportPlotlyJson을 연결한다.
+@@ -776,7 +809,9 @@ def FastFigureApp():
+            접기 조작은 project 값·선택 object·axis 설정·debugEnabled를 변경하지 않는다.
+         7. PaletteActions는 appearance.readPalette 결과를 draft로 표시하고 명시적 apply/reset에
+            appearance.setPalette/resetPalette를 호출한다.
+-           StatusDebug는 telemetry를 표시하고 debug 클릭에 handleDebugToggle을 호출한다.
++           StatusDebug는 bindUiDisplay의 statusDisplay가 전달한 문자열·토글 상태·로그를 표시한다.
++           debug 토글·로그 저장·지우기 클릭은 각각 handleDebugToggle, renderer.saveDebugOutput,
++           renderer.clearDebugOutput을 호출한다.
+            ReadmeOverlay는 배포 README 내용을 표시한다.
+         8. LabelOverlay의 입력은 labels.readSettings를 표시하고 enabled/settings/position/reset/finish 입력을
+            labels의 대응 method에 연결한다. pointer 이동의 유효한 position은 같은 setPosition을 호출한다.
+@@ -796,10 +831,12 @@ def FastFigureApp():
+             배경 click·grid shape 변경·overlay close는 selection을 비운다.
+             slot click과 merge/split 입력은 먼저 자신의 동작을 처리하고 parent clear 전파를 소비한다.
+             merge/split에는 그 시점의 선택 id 배열을 layout.mergeSlots/splitSlots에 전달한다.
+-        11. 미리보기 host의 너비를 측정하여 layout.readState에 전달한다.
++        11. 미리보기 창을 열 때, 열린 상태에서 layout()을 호출할 때, 또는 아래의 가로 크기 입력을
++            받았을 때 미리보기를 갱신한다. 내부 틀을 담는 외부 표시 영역의 content-box 너비를
++            width에 둔다. 아직 측정되지 않았거나 너비가 0 이하이면 width에 None을 둔다.
++            이번 width를 창 인스턴스의 previousPreviewWidth에 저장하고 layout.readState(width)를 호출한다.
+             readState의 기존 preview 너비 범위·무효 입력 기본값을 유지하고 반환된
+             previewGeometry["width"]를 host 너비로 적용한다. 외부 표시 영역이 더 좁으면 가로 스크롤로 본다.
+-            측정 전·표시 불가의 너비는 None으로 전달하여 기존 fallback을 사용한다.
+             반환된 gridRows/gridCols/slotStyle, visibleSlots, previewGeometry를 같은 표시 회차에
+             renderDashboardFrame에 미리보기 host와 함께 전달하고 반환값을 previewFrame에 둔다.
+             이 공통 절차가 grid와 각 슬롯 틀을 만든다. 좌표·local selection·포커스 강조를
+@@ -809,8 +846,11 @@ def FastFigureApp():
+             local selection·포커스는 점선과 구분되는 안쪽 강조로 표시한다.
+             선택·해제·스타일 갱신마다 해당 host의 이전 장식을 정리하고 현재 span·radius로 다시 구성한다.
+             미리보기의 장식 테두리·선택 표시는 슬롯 경계와 content 기하 치수를 유지한다.
+-            host 정리 시 이 미리보기의 틀과 listener만 해제한다.
+-            Modal/viewport 폭이 달라지면 다시 조회한다. 세로 resize는 Modal local 높이만 바꾼다.
++            창을 열 때 외부 표시 영역 하나에 브라우저 content-box 크기 통지기를 연결한다.
++            통지에서 width를 위와 같이 정규화하고 previousPreviewWidth와 같으면 조회 없이 반환한다.
++            다르면 이번 width로 갱신한다. renderer가 너비를 적용하는 내부 틀에는 통지기를 연결하지 않는다.
++            세로 resize는 Modal local 높이만 바꾼다. 창을 닫거나 unmount할 때 통지기를 해제하고
++            previousPreviewWidth와 이 미리보기의 틀·listener를 정리한다.
+             preview 갱신은 실제 dashboard generation·Plotly instance·이미지 decode 자원을 변경하지 않는다.
+         12. DashboardFileDrop이 수신 가능한 동안 dashboard의 논리적 수신 경로를 하나 유지한다.
+             rerender·callback 교체 사이에도 유효한 drop은 정확히 한 import 시도로 전달한다.
+@@ -898,10 +938,15 @@ def FastFigureShell():
+     - renderer host layout CSS variable.
+ 
+     처리:
+-        1. Sidebar·창·graphArea 크기 변경과 스크롤 이동은 기존 workspace 내용의 CSS 위치·배율로 처리한다.
+-           transformWorkspace()로 Application의 workspace-structure 조회와 CSS 변환을 실행한다.
+-           Plotly.react/newPlot/resize·figure/CSV 계산·이미지 재해석을 요청하지 않는다.
+-        2. 기존 content와 포커스·선택 장식·bookmark를 유지한다.
++        1. Sidebar 너비·접힘 처리기는 CSS 적용 뒤 바깥 graphArea의 너비·높이(px)를 읽는다.
++           mount에서 관찰한 같은 바깥 영역의 resize 통지도 같은 크기 처리기로 보낸다.
++           영역 관찰을 지원하지 않으면 browser window resize 이벤트에서 해당 영역을 측정한다.
++           마지막으로 변환한 너비·높이와 같거나 크기가 양수가 아니면 반환한다. 그 외에만
++           transformWorkspace()로 workspace-structure 조회와 CSS 변환을 실행하고 그 크기를 기록한다.
++           mount 종료 시 관찰 또는 window listener를 해제하고 크기 기록을 비운다.
++        2. 스크롤은 브라우저의 native 배치로 처리하며 별도 조회를 실행하지 않는다. 두 경로 모두
++           Plotly.react/newPlot/resize·figure/CSV 계산·이미지 재해석을 요청하지 않고
++           기존 content와 포커스·선택 장식·bookmark를 유지한다.
+            아직 내용이 없는 슬롯을 resize만으로 그리지 않는다. shell을 반환한다.
+     """
+     return shell
+diff --git a/sourcescript/frontend/renderer.py b/sourcescript/frontend/renderer.py
+index 28c909a..97466e6 100644
+--- a/sourcescript/frontend/renderer.py
++++ b/sourcescript/frontend/renderer.py
+@@ -68,41 +68,31 @@ RENDERER_HOSTS = {
+ }
+ 
+ 
+-uiTelemetryState = {
+-    "revision": "telemetry projection revision",
+-    "status": "사용자에게 표시하는 최신 status text",
+-    "debugEnabled": "debug runtime authority를 UI에 투영한 boolean",
+-    "debugLines": "현재 session debug log line projection",
+-}
+-
+-
+-debugEnabled = '현재 세션의 debug 기록 활성 여부인 논리값.'
+-
+-
+-
++statusText = ""  # 현재 세션의 최신 상태 문자열.
++debugEnabled = False  # 현재 세션의 디버그 기록 활성 여부.
++debugLines = []  # 최근 500개 로그 문자열을 발생 순서대로 보관.
++debugSequence = 0  # 마지막으로 부여한 로그 순번.
++statusDisplay = None  # 현재 mount의 표시 setter 세 개 또는 None.
+ 
+ 
+-def publishUiTelemetry(patch):
+-    telemetry = "UI telemetry 딕셔너리."
++def setStatusDisplay(display):
+     """
+     Args:
+-    - patch:
+-      telemetry의 이번 변경 필드 딕셔너리.
++    - display:
++      /frontend/mantine_ui/bindUiDisplay가 반환한 statusDisplay 또는 None.
+ 
+     Return:
+-    - telemetry:
+-      UI telemetry 딕셔너리.
+-      revision이 증가한 새 immutable telemetry projection.
++    - 없음.
+ 
+     변경:
+-    - uiTelemetryState와 표시 revision. 등록된 표시 구독자에게 알린다.
++    - renderer의 statusDisplay. 연결하는 경우 현재 mount의 세 표시값.
+ 
+     처리:
+-        1. patch의 명시된 필드만 uiTelemetryState의 같은 필드에 반영한다. 생략된 필드는 유지한다.
+-        2. telemetry revision을 한 번 증가시키고 변경 후 읽기 전용 telemetry를 구성한다.
+-        3. 등록된 표시 구독자에게 알린 뒤 telemetry를 반환한다.
++        1. display를 statusDisplay에 대입한다. None이면 반환한다.
++        2. display["statusText"](statusText), display["debugEnabled"](debugEnabled),
++           display["debugLines"](debugLines의 분리된 읽기 전용 배열)을 순서대로 호출한다.
++           세 값의 Source of Truth는 이 모듈의 동명 세션 값이다. 프로젝트 값은 읽지 않는다.
+     """
+-    return telemetry
+ 
+ 
+ def readDebugEnabled():
+@@ -139,13 +129,14 @@ def setDebugEnabled(enabled):
+       최종 debugEnabled
+ 
+     변경:
+-    - Frontend runtime debugEnabled와 UI telemetry projection.
++    - Frontend runtime debugEnabled와 현재 mount의 토글 표시값.
+ 
+     처리:
+-        1. 입력을 boolean 의미로 정규화해 debugEnabled에 먼저 반영하고 그 실제 값을 projection으로 즉시 publish한다.
+-           명시 bool 설정 계약을 유지하며 UI projection을 현재 runtime 값 대신 읽지 않는다.
+-           publish 오류는 전파하고 이미 수행한 runtime 변경을 숨은 rollback으로 되돌리거나 성공으로 위장하지 않는다.
+-           enabledResult를 반환한다.
++        1. enabled가 논리값 True이면 True, 그 외에는 False를 enabledResult에 대입한다.
++           enabledResult를 이 모듈의 debugEnabled에 대입한다.
++        2. statusDisplay가 None이 아니면 statusDisplay["debugEnabled"](enabledResult)를 호출한다.
++           표시 오류는 전파하며 debugEnabled를 되돌리지 않는다.
++        3. enabledResult를 반환한다.
+     """
+     return enabledResult
+ 
+@@ -163,16 +154,83 @@ def status(message):
+       표시한 status 문자열.
+ 
+     변경:
+-    - uiTelemetryState의 status와 표시 revision.
++    - renderer의 statusText와 현재 mount의 상태 문자열 표시.
+ 
+     처리:
+-        1. message 문자열을 text에 둔다.
+-        2. publishUiTelemetry({"status": text})로 최신 상태 표시를 발행한다.
++        1. message가 None이면 빈 문자열, 그 외에는 message의 문자열 표현을 text에 둔다.
++           text를 이 모듈의 statusText에 대입한다.
++        2. statusDisplay가 None이 아니면 statusDisplay["statusText"](text)를 호출한다.
+         3. text를 반환한다.
+     """
+     return text
+ 
+ 
++_DEBUG_DATA_OMITTED = object()
++
++
++def debugLog(event, data=_DEBUG_DATA_OMITTED, level="debug"):
++    """
++    Args:
++    - event, data, level:
++      호출자가 넘긴 로그 이름, 기록할 값, 로그 수준 문자열. data 생략이면 빈 딕셔너리, 명시적인 None은 JSON null이다.
++
++    Return:
++    - 없음.
++
++    변경:
++    - 활성 상태에서 renderer의 debugSequence, debugLines, 콘솔 및 현재 mount의 로그 표시.
++
++    처리:
++        1. 이 모듈의 debugEnabled가 False이면 반환한다.
++        2. data가 _DEBUG_DATA_OMITTED이면 빈 딕셔너리를 사용한다. data가 오류이면 name/message/stack을 담는다.
++           그 외에는 JSON 직렬화 가능한 분리 값을 만든다.
++           직렬화 실패 시 serializationError에 오류 메시지, value에 data의 문자열 표현을 담는다.
++        3. debugSequence를 1 증가시킨다. 순번(최소 네 자리, 0 채움), UTC 시각(HH:mm:ss.SSS),
++           대문자 level, event, 직렬화한 data를 공백으로 이어 한 줄을 만든다.
++           level에 맞는 콘솔 함수 또는 기본 debug 함수에 "[chart-builder]", event, 분리 값을 순서대로 전달한다.
++        4. 기존 debugLines 뒤에 이 줄을 추가하고 마지막 500줄을 debugLines에 대입한다.
++           statusDisplay가 None이 아니면 statusDisplay["debugLines"]에 그 배열의 분리된 읽기 전용 복사본을 전달한다.
++    """
++
++
++def clearDebugOutput():
++    """
++    Args:
++    - 없음.
++
++    Return:
++    - 없음.
++
++    변경:
++    - renderer의 debugSequence와 debugLines 및 현재 mount의 로그 표시.
++
++    처리:
++        1. debugSequence에 0, debugLines에 빈 배열을 대입한다. debugEnabled는 유지한다.
++        2. statusDisplay가 None이 아니면 statusDisplay["debugLines"]에 빈 읽기 전용 배열을 전달한다.
++    """
++
++
++def saveDebugOutput():
++    """
++    Args:
++    - 없음.
++
++    Return:
++    - 없음.
++
++    변경:
++    - 디버그 감사 및 다운로드 작업. 디버그가 활성일 때 debugLog의 세션 로그 변경을 포함한다.
++
++    처리:
++        1. auditApp("debug:save")를 호출한다. {build: APP_BUILD, userAgent: navigator.userAgent,
++           location: location.href}를 data에 두고 debugLog("debugLog:save", data)를 호출한다.
++        2. 이 모듈의 debugLines를 줄바꿈으로 연결한다. UI 표시 배열을 읽지 않는다.
++        3. UTF-8 text/plain Blob과 임시 URL을 만든다. 현재 UTC ISO 시각의 ':'와 '.'을 '-'로 바꾼
++           문자열을 stamp에 넣고 chart-builder-debug-{stamp}.log 이름으로 다운로드를 요청한다.
++           다운로드 클릭 후 setTimeout의 0ms callback에서 임시 URL을 해제한다.
++    """
++
++
+ 
+ 
+ 
+@@ -296,7 +354,12 @@ def presentSlotContent(slot, interfaceState, geometry):
+     - 그 슬롯의 graph/image surface와 슬롯별 비동기 작업.
+ 
+     처리:
+-        1. 현재 slot id의 host·종류·chart/image 소유 연결을 확인한다. 연결이 바뀌었으면 이전 자원을 정리한다. 같은 연결이면 기존 surface를 사용한다.
++        1. 이번 틀에서 slot.id의 content host를 찾고, slot의 contentType과 graph의 chart id 또는
++           image의 image id를 읽는다. 연결 id가 없으면 None을 사용한다.
++           현재 workspace의 slot.id별 자원 기록에서 이전 surface를 찾는다. 이전 surface가 있고
++           host DOM 인스턴스, contentType, 연결 id가 각각 같으면 surface를 재사용한다.
++           하나라도 다르면 이전 surface가 소유한 자원만 해제한다. 빈 슬롯이면 새 surface를
++           만들지 않고, 내용이 있으면 이번 세 값으로 새 surface를 해당 슬롯 기록에 둔다.
+         2. 이 슬롯의 작업 순번을 한 번 증가시켜 operation에 둔다. 같은 host의 기존 pending 뒤에 이번 작업을 연결한다. 다른 슬롯의 작업 순번과 pending은 변경하지 않는다.
+         3. 실행 직전과 완료 시 슬롯 작업 순번·workspace 수명·host 연결·slot/chart/image 식별값을 확인한다. 교체되었거나 더 최신 같은 슬롯 작업이 있으면 결과를 버리고 이 작업의 임시 자원만 해제한다.
+         4. graph이면 supplied figure만 현재 host의 Plotly 내용 갱신에 전달한다. Backend CSV/figure를 Frontend에서 다시 계산하지 않는다. 실제 내용 렌더링의 새 기준 너비·높이를 surface에 둔다.
+diff --git a/sourcescript/system.py b/sourcescript/system.py
+index e6d64aa..3ef3751 100644
+--- a/sourcescript/system.py
++++ b/sourcescript/system.py
+@@ -85,8 +85,9 @@ def initializeFastFigure():
+            프로젝트 내용은 선택 슬롯 자동 갱신 또는 명시적 전체 렌더링 버튼에서 표시한다.
+         5. Application boundary가 Frontend FSM에 lifecycle ready 전이를 전달한다.
+         6. mantine_ui.FastFigureApp의 반환값을 uiTree와 display에 둔다.
+-           uiTree를 기존 React root 하나에 mount한다. mount가 완료되면 adapter.setUiDisplay(display)를 호출한다.
+-           root를 해제할 때 먼저 adapter.setUiDisplay(None)을 호출한 뒤 화면 요소를 정리한다.
++           uiTree를 기존 React root 하나에 mount한다. mount가 완료되면
++           adapter.setUiDisplay(display), renderer.setStatusDisplay(display["statusDisplay"])를 순서대로 호출한다.
++           root를 해제할 때 renderer.setStatusDisplay(None), adapter.setUiDisplay(None)을 순서대로 호출한 뒤 화면 요소를 정리한다.
+         7. project 참조·runtime 초기값과 최종 mount 구성을 확인하여 initialized_runtime에 둔다.
+         8. initialized_runtime를 반환한다.
+     """

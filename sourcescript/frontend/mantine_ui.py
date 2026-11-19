@@ -385,7 +385,8 @@ def changeLayoutGridDimension(dimension, value, companion=None):
         3. rows이면 value와 현재 gridCols, cols이면 현재 gridRows와 value를 구성한다.
         4. 같은 동기 처리에서 layout.setGrid(rows, cols)의 결과를 outcome에 둔다.
            동기 read부터 명령 진입까지 대기·외부 callback을 삽입하지 않는다.
-        5. 성공 결과로 현재 layout을 표시하고 grid shape 변경의 기존 local selection 정리 규칙을 적용한다.
+        5. 성공하면 grid shape 변경의 기존 local selection 정리 규칙만 적용한다. layout 표시는
+           반영 후 Application이 호출한 layout()이 담당하므로 이 입력 처리기는 다시 읽지 않는다.
            거부이면 False를 반환하고 예외는 전파한다. 이때 기존 layout과 local selection을 유지한다.
         6. outcome을 반환한다.
     """
@@ -409,9 +410,8 @@ def handleDebugToggle():
     처리:
         1. 클릭 이벤트 시 renderer runtime owner의 readDebugEnabled()로 현재 boolean을 읽고,
            await/외부 callback 없이 그 반전을 기존 setDebugEnabled(value)에 전달한다.
-           telemetry는 버튼의 label/pressed 표시를 담당한다.
-           setDebugEnabled가 owner를 변경한 뒤 telemetry를 publish하며 UI는 그 단방향 projection을 표시한다.
-           별도 debug mirror, Project mutation, toggle command/API 또는 두 번째 publish를 만들지 않는다.
+           setDebugEnabled가 runtime 값을 변경한 뒤 현재 mount의 debugEnabled 표시 함수에 그 값을 전달한다.
+           표시값을 다시 읽어 다음 토글을 계산하지 않으며 Project mutation이나 별도 toggle API를 만들지 않는다.
            명시 bool setter를 직접 사용하는 다른 caller의 계약을 바꾸지 않는다. 원래 오류는 caller에 전파한다.
            outcome를 반환한다.
     """
@@ -435,29 +435,60 @@ def bindUiDisplay(elements):
     처리:
         1. 아래 함수를 구성하여 이름별로 display에 둔다. 조회가 필요한 함수는 현재 표시 중인 요소만 읽는다.
            조회 결과는 해당 요소의 React 표시값에 둔다. 최초 표시에도 같은 조회 절차를 사용한다.
-        2. selection(current): 도구 모음, 자산·객체의 선택 표시와 창을 current에 맞추고 새 슬롯의 편집기를 표시한다.
+        2. selection(current, csvOptions=None, force=False, selectedSlot 생략 가능):
            current의 원형은 /frontend/interface_fsm/InterfaceStateMachine.readState의 반환값이다.
+           selectedSlot 인수가 생략됐으면 selectedSlotId가 None일 때 None을, 그 외에는 slots.readSelected
+           결과를 selectedSlot에 둔다. 이미 읽은 Slot 또는 None이 전달되면 다시 읽지 않는다.
+           도구 모음·자산/객체 선택 장식·창을 current에 맞춘다. 장식 갱신은 편집기 데이터 조회를 하지 않는다.
            열린 레이블 창의 기준 슬롯이나 캡션 창의 슬롯 본문 대상이 바뀌면 그 창에서 새 대상의 값을 읽는다.
+           selectedSlot에서 편집기 표시 identity를 구성한다. Slot이 없으면 None, 있으면
+           (id, current.workspace, contentType, ownerId)다. ownerId는 image면 imageId, graph면 chart다.
+           이를 현재 mount의 편집기 identity와 비교한다. 최초 표시, force=True 또는 identity가 다르면
+           이전 편집기의 입력을 dispose하고 새 종류에 해당하는 입력을 초기화한다.
+           graph면 그래프 데이터·레이아웃·팔레트를 각 공식 조회로 표시한다. 전달된 csvOptions가 None이
+           아니면 빈 배열도 그대로 사용하고, None일 때만 assets.readList('csv')를 읽는다.
+           image면 images.readSettings와 표시 component의 images.readEditor를 읽는다. None이면 편집기를 비운다.
+           초기화를 마친 identity를 편집기 수명에만 보관하고 True를 반환한다.
+           identity가 같고 force=False면 편집기를 유지하고 False를 반환한다. selection 장식 호출에서는
+           기존 선택 context가 바뀐 경우에만 해당 CSV/객체 표시를 갱신하며 새 편집기 조회와 중복하지 않는다.
            assetSelection(current)은 트리의 선택 표시와 현재 CSV 표시를 갱신한다. graphObject(current)는 해당 객체 입력을 갱신한다.
            overlay(name)는 지정된 창을 표시하고 닫힌 창의 미확정 입력을 정리한다.
            lifecycle(value)는 버튼과 입력의 조작 가능 여부를 갱신하고 taskError(error)는 오류를 표시한다.
         3. projectName()은 project.readName을 읽는다. assetTree()는 assets.readTree를 읽고 휴지통이 열려 있으면 assets.readTrash를 읽는다.
            slotConnections()는 slots.readDisplay로 슬롯별 연결 자산 행을 갱신한다.
-           csvOptions()는 assets.readList('csv')를 읽는다. csv(ids)는 현재 CSV와 편집 객체가 각각 사용하는 CSV id 중
-           ids에 있는 대상을 갱신한다. FastFigureApp의 그래프 데이터 표시 절차에 따라 열린 표에만 행을 읽는다.
-        4. slot(ids)은 선택 슬롯 id가 ids에 있을 때 slots.readSelected 결과를 표시한다.
-           graph(ids, event)는 표시 중인 chart가 ids에 있을 때 graphs.readData로 객체 목록·제목을,
-           CHART_LAYOUT_CHANGED 또는 CHART_MODEL_REPLACED에서는 graphs.readLayout으로 현재 설정을 갱신한다.
-           객체 변경이나 chart 교체가 팔레트 표시에 영향을 주면 graphs.readPalette를 읽는다.
-           image(ids)는 표시 이미지가 ids에 있으면 images.readSettings를 읽고 실제 이미지 표시에는 images.readEditor를 사용한다.
-           slot(ids)으로 표시 이미지 연결이 바뀐 경우에도 새 이미지 입력과 미리보기를 같은 절차로 표시한다.
+           csvOptions()는 assets.readList('csv')를 읽어 현재 옵션 표시를 갱신하고 배열을 반환한다.
+           반환 배열은 이번 호출의 초기화 인수로만 재사용하며, 다음 조회의 cache나 자산의 원천으로 보관하지 않는다.
+           csv(ids)는 그래프 편집기가 열려 있을 때 현재 CSV와 편집 객체가 각각 사용하는 CSV id 중 ids에 있는
+           대상만 갱신한다. 현재 CSV의 헤더·행 수, 해당 객체의 열 입력 및 열린 표에 필요한 값을 읽는다.
+           열린 표에만 행을 읽고 같은 CSV의 같은 열 정의는 이번 표시에서 한 번만 읽는다.
+        4. slot(current,csvOptions,event)는 호출자가 선택 id가 changed.slotIds에 있음을 확인한 뒤 호출한다.
+           slots.readSelected를 한 번 읽는다. 2번과 같은 identity가 아니면
+           selection(current,csvOptions,selectedSlot=이번 Slot)에 도구 모음 표시까지 맡기고 그 반환값을 반환한다.
+           identity가 같으면 이번 Slot을 도구 모음에 표시하고 SLOT_IMAGE_SETTINGS_CHANGED에서만 images.readSettings로 표시 중인
+           image의 입력을 갱신하고 False를 반환한다. 이 설정 경로는 이미지 바이트를 다시 읽지 않는다.
+           graph(ids,event,operation,removedObjectChartIds,appendedObjectChartIds)는 현재 graph 편집기의
+           ownerId가 ids에 없으면 조회 없이 반환한다. CHART_LAYOUT_CHANGED에서는 graphs.readLayout만 읽어
+           축·설정·제목을 갱신하고, 이미 표시된 object 목록의 제목 접두부를 그 title로 바꾼 뒤 반환한다.
+           그 외에는 graphs.readData로 객체 목록·제목을 갱신한다. CHART_MODEL_REPLACED이면
+           graphs.readLayout도 읽는다. event=GRAPH_OBJECTS_REPLACED이고 operation이 graphs.addObject,
+           graphs.deleteObject, graphs.moveObject, graphs.setObjectValues, graphs.applyPalette 중 하나이거나,
+           event=CHART_MODEL_REPLACED이거나, 현재 ownerId가 removedObjectChartIds 또는
+           appendedObjectChartIds에 있으면 graphs.readPalette를 한 번 읽는다.
+           image(ids)는 현재 image 편집기의 ownerId가 ids에 있으면 실제 이미지 표시 component에서
+           images.readEditor로 갱신한다. image asset의 bytes/MIME 교체는 slot-local 설정을 바꾸지 않는다.
         5. layout()은 layout.readControls를 읽고 열린 미리보기에서만 layout.readState를 읽는다.
            labels(event)는 레이블 설정 및 열린 위치 편집기의 해당 표시를 읽는다.
            captions(event, slotIds)는 캡션 설정 또는 본문을 읽는다. 슬롯 본문은 표시 슬롯 id가 slotIds에 있을 때 읽는다.
            printSettings()는 열린 프린트 창에 print.readSettings를 표시한다.
            palette(value)는 /backend/project_state/activeProject._state.appearance.uiPalette 원형의 공식 읽기 결과를 받아 색상 입력과 theme을 갱신한다.
            zoom(value)는 전달받은 배율을 현재 배율 입력에 표시한다.
-        6. display를 반환한다.
+        6. display["statusDisplay"]에 StatusDebug의 다음 세 함수를 담은 딕셔너리를 대입한다.
+           statusText(text)는 상태 문자열을 표시한다. debugEnabled(enabled)는 토글의 label과 pressed를
+           enabled에 맞춰 설정한다. debugLines(lines)는 배열을 줄바꿈으로 연결해 로그를 표시하고,
+           로그가 비었거나 lifecycle이 busy이면 저장·지우기 버튼을 비활성화한다.
+           lifecycle(value)에서도 현재 표시하는 배열과 새 lifecycle로 같은 버튼 사용 가능 여부를 설정한다.
+           세 함수는 renderer가 넘긴 값만 사용하며 프로젝트를 조회하지 않는다.
+        7. display를 반환한다.
     """
     return display
 
@@ -665,7 +696,7 @@ def runLifecycleTask(lifecycle, eventName, task):
     처리:
         1. Mantine Frontend는 task callback을 interfaceFSM에 직접 넘기지 않고 runApplicationLifecycleTask에 위임한다.
            Application boundary가 LIFECYCLE_START -> task -> COMPLETE/FAILED 순서를 소유한다.
-           UI layer는 error를 debug telemetry에 기록할 수 있지만 별도 domain rollback 규칙을 만들지 않는다.
+           UI layer는 error를 renderer.debugLog에 전달할 수 있지만 별도 domain rollback 규칙을 만들지 않는다.
            runApplicationLifecycleTask(lifecycle, eventName, task)를 반환한다.
     """
     return outcome
@@ -740,8 +771,9 @@ def FastFigureApp():
            slot 연결 drag는 assets.draggableAsset가 승인한 trash 밖 CSV/image에만 허용하여
            assets.connectToSlot에 path·kind·대상 slotId를 전달한다.
         5. project actions에는 project.readName/setName/importFile/exportFile을 연결한다.
-           GraphDataEditor는 graphs.readData의 currentCsv 메타데이터와 편집 objects만 표시한다.
-           CSV 선택 옵션은 assets.readList('csv')로 읽는다. 객체의 열 선택 입력에는 그 객체의 CSV id로
+           GraphDataEditor는 bindUiDisplay의 selection/graph/csv가 갱신한 currentCsv 메타데이터와 편집 objects를 표시한다.
+           CSV 선택 옵션은 selection 또는 csvOptions에서 읽고, component mount/render가 따로 읽지 않는다.
+           객체의 열 선택 입력에는 그 객체의 CSV id로
            graphs.readColumns를 호출한다. 변환 데이터의 열은 CSV id에 None을 주고 chart id를 전달한다.
            표 미리보기에 열기·닫기 버튼을 두고, 펼친 상태에서 현재 CSV가 있을 때 그 CSV의 열과
            assets.readPreview(csvId, 0, 30)의 행을 읽는다. 같은 표시에서 두 열 조회의 입력이 같으면 반환 배열을 함께 사용한다.
@@ -758,8 +790,9 @@ def FastFigureApp():
            접근성 이름에는 전체 제목·식별 문자열을 제공한다.
            제목 변경·추가·이동·프로젝트 불러오기 후에도 이번 공식 조회로 표시를 다시 구성한다.
            chart가 없으면 빈 목록이다. 이 표시는 object·title·trace 범례·저장 필드를 변경하지 않는다.
-        6. GraphLayoutEditor는 graphs.readLayout을 표시하고 updateSelectedGraphLayout을 호출한다.
-           GraphPaletteActions는 graphs.readPalette를 표시하고 graphs.applyPalette를 호출한다.
+        6. GraphLayoutEditor는 bindUiDisplay의 selection/graph에서 받은 graphs.readLayout 결과를 표시하고
+           updateSelectedGraphLayout을 호출한다. GraphPaletteActions는 같은 표시 경로에서 받은
+           graphs.readPalette 결과를 표시하고 graphs.applyPalette를 호출한다.
            버튼의 chart id·editable 판정은 graphs.readControls 한 번으로 읽는다.
            GraphFileActions는 importSelectedSlotFile·setSelectedGraphEditable와
            graphs.exportFfsx/exportPlotlyJson을 연결한다.
@@ -776,7 +809,9 @@ def FastFigureApp():
            접기 조작은 project 값·선택 object·axis 설정·debugEnabled를 변경하지 않는다.
         7. PaletteActions는 appearance.readPalette 결과를 draft로 표시하고 명시적 apply/reset에
            appearance.setPalette/resetPalette를 호출한다.
-           StatusDebug는 telemetry를 표시하고 debug 클릭에 handleDebugToggle을 호출한다.
+           StatusDebug는 bindUiDisplay의 statusDisplay가 전달한 문자열·토글 상태·로그를 표시한다.
+           debug 토글·로그 저장·지우기 클릭은 각각 handleDebugToggle, renderer.saveDebugOutput,
+           renderer.clearDebugOutput을 호출한다.
            ReadmeOverlay는 배포 README 내용을 표시한다.
         8. LabelOverlay의 입력은 labels.readSettings를 표시하고 enabled/settings/position/reset/finish 입력을
            labels의 대응 method에 연결한다. pointer 이동의 유효한 position은 같은 setPosition을 호출한다.
@@ -796,10 +831,12 @@ def FastFigureApp():
             배경 click·grid shape 변경·overlay close는 selection을 비운다.
             slot click과 merge/split 입력은 먼저 자신의 동작을 처리하고 parent clear 전파를 소비한다.
             merge/split에는 그 시점의 선택 id 배열을 layout.mergeSlots/splitSlots에 전달한다.
-        11. 미리보기 host의 너비를 측정하여 layout.readState에 전달한다.
+        11. 미리보기 창을 열 때, 열린 상태에서 layout()을 호출할 때, 또는 아래의 가로 크기 입력을
+            받았을 때 미리보기를 갱신한다. 내부 틀을 담는 외부 표시 영역의 content-box 너비를
+            width에 둔다. 아직 측정되지 않았거나 너비가 0 이하이면 width에 None을 둔다.
+            이번 width를 창 인스턴스의 previousPreviewWidth에 저장하고 layout.readState(width)를 호출한다.
             readState의 기존 preview 너비 범위·무효 입력 기본값을 유지하고 반환된
             previewGeometry["width"]를 host 너비로 적용한다. 외부 표시 영역이 더 좁으면 가로 스크롤로 본다.
-            측정 전·표시 불가의 너비는 None으로 전달하여 기존 fallback을 사용한다.
             반환된 gridRows/gridCols/slotStyle, visibleSlots, previewGeometry를 같은 표시 회차에
             renderDashboardFrame에 미리보기 host와 함께 전달하고 반환값을 previewFrame에 둔다.
             이 공통 절차가 grid와 각 슬롯 틀을 만든다. 좌표·local selection·포커스 강조를
@@ -809,8 +846,11 @@ def FastFigureApp():
             local selection·포커스는 점선과 구분되는 안쪽 강조로 표시한다.
             선택·해제·스타일 갱신마다 해당 host의 이전 장식을 정리하고 현재 span·radius로 다시 구성한다.
             미리보기의 장식 테두리·선택 표시는 슬롯 경계와 content 기하 치수를 유지한다.
-            host 정리 시 이 미리보기의 틀과 listener만 해제한다.
-            Modal/viewport 폭이 달라지면 다시 조회한다. 세로 resize는 Modal local 높이만 바꾼다.
+            창을 열 때 외부 표시 영역 하나에 브라우저 content-box 크기 통지기를 연결한다.
+            통지에서 width를 위와 같이 정규화하고 previousPreviewWidth와 같으면 조회 없이 반환한다.
+            다르면 이번 width로 갱신한다. renderer가 너비를 적용하는 내부 틀에는 통지기를 연결하지 않는다.
+            세로 resize는 Modal local 높이만 바꾼다. 창을 닫거나 unmount할 때 통지기를 해제하고
+            previousPreviewWidth와 이 미리보기의 틀·listener를 정리한다.
             preview 갱신은 실제 dashboard generation·Plotly instance·이미지 decode 자원을 변경하지 않는다.
         12. DashboardFileDrop이 수신 가능한 동안 dashboard의 논리적 수신 경로를 하나 유지한다.
             rerender·callback 교체 사이에도 유효한 drop은 정확히 한 import 시도로 전달한다.
@@ -898,10 +938,15 @@ def FastFigureShell():
     - renderer host layout CSS variable.
 
     처리:
-        1. Sidebar·창·graphArea 크기 변경과 스크롤 이동은 기존 workspace 내용의 CSS 위치·배율로 처리한다.
-           transformWorkspace()로 Application의 workspace-structure 조회와 CSS 변환을 실행한다.
-           Plotly.react/newPlot/resize·figure/CSV 계산·이미지 재해석을 요청하지 않는다.
-        2. 기존 content와 포커스·선택 장식·bookmark를 유지한다.
+        1. Sidebar 너비·접힘 처리기는 CSS 적용 뒤 바깥 graphArea의 너비·높이(px)를 읽는다.
+           mount에서 관찰한 같은 바깥 영역의 resize 통지도 같은 크기 처리기로 보낸다.
+           영역 관찰을 지원하지 않으면 browser window resize 이벤트에서 해당 영역을 측정한다.
+           마지막으로 변환한 너비·높이와 같거나 크기가 양수가 아니면 반환한다. 그 외에만
+           transformWorkspace()로 workspace-structure 조회와 CSS 변환을 실행하고 그 크기를 기록한다.
+           mount 종료 시 관찰 또는 window listener를 해제하고 크기 기록을 비운다.
+        2. 스크롤은 브라우저의 native 배치로 처리하며 별도 조회를 실행하지 않는다. 두 경로 모두
+           Plotly.react/newPlot/resize·figure/CSV 계산·이미지 재해석을 요청하지 않고
+           기존 content와 포커스·선택 장식·bookmark를 유지한다.
            아직 내용이 없는 슬롯을 resize만으로 그리지 않는다. shell을 반환한다.
     """
     return shell
