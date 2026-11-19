@@ -6,10 +6,11 @@ Python 문법으로 작성한 구현 명세다.
 """
 
 from sourcescript.backend.project_state import BACKEND_QUERY_KINDS
+from sourcescript.application import adapter
 from sourcescript.application.adapter import dispatchProjectCommand, dispatchProjectQuery, dispatchInterfaceEvent, dispatchSlotSelection, transformWorkspace
 from sourcescript.backend.project_state import DEFAULT_UI_PALETTE
 from sourcescript.frontend.interface_fsm import interfaceFSM
-from sourcescript.frontend.renderer import renderDashboardTarget, renderDashboardCurrent, finishDashboardFileDropInteraction
+from sourcescript.frontend.renderer import applyUiPalette, renderDashboardTarget, renderDashboardCurrent, finishDashboardFileDropInteraction
 
 
 
@@ -264,7 +265,7 @@ def setLayoutApiZoom(value):
         1. 대시보드 확대·축소 입력으로 받은 value를 dispatchInterfaceEvent('SET_DASHBOARD_ZOOM', {'value': value})에 전달한다.
         2. transformWorkspace()를 호출한다. 대시보드를 새로 렌더링하지 않고,
            이미 렌더링된 화면에 확정된 배율의 CSS 확대·축소만 적용한다.
-        3. readLayoutApiControls()의 결과를 layoutState에 둔다.
+        3. readLayoutApiControls()의 결과를 layoutState에 둔다. adapter.uiDisplay가 연결되어 있으면 zoom(layoutState["zoom"])을 호출한다.
     """
     return layoutState
 
@@ -283,9 +284,7 @@ def commitLayoutApiZoom():
     - 없음.
 
     처리:
-        1. 기존 layout zoom completion 알림 한 번 후 fresh read; 두 번째 저장/commit/Project field 없음.
-           interfaceFSM.notify('layout', 'DASHBOARD_ZOOM_CHANGED', {})를 호출한다.
-           readLayoutApiControls()를 반환한다.
+        1. readLayoutApiControls()의 결과를 layoutState에 둔다.
     """
     return layoutState
 
@@ -308,7 +307,7 @@ def resetLayoutApiZoom():
         1. 대시보드 배율 초기화 버튼에서 이 API를 호출하면 dispatchInterfaceEvent('RESET_DASHBOARD_ZOOM', {})로 배율을 100%로 되돌린다.
         2. transformWorkspace()를 호출해 이미 렌더링된 화면의 CSS 배율을 100%로 되돌린다.
            대시보드를 새로 렌더링하지 않는다.
-        3. readLayoutApiControls()의 결과를 layoutState에 둔다.
+        3. readLayoutApiControls()의 결과를 layoutState에 둔다. adapter.uiDisplay가 연결되어 있으면 zoom(layoutState["zoom"])을 호출한다.
     """
     return layoutState
 
@@ -812,8 +811,8 @@ def setAppearanceApiPalette(values):
            선택 슬롯의 내용 표시는 dispatchProjectCommand가 한 번 수행한다.
            rendererInput은 그 선택 슬롯 또는 구조 조회 결과다. wrapper에서 표시 작업을 중복 실행하지 않는다.
            dispatchProjectQuery('project-api', {'operation': BACKEND_QUERY_KINDS['project-api']['appearance.readPalette']})의 결과를 palette에 둔다.
-           palette를 applyUiPalette에 전달해 UI 색상을 적용한다. 다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
-           UI 팔레트 표시 알림은 dispatchProjectCommand가 발행한 APPEARANCE_CHANGED를 사용한다.
+           applyUiPalette(palette)로 CSS 색상을 적용한다. adapter.uiDisplay가 연결되어 있으면 palette(palette 값)를 호출해 색상 입력과 theme에 같은 값을 적용한다.
+           다른 슬롯의 그래프 색상은 전체 렌더링 버튼에서 표시한다.
     """
     return palette
 

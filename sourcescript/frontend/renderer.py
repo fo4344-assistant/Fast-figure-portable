@@ -200,7 +200,7 @@ def applyDashboardProjectionInvalidation(event, mutationResult, interfaceState, 
         2. workspace-structure이면 applyWorkspaceTransform을 호출하고 effect=STRUCTURE로 반환한다. pathOnly이고 실제 참조 제거가 없으면 effect=NONE으로 반환한다.
         3. 현재 선택이 None이거나 targetSlot이 없으면 effect=NONE으로 반환한다. targetSlot.id가 현재 선택과 다르면 결과를 적용하지 않는다.
         4. 그 외에는 renderDashboard(projectProjection, interfaceState)를 한 번 호출하고 effect=SELECTED_SLOT으로 반환한다. APPEARANCE_CHANGED도 선택 슬롯의 figure만 사용한다. 전체 함수로 전환하는 분기를 두지 않는다.
-        5. 공통 UI CSS·편집기 공식 읽기·성공 알림은 기존 경로를 유지한다. 다른 슬롯의 그래프 배경·글꼴·캡션은 전체 버튼에서 갱신한다.
+        5. 다른 슬롯의 그래프 배경·글꼴·캡션은 전체 버튼에서 갱신한다.
     """
     return effect
 
@@ -542,7 +542,7 @@ def prepareDashboardFileDrop(slotId, frontendActions):
     return accepted
 
 
-def applyUiPalette(projectProjection, notify):
+def applyUiPalette(projectProjection):
     paletteView = "CSS 표시 결과."
     """
     Args:
@@ -551,9 +551,6 @@ def applyUiPalette(projectProjection, notify):
       dispatchProjectQuery("renderer", {operation: "ui-palette"})의 반환값 또는
       같은 작업의 선택 슬롯 또는 명시적 전체 renderer 조회 결과에서 읽은 appearance.uiPalette다.
       원본: /backend/project_state/activeProject._state.appearance.uiPalette
-
-    - notify:
-      표시 변경 알림 여부인 논리값.
 
     Return:
     - paletteView:
@@ -569,14 +566,13 @@ def applyUiPalette(projectProjection, notify):
            --ink=fontColor, --graph-bg=paperColor다.
            자동 graph 내용 갱신은 applyDashboardProjectionInvalidation이 같은 작업의 선택 슬롯 조회 결과로 수행한다.
            다른 슬롯의 graph 색상은 전체 렌더링 버튼에서 갱신한다.
-           notify가 참이면 UI_PALETTE_CHANGED를 한 번 알린다.
            MantineProvider의 전체 UI 변수 계산은 mantine_ui.FastFigureApp이 소유한다.
            paletteView를 반환한다.
     """
     return paletteView
 
 
-def applySlotStyle(projectProjection, interfaceState, notify):
+def applySlotStyle(projectProjection, interfaceState):
     styleView = "기존 화면의 CSS 변환 결과."
     """
     Args:
@@ -584,8 +580,6 @@ def applySlotStyle(projectProjection, interfaceState, notify):
       구조 조회 결과.
     - interfaceState:
       Application이 제공한 현재 Frontend 상태.
-    - notify:
-      기존 표시 변경 알림 여부.
 
     Return:
     - styleView: CSS 변환 결과.
@@ -595,7 +589,7 @@ def applySlotStyle(projectProjection, interfaceState, notify):
 
     처리:
         1. applyWorkspaceTransform(projectProjection, interfaceState)의 결과를 styleView에 둔다. Plotly 갱신·resize를 호출하지 않는다.
-        2. notify이면 기존 알림을 한 번 전달하고 styleView를 반환한다.
+        2. styleView를 반환한다.
     """
     return styleView
 

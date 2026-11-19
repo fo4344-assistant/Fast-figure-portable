@@ -52,6 +52,8 @@ from sourcescript.portable_build import portable_build
 
 def initializeFastFigure():
     initialized_runtime = "Application·Frontend controller·UI mount의 runtime 구성."
+    uiTree = "FastFigureApp의 MantineProvider·FastFigureShell 트리."
+    display = "FastFigureApp의 요소별 표시 함수 딕셔너리."
     """
     Args:
     - 없음.
@@ -82,8 +84,9 @@ def initializeFastFigure():
            초기 slot style·geometry와 선택 장식만 적용한다. 초기 전체 내용 렌더링은 실행하지 않는다.
            프로젝트 내용은 선택 슬롯 자동 갱신 또는 명시적 전체 렌더링 버튼에서 표시한다.
         5. Application boundary가 Frontend FSM에 lifecycle ready 전이를 전달한다.
-        6. mantine_ui.FastFigureApp의 MantineProvider·FastFigureShell 트리를
-           기존 React root 하나에 mount한다.
+        6. mantine_ui.FastFigureApp의 반환값을 uiTree와 display에 둔다.
+           uiTree를 기존 React root 하나에 mount한다. mount가 완료되면 adapter.setUiDisplay(display)를 호출한다.
+           root를 해제할 때 먼저 adapter.setUiDisplay(None)을 호출한 뒤 화면 요소를 정리한다.
         7. project 참조·runtime 초기값과 최종 mount 구성을 확인하여 initialized_runtime에 둔다.
         8. initialized_runtime를 반환한다.
     """

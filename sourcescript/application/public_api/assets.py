@@ -109,8 +109,7 @@ def selectProjectCsv(path):
            대상이 없거나 kind가 csv가 아니면 None을 반환한다. resolved["target"]을 target에 둔다.
         2. target["path"]와 kind=csv를 SELECT_ASSET의 입력으로 dispatchInterfaceEvent에 전달한다.
            Frontend 전이는 CSV를 선택하고 그래프 객체 선택을 해제한다. 슬롯 선택은 유지한다.
-        3. target["path"]로 assets.readDeletionTarget을 조회하고 반환된 target을 outcome에 둔다.
-           조회 결과가 None이면 outcome을 None으로 둔다. 조회·전이 오류는 전파한다.
+        3. target을 outcome에 둔다. 조회·전이 오류는 전파한다.
     """
     return outcome
 

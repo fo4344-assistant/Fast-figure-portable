@@ -13,6 +13,7 @@ from sourcescript.backend.project_state import (
     buildFrontendReconciliationInput,
 )
 from sourcescript.backend.project_efsm import projectEFSM, PROJECT_COMMANDS
+from sourcescript.frontend import renderer
 from sourcescript.frontend.interface_fsm import interfaceFSM, INTERFACE_EVENTS
 
 BACKEND_REFERENCE_EVENTS = {
@@ -26,7 +27,7 @@ BACKEND_REFERENCE_EVENTS = {
 
 
 class ApplicationInterface:
-    """Frontend 상태 읽기와 알림 구독의 Application 진입점."""
+    """Frontend 상태 읽기의 Application 진입점."""
 
     def readState(self):
         projection = "Frontend 상태 읽기 딕셔너리."
@@ -67,28 +68,26 @@ class ApplicationInterface:
         """
         return projection
 
-    def subscribe(self, onStoreChange):
-        unsubscribe = "구독을 해제하는 함수."
-        """
-        Args:
-        - onStoreChange:
-          /frontend/interface_fsm/InterfaceStateMachine.publish의 notice를 받는 함수.
-
-        Return:
-        - unsubscribe:
-          같은 등록을 해제하는 함수.
-
-        변경:
-        - interfaceFSM의 listener 집합.
-
-        처리:
-            1. interfaceFSM.subscribe(onStoreChange)를 호출한다.
-            2. 반환된 해제 함수를 unsubscribe에 두고 반환한다.
-        """
-        return unsubscribe
-
 
 appFSM = ApplicationInterface()
+uiDisplay = "현재 mount의 요소별 표시 함수 또는 None. 원형: /frontend/mantine_ui/bindUiDisplay의 반환값."
+
+
+def setUiDisplay(display):
+    """
+    Args:
+    - display:
+      /frontend/mantine_ui/bindUiDisplay의 결과 또는 None.
+
+    Return:
+    - 없음.
+
+    변경:
+    - 이 Application의 uiDisplay.
+
+    처리:
+        1. display를 uiDisplay에 둔다. UI를 해제할 때는 None을 전달한다.
+    """
 
 
 def dispatchProjectQuery(query, payload=None):
@@ -130,6 +129,8 @@ def dispatchInterfaceEvent(event, payload=None):
     validatedInput = "FrontendValidatedInput 원형의 딕셔너리."
     projection = "Frontend 상태 읽기 딕셔너리."
     validator = "참조 판정 함수."
+    before = "객체 선택 직전의 Frontend 상태."
+    request = "참조 판정에 전달할 이번 이벤트의 입력 딕셔너리."
     """
     Args:
     - event:
@@ -146,13 +147,20 @@ def dispatchInterfaceEvent(event, payload=None):
     - interfaceFSM이 소유하는 runtime 상태.
 
     처리:
-        1. BACKEND_REFERENCE_EVENTS에서 event에 대응하는 함수를 validator에 둔다.
-           등록된 함수가 있으면 validator(event,payload)를 한 번 호출하여 validatedInput에 둔다.
-        2. 그 외에는 accepted=True와 event의 입력을 담은 validatedInput을 구성한다.
-        3. interfaceFSM.send(event, validatedInput)의 결과를 projection에 두고 반환한다.
-           accepted=False 입력은 Frontend 소유자가 현재 상태를 반환한다.
-        4. 명시적 graph object 선택은 selectAsset=True를 전달하며 commit 뒤 index 보정은
-           selectAsset=False로 구분한다. Backend 조회 실패는 호출자에게 전파한다.
+        1. payload의 필드를 request에 복사한다. None이면 빈 딕셔너리로 둔다.
+           SELECT_GRAPH_OBJECT이면 interfaceFSM.readState()의 결과를 before에 두고 before["selectedSlotId"]를 request에 넣는다.
+           명시적 객체 선택의 selectAsset=True와 참조 보정의 selectAsset=False 구분을 유지한다.
+        2. BACKEND_REFERENCE_EVENTS에서 event에 대응하는 함수를 validator에 둔다.
+           등록된 함수가 있으면 validator(event, request)의 결과를 validatedInput에 둔다.
+           그 외에는 accepted=True와 request를 담은 validatedInput을 구성한다.
+        3. interfaceFSM.send(event, validatedInput)의 결과를 projection에 둔다.
+           입력이 거부되었거나 uiDisplay가 None이면 projection을 반환한다.
+        4. SELECT_ASSET·CLEAR_ASSET_SELECTION이면 uiDisplay의 assetSelection(projection)과 graphObject(projection)를 호출한다.
+           SELECT_GRAPH_OBJECT·CLEAR_GRAPH_OBJECT이면 graphObject(projection)를 호출한다.
+           SELECT_GRAPH_OBJECT에서 자산 종류 또는 경로가 before와 달라졌으면 assetSelection(projection)도 호출한다.
+        5. TOGGLE_OVERLAY·CLOSE_OVERLAY·OUTSIDE_CLICK·ESCAPE이면 overlay(projection["overlay"])를 호출한다.
+           슬롯 선택 표시는 dispatchSlotSelection, 배율 표시는 배율 API, 작업 상태 표시는 runLifecycleTask에서 처리한다.
+        6. projection을 반환한다. 조회·표시 오류는 호출자에게 전파한다.
     """
     return projection
 
@@ -162,6 +170,7 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
     interfaceState = "최종 Frontend 상태."
     selectionContext = "현재 visible 슬롯의 선택 문맥."
     projectResult = "조건부 종류 변경 결과 또는 None."
+    commandState = "조건부 명령이 반환한 최종 Frontend 상태."
     rendererProjection = "구조 또는 선택 슬롯 조회 결과."
     """
     Args:
@@ -180,13 +189,15 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
     - Frontend 선택과 선택 장식. 조건이 맞으면 빈 슬롯 종류.
 
     처리:
-        1. 기존 Backend SELECT_SLOT 검증을 실행한다. 거부이면 현재 상태와 None, None을 반환한다.
-        2. interfaceFSM.send로 선택을 반영한다. 같은 슬롯의 UI 입력은 toggle-clear,
-           model-to-fsm은 선택 유지 규칙을 사용한다.
-        3. 선택 id가 None이 아니고 pendingContentType이 있으면 slot-selection-context를 읽는다.
-           현재 빈 슬롯의 종류가 요청과 다르면 dispatchProjectCommand의 SLOT_TYPE_CHANGED를 한 번 호출한다.
-           그 결과를 projectResult에 둔다. 그 외에는 None이다.
-        4. 최종 interfaceFSM.readState를 interfaceState에 둔다.
+        1. validateSlotSelection("SELECT_SLOT", {slotId, direction})의 결과를 validatedInput에 둔다.
+           거부이면 현재 상태와 None, None을 반환한다.
+        2. interfaceFSM.send("SELECT_SLOT", validatedInput)의 결과를 interfaceState에 둔다.
+        3. interfaceState["selectedSlotId"]가 None이 아니고 pendingContentType이 있으면 그 id로 slot-selection-context를 조회해 selectionContext에 둔다.
+           현재 빈 슬롯의 종류가 요청과 다르면 dispatchProjectCommand에 SLOT_TYPE_CHANGED와 대상 id·종류를 전달한다.
+           showSelectedEditor=False를 전달하여 이 절차의 4번에서 최종 슬롯 편집기를 표시한다.
+           명령이 반환한 튜플을 projectResult, commandState, rendererProjection에 두고 commandState를 interfaceState에 둔다.
+           명령을 호출하지 않았으면 projectResult에 None을 둔다.
+        4. uiDisplay가 연결되어 있으면 selection(interfaceState)를 한 번 호출한다.
            renderer의 선택 장식·상호작용 권한을 이 상태로 먼저 갱신한다.
            선택이 None이면 workspace-structure를 조회하여 rendererProjection에 두고 튜플을 반환한다.
         5. 3번 명령이 이미 같은 최종 선택의 표시를 수행했으면 그 rendererProjection을 포함한 튜플을 반환한다.
@@ -198,7 +209,7 @@ def dispatchSlotSelection(slotId, pendingContentType=None, direction="ui-to-fsm"
     return interfaceState, projectResult, rendererProjection
 
 
-def dispatchProjectCommand(event, payload):
+def dispatchProjectCommand(event, payload, showSelectedEditor=True):
     result = "ProjectMutationResult 딕셔너리."
     frontendBefore = "참조 보정 전 Frontend 상태."
     reconciliationInput = "Backend 참조 보정 결과."
@@ -210,6 +221,8 @@ def dispatchProjectCommand(event, payload):
       PROJECT_COMMANDS의 명령 이름.
     - payload:
       기존 명령의 식별자·새 값·파일 바이트.
+    - showSelectedEditor:
+      이 호출에서 현재 슬롯 편집기를 갱신할지 정하는 논리값.
 
     Return:
     - result, interfaceState, rendererProjection:
@@ -223,30 +236,78 @@ def dispatchProjectCommand(event, payload):
         2. interfaceFSM.readState()를 frontendBefore에 둔다.
            result["committed"]가 False이면 (result, frontendBefore, None)을 반환한다.
         3. buildFrontendReconciliationInput(event, result, frontendBefore)를 reconciliationInput에 둔다.
-           interfaceFSM.reconcileProjectResult(event, reconciliationInput, result)의 결과를 interfaceState에 둔다.
-           참조 보정을 마친 뒤 이 명령의 변경과 값이 달라진 Frontend 필드를 한 번 알린다.
+           interfaceFSM.reconcileProjectResult(reconciliationInput)의 결과를 interfaceState에 둔다.
         4. PROJECT_LOADED이면 renderer.clearWorkspacePresentation()으로 이전 workspace 자원을 정리한다.
            workspace-structure 조회를 renderer.applyWorkspaceTransform에 전달해 새 빈 틀과 선택 장식만 준비한다.
-           이 구조 조회를 rendererProjection에 둔다. 내용은 전체 버튼에서 표시한다.
+           이 구조 조회를 rendererProjection에 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, True)를 호출한다.
+           전체 내용은 렌더링 버튼에서 표시한다.
            (result, interfaceState, rendererProjection)을 반환한다.
         5. GRID_LAYOUT_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED·LAYOUT_STYLE_CHANGED이면
            workspace-structure를 조회한다. 사라진 소유 연결만 정리하고 유지되는 내용은 CSS로 이동·확대·축소한다.
            틀이 안전하게 호환되지 않으면 전체 렌더링 필요를 안내한다.
-           rendererProjection에 이 구조 조회를 두고 (result, interfaceState, rendererProjection)을 반환한다.
-           내용 표시 분기로 진행하지 않는다.
+           rendererProjection에 이 구조 조회를 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
+           (result, interfaceState, rendererProjection)을 반환한다.
         6. reconciliationInput["projectionEffect"]의 pathOnly가 참이고 referencesRemoved가 거짓이면 구조·참조 정리만 수행한다.
            EXPORT_SETTINGS_CHANGED는 파일 출력 설정만 변경하므로 workspace 내용 갱신을 생략한다.
            이 두 경우에는 workspace-structure 조회를 rendererProjection에 두고
-           (result, interfaceState, rendererProjection)을 반환한다. 선택 내용 표시 분기로 진행하지 않는다.
+           refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고
+           (result, interfaceState, rendererProjection)을 반환한다.
            그 외에는 selected-slot을 조회한다. 선택 None이면 구조 조회로 바꾸고 내용 계산을 생략한다.
            renderer.applyDashboardProjectionInvalidation에 event, result, interfaceState, 조회 결과를 한 번 전달한다.
            전체 palette/CSV/labels/captions 변경의 다른 슬롯 표시는 전체 렌더링 버튼에서 반영한다.
            전역 dashboard caption도 전체 버튼에서 갱신한다. Sidebar의 공식 값 읽기는 계속 허용한다.
-        7. rendererProjection에 이번 조회 결과를 두고 튜플을 반환한다.
+        7. rendererProjection에 이번 조회 결과를 둔다. refreshCommittedUi(event, result, frontendBefore, interfaceState, showSelectedEditor)를 호출하고 튜플을 반환한다.
            wrapper는 이 명령의 표시 작업을 중복 실행하지 않는다.
            조회·표시 오류는 원래 실패로 전달하며 이미 완료한 commit은 유지한다.
     """
     return result, interfaceState, rendererProjection
+
+
+def refreshCommittedUi(event, result, before, current, showSelectedEditor):
+    changed = "이번 명령의 반영 전후 차이. 원형: /backend/project_efsm/ProjectMutationResult의 changed."
+    palette = "새 프로젝트의 UI 팔레트. 원형: /backend/project_state/activeProject._state.appearance.uiPalette."
+    """
+    Args:
+    - event:
+      반영된 PROJECT_COMMANDS의 이름.
+    - result:
+      이번 명령 결과. 원형: /backend/project_efsm/ProjectMutationResult.
+    - before, current:
+      참조 보정 전후 /frontend/interface_fsm/InterfaceStateMachine.readState의 결과.
+    - showSelectedEditor:
+      dispatchProjectCommand에서 받은 현재 슬롯 편집기 표시 여부.
+
+    Return:
+    - 없음.
+
+    변경:
+    - 현재 UI에서 이 명령의 영향을 받는 요소의 표시값.
+
+    처리:
+        1. PROJECT_LOADED이면 dispatchProjectQuery("project-api", {operation: "appearance.readPalette"})의 결과를 palette에 둔다.
+           renderer.applyUiPalette(palette)로 CSS 색상을 적용한다. uiDisplay가 연결되어 있으면 uiDisplay.palette(palette),
+           projectName(), assetTree(), slotConnections(), csvOptions(), selection(current)을 호출한다. 이 분기를 종료한다.
+        2. uiDisplay가 None이면 종료한다. result["changed"]를 changed에 둔다.
+        3. 슬롯 선택이나 workspace가 달라지면 selection(current)을 호출한다.
+           슬롯 선택과 workspace가 유지되면 자산 종류·경로가 달라졌을 때 assetSelection(current), 객체 순번이 달라졌을 때
+           graphObject(current), 열린 창이 달라졌을 때 overlay(current["overlay"])를 호출한다.
+        4. PROJECT_NAME_CHANGED이면 projectName()을 호출한다.
+           자산 생성·제거·이동, 디렉터리 생성·이동·휴지통 비우기, changed["assetReferenceChanges"]에 항목이 있는 경우,
+           또는 changed["csvIds"]에 항목이 있는 경우 assetTree()를 한 번 호출한다. CSV 교체·가져오기·헤더 변경 후 트리의 행 수도 이때 읽는다.
+           CSV 목록의 id·이름·경로가 바뀌었으면 csvOptions()를 호출한다.
+        5. 슬롯 교환·병합·분할·그리드 변경으로 연결 행의 배치가 달라지거나, 슬롯·그래프의 자산 연결 또는 연결 자산의 이름·경로가 달라지면 slotConnections()를 호출한다.
+           참조 총수가 같은 슬롯 교환도 해당한다.
+           3번에서 새 편집기를 구성했으면 그 표시를 사용한다. 같은 편집기를 유지하면 changed의 비어 있지 않은 csvIds를 csv에 전달한다.
+           같은 편집기를 유지하고 showSelectedEditor가 참이면 비어 있지 않은 slotIds·chartIds·imageIds를 각각 slot·graph·image에 전달한다.
+           csv는 현재 CSV의 헤더·행 수와 해당 CSV를 쓰는 열 입력 및 열린 표에 적용한다.
+           graph는 명령에 따라 객체 목록·입력, 축·제목, 팔레트 중 바뀐 부분을 갱신하도록 event도 전달한다.
+        6. GRID_LAYOUT_CHANGED·LAYOUT_STYLE_CHANGED·SLOTS_MERGED·SLOTS_SPLIT·SLOTS_SWAPPED이면 layout()을 호출한다.
+           LABEL_SETTINGS_CHANGED·LABEL_POSITION_CHANGED이면 labels(event), CAPTION_TEXT_INPUT·SLOT_CAPTIONS_INSERTED·
+           CAPTION_SETTINGS_CHANGED이면 captions(event, changed["slotIds"])를 호출한다.
+           EXPORT_SETTINGS_CHANGED이면 printSettings()를 호출한다. UI 팔레트 적용과 반환은 setAppearanceApiPalette에서 처리한다.
+        7. 같은 요소의 같은 표시값이 여러 조건을 충족하면 이 호출에서 한 번 읽는다.
+           표시 오류가 발생해도 이미 완료한 프로젝트 반영은 유지한다.
+    """
 
 
 def transformWorkspace():
@@ -304,6 +365,7 @@ def renderWholeWorkspace():
 def runLifecycleTask(lifecycle, event, task):
     outcome = "task의 반환값."
     failure = "task가 발생시킨 오류."
+    state = "작업 상태 전이 직후의 Frontend 읽기 결과."
     """
     Args:
     - lifecycle:
@@ -326,11 +388,16 @@ def runLifecycleTask(lifecycle, event, task):
         1. interfaceFSM.readState()["lifecycle"]이 ready인지 확인한다.
            busy이면 task 실행 전에 busy 거부 결과를 반환한다.
         2. lifecycle이 importing/exporting인지 확인하고 잘못된 값이면 실행 전에 거부한다.
-        3. INTERFACE_EVENTS["LIFECYCLE_START"]로 lifecycle과 event를 interfaceFSM.send에 전달한다.
+        3. dispatchInterfaceEvent("LIFECYCLE_START", {lifecycle, event})의 결과를 state에 둔다.
+           uiDisplay가 연결되어 있으면 lifecycle(state["lifecycle"])을 호출한다.
         4. task를 정확히 한 번 호출한다. 동기 반환 또는 비동기 완료 값을 outcome에 둔다.
-        5. 정상 완료이면 INTERFACE_EVENTS["LIFECYCLE_COMPLETE"]로 event와 outcome을 interfaceFSM.send에 전달한 뒤 outcome을 반환한다.
-        6. 동기 예외 또는 비동기 거부이면 원래 오류를 failure에 둔다.
-           INTERFACE_EVENTS["LIFECYCLE_FAILED"]로 event와 메시지를 interfaceFSM.send에 전달하여 error 발행과 ready 복귀를 마친 뒤
-           failure를 호출자에게 전파한다.
+        5. 정상 완료이면 dispatchInterfaceEvent("LIFECYCLE_COMPLETE", {event, outcome})의 결과를 state에 둔다.
+           uiDisplay가 연결되어 있으면 lifecycle(state["lifecycle"])을 호출하고 outcome을 반환한다.
+        6. task의 동기 예외 또는 비동기 거부이면 원래 오류를 failure에 둔다.
+           dispatchInterfaceEvent("LIFECYCLE_FAILED", {event, message: failure의 메시지})의 결과를 state에 둔다.
+           uiDisplay가 연결되어 있으면 taskError(state["error"])를 호출한다.
+           오류 표시의 성공 여부와 관계없이 interfaceFSM.recoverLifecycle()의 결과를 state에 둔다.
+           uiDisplay가 연결되어 있으면 lifecycle(state["lifecycle"])을 호출한다. 오류 표시와 조작 가능 여부 갱신에서 발생한 오류로
+           작업의 원래 failure를 바꾸지 않는다. failure를 호출자에게 전파한다.
     """
     return outcome

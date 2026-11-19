@@ -317,7 +317,7 @@ class UiCommand:
 
         처리:
             1. cancel로 미확정 편집을 정리하고 active=False로 둔다.
-            2. 이 UI가 등록한 이벤트·구독을 해제한다. 진행 중 작업의 종료 정리는 해당 작업이 수행한다.
+            2. 이 UI가 등록한 입력 이벤트를 해제한다. 진행 중 작업의 종료 정리는 해당 작업이 수행한다.
         """
 
 
@@ -418,75 +418,48 @@ def handleDebugToggle():
     return outcome
 
 
-def subscribeAppState(onStoreChange):
-    unsubscribe = "이번 알림 등록을 해제하는 함수."
+def bindUiDisplay(elements):
+    display = "현재 mount의 요소별 표시 함수 딕셔너리."
     """
     Args:
-    - onStoreChange:
-      /frontend/interface_fsm/InterfaceStateMachine.publish의 notice를 받는 함수.
+    - elements:
+      FastFigureApp에서 구성한 현재 화면 요소와 각 요소의 표시값 설정 함수.
 
     Return:
-    - unsubscribe:
-      이번 등록을 해제하는 함수.
+    - display:
+      아래 처리에 적은 이름과 인수를 가진 표시 함수 딕셔너리. 각 함수는 해당 요소의 표시값을 설정한다.
 
     변경:
-    - Application을 통해 Frontend listener를 등록한다.
-
-    처리:
-        1. appFSM.subscribe(onStoreChange)의 결과를 unsubscribe에 두고 반환한다.
-    """
-    return unsubscribe
-
-
-def useAppState():
-    current = "이번 화면 구성에 쓰는 Frontend 상태 딕셔너리."
-    """
-    Args:
     - 없음.
 
-    Return:
-    - current:
-      lifecycle, workspace, overlay, selectedSlotId, assetSelection, assetPath, graphObjectIndex.
-      Source of Truth: /frontend/interface_fsm/InterfaceStateMachine.readState.
-
-    변경:
-    - 화면 구성 component의 알림 등록과 표시 상태.
-
     처리:
-        1. 위 일곱 필드의 이름을 이 component의 관심 필드로 사용한다.
-        2. useControlSnapshot에 해당 필드만 공식 Frontend 읽기에서 가져오는 함수와,
-           notice의 fields에 관심 필드가 하나 이상 있는지 판정하는 함수를 전달한다.
-        3. 반환된 화면 구성 값을 current에 두고 반환한다.
+        1. 아래 함수를 구성하여 이름별로 display에 둔다. 조회가 필요한 함수는 현재 표시 중인 요소만 읽는다.
+           조회 결과는 해당 요소의 React 표시값에 둔다. 최초 표시에도 같은 조회 절차를 사용한다.
+        2. selection(current): 도구 모음, 자산·객체의 선택 표시와 창을 current에 맞추고 새 슬롯의 편집기를 표시한다.
+           current의 원형은 /frontend/interface_fsm/InterfaceStateMachine.readState의 반환값이다.
+           열린 레이블 창의 기준 슬롯이나 캡션 창의 슬롯 본문 대상이 바뀌면 그 창에서 새 대상의 값을 읽는다.
+           assetSelection(current)은 트리의 선택 표시와 현재 CSV 표시를 갱신한다. graphObject(current)는 해당 객체 입력을 갱신한다.
+           overlay(name)는 지정된 창을 표시하고 닫힌 창의 미확정 입력을 정리한다.
+           lifecycle(value)는 버튼과 입력의 조작 가능 여부를 갱신하고 taskError(error)는 오류를 표시한다.
+        3. projectName()은 project.readName을 읽는다. assetTree()는 assets.readTree를 읽고 휴지통이 열려 있으면 assets.readTrash를 읽는다.
+           slotConnections()는 slots.readDisplay로 슬롯별 연결 자산 행을 갱신한다.
+           csvOptions()는 assets.readList('csv')를 읽는다. csv(ids)는 현재 CSV와 편집 객체가 각각 사용하는 CSV id 중
+           ids에 있는 대상을 갱신한다. FastFigureApp의 그래프 데이터 표시 절차에 따라 열린 표에만 행을 읽는다.
+        4. slot(ids)은 선택 슬롯 id가 ids에 있을 때 slots.readSelected 결과를 표시한다.
+           graph(ids, event)는 표시 중인 chart가 ids에 있을 때 graphs.readData로 객체 목록·제목을,
+           CHART_LAYOUT_CHANGED 또는 CHART_MODEL_REPLACED에서는 graphs.readLayout으로 현재 설정을 갱신한다.
+           객체 변경이나 chart 교체가 팔레트 표시에 영향을 주면 graphs.readPalette를 읽는다.
+           image(ids)는 표시 이미지가 ids에 있으면 images.readSettings를 읽고 실제 이미지 표시에는 images.readEditor를 사용한다.
+           slot(ids)으로 표시 이미지 연결이 바뀐 경우에도 새 이미지 입력과 미리보기를 같은 절차로 표시한다.
+        5. layout()은 layout.readControls를 읽고 열린 미리보기에서만 layout.readState를 읽는다.
+           labels(event)는 레이블 설정 및 열린 위치 편집기의 해당 표시를 읽는다.
+           captions(event, slotIds)는 캡션 설정 또는 본문을 읽는다. 슬롯 본문은 표시 슬롯 id가 slotIds에 있을 때 읽는다.
+           printSettings()는 열린 프린트 창에 print.readSettings를 표시한다.
+           palette(value)는 /backend/project_state/activeProject._state.appearance.uiPalette 원형의 공식 읽기 결과를 받아 색상 입력과 theme을 갱신한다.
+           zoom(value)는 전달받은 배율을 현재 배율 입력에 표시한다.
+        6. display를 반환한다.
     """
-    return current
-
-
-def useControlSnapshot(readCurrent, affectsDisplay):
-    snapshot = "이 component의 현재 표시 값."
-    """
-    Args:
-    - readCurrent:
-      이 component가 표시하는 값을 반환하는 공식 읽기 함수.
-    - affectsDisplay:
-      /frontend/interface_fsm/InterfaceStateMachine.publish의 notice와 이 component의
-      현재 표시 대상 및 열림 상태로 다시 읽을지 정하는 함수.
-
-    Return:
-    - snapshot:
-      이 component의 표시 값. 형태는 readCurrent의 결과를 따른다.
-
-    변경:
-    - 이 component의 알림 등록과 표시 값.
-
-    처리:
-        1. 표시를 시작할 때 subscribeAppState에 이 component의 알림 함수를 등록한다.
-           알림 함수는 affectsDisplay(notice)가 참이면 이 component의 표시 갱신을 요청한다.
-        2. 표시 갱신을 처리할 때, 등록 직후, 조회 대상·열림 상태가 바뀔 때 readCurrent()의 결과를 이 component의 표시 값에 둔다.
-           공식 조회 오류는 이 component의 표시 오류로 처리한다.
-        3. 현재 표시 값을 snapshot에 둔다. 입력 확정과 명령 전송은 UiCommand의 그 시점 공식 읽기를 사용한다.
-        4. component 해제 시 등록 해제 함수를 호출한다. snapshot을 반환한다.
-    """
-    return snapshot
+    return display
 
 
 def addSelectedGraphObject():
@@ -700,6 +673,7 @@ def runLifecycleTask(lifecycle, eventName, task):
 
 def FastFigureApp():
     uiTree = "MantineProvider의 React 트리."
+    display = "bindUiDisplay의 요소별 표시 함수 딕셔너리."
     choosePlan = "충돌 선택 Promise를 반환하는 함수."
     palette = "ProjectObject._state의 appearance.uiPalette 원형의 딕셔너리."
     theme = "Mantine theme 딕셔너리."
@@ -714,16 +688,15 @@ def FastFigureApp():
     - 없음.
 
     Return:
-    - uiTree:
-      MantineProvider의 React 트리.
-      MantineProvider 아래 FastFigureShell.
+    - uiTree, display:
+      FastFigureShell을 포함한 MantineProvider 트리와 그 화면의 요소별 표시 함수.
 
     변경:
-    - UI-local component 상태·구독·입력 수신 수명주기.
+    - UI-local component의 표시값과 입력 수신 수명주기.
 
     처리:
-        1. useControlSnapshot에 FastFigureApi.appearance.readPalette를 연결한다.
-           처음 표시할 때와 APPEARANCE_CHANGED 또는 PROJECT_LOADED 반영 알림에서 읽은 값을 palette에 둔다.
+        1. 첫 표시 때 FastFigureApi.appearance.readPalette의 결과를 palette에 둔다.
+           이후 palette(value)로 전달받은 색상 값을 같은 표시에 적용한다.
            palette의 표시 값이 달라질 때 아래 규칙으로 theme을 구성한다.
            theme.colors.ffui의 10개 shade는 모두 uiColor, primaryColor=ffui, color scheme=light다.
            body=uiBackgroundColor, text/default-color/primary-light-color=fontColor, default=uiSurfaceColor,
@@ -759,7 +732,8 @@ def FastFigureApp():
            data actions에는 assets.importFiles, slots.reset과 asset 삭제 동작을 연결한다.
            image editor의 입력은 images.readSettings 결과를 표시하고 images.setSettings와 images.insertEmpty를 호출한다.
            실제 이미지 표시가 필요한 component만 images.readEditor로 바이트를 요청한다.
-        4. ProjectDataTree는 readProjectAssetDisplay의 nodes와 slotRows를 표시한다.
+        4. ProjectDataTree의 최초 표시에는 readProjectAssetDisplay의 nodes와 slotRows를 사용한다.
+           이후 자산 행은 assetTree(), 슬롯 연결 행은 slotConnections()에서 각각 읽어 표시한다.
            row 선택에는 assets.selectCsv/selectImage/selectDirectory, 이동에는 assets.planMove/move,
            menu에는 createDirectory/delete/emptyTrash/download를 연결한다.
            trash의 CSV/image도 선택 가능하게 표시하고, 이동·복구는 같은 planMove/move로 처리한다.
@@ -899,36 +873,13 @@ def FastFigureApp():
             기존 위젯 설정·이벤트 연결을 구성한다. 증감 버튼·화살표는 step에 한 번 연결한다.
             원문·선택 범위·포커스를 일반 재렌더에서 유지하고 외부 공식 갱신으로 편집 문자열을 덮어쓰지 않는다.
             대상 변경·Escape·overlay 닫힘은 cancel, unmount는 dispose를 호출한다.
-            같은 대상의 재렌더는 같은 객체를 유지하며 함수 연결은 현재 API·대상을 조회한다.
-            각 component는 표시 대상과 공식 조회에 맞는 affectsDisplay를 useControlSnapshot에 전달한다.
-            lifecycle 변경은 입력의 사용 가능 여부를, workspace·overlay·선택 참조 변경은 필요한 component와 조회 대상을 갱신한다.
-            반영한 Backend 명령의 알림은 다음 소비자에게 연결한다.
-            - 프로젝트 교체: 현재 표시 중인 component가 새 프로젝트에서 해당 API로 읽는다.
-            - PROJECT_NAME_CHANGED: 프로젝트 이름 표시에서 project.readName을 읽는다.
-            - 자산 트리: 디렉터리 생성·이동·휴지통 비우기, changed.assets의 자산 변경, changed.assetReferenceChanges의 참조 수 변경을 받으면
-              assets.readTree를 읽는다. 휴지통 표시가 열려 있으면 디렉터리·자산의 이동·삭제로 구성원이 바뀌거나,
-              표시 중인 자산의 kind/id가 changed.assetReferenceChanges에 있으면 assets.readTrash를 읽는다.
-              CSV 선택 목록은 CSV가 생성·삭제되거나 경로·이름이 달라진 경우 assets.readList('csv')를 읽는다.
-            - CSV 표시: changed.csvIds에 현재 선택 CSV가 있으면 헤더·행 수 표시를 갱신하고 열린 미리보기의 표를 다시 읽는다.
-              changed.csvIds에 편집 중인 graph object의 csvId가 있으면 그 열 선택을 읽는다. 현재 선택 CSV의 경로가 바뀌면 새 대상에서 읽는다.
-            - 슬롯 연결 표시: changed.slotIds 또는 연결 자산의 변경이 표시 슬롯의 연결·이름·경로에 영향을 주면 slots.readDisplay를 읽는다.
-              슬롯 편집기와 도구 모음은 표시 슬롯의 식별자가 바뀌거나 changed.slotIds에 속할 때 해당 슬롯을 읽는다.
-            - 그래프 표시: changed.chartIds에 표시 chart가 있으면 영향받은 조회를 읽는다.
-              GRAPH_OBJECTS_REPLACED는 객체 목록·객체 입력·팔레트, CHART_LAYOUT_CHANGED는 축·전역 설정과 제목이 포함된 객체 목록,
-              CHART_MODEL_REPLACED와 슬롯의 chart 교체는 현재 chart의 목록·설정·팔레트를 갱신한다.
-            - 레이아웃 변경: grid·style·슬롯 배치 중 수정된 값을 사용하는 입력과 열린 레이아웃 미리보기를 읽는다.
-              배율 변경은 배율 입력을 갱신한다. 확대·축소·100% 초기화 버튼의 API는 이미 렌더링된 화면에 CSS 배율만 적용한다.
-            - LABEL_SETTINGS_CHANGED는 레이블 설정과 열린 위치 편집기의 표시, LABEL_POSITION_CHANGED는 열린 위치 편집기의 좌표를 갱신한다.
-            - CAPTION_TEXT_INPUT·SLOT_CAPTIONS_INSERTED는 바뀐 캡션의 본문을, CAPTION_SETTINGS_CHANGED는 캡션 설정과 그 설정을 표시하는 편집기를 갱신한다.
-              슬롯 캡션을 읽을 때는 changed.slotIds와 표시 대상 id를 비교한다.
-            - EXPORT_SETTINGS_CHANGED는 열린 프린트 설정을 읽는다. APPEARANCE_CHANGED는 팔레트 편집기와 UI theme에서 appearance.readPalette를 읽는다.
-              theme은 팔레트 값이 달라졌을 때 구성한다.
-            raw 입력은 해당 UiCommand의 로컬 표시를 갱신한다. 명령 실행 시에는 그 시점의 공식 입력을 읽는다.
+            lifecycle·선택·창 갱신 함수는 현재 입력의 사용 가능 여부와 대상을 설정한다.
+            raw 입력은 해당 UiCommand의 로컬 표시를 갱신한다. 명령 실행 시점의 공식 입력은 UiCommand.readCurrent로 읽는다.
         17. 위 component와 event handler를 FastFigureShell 아래 구성하고
-            theme을 적용한 MantineProvider 트리를 uiTree에 둔다.
-        18. uiTree를 반환한다.
+            theme을 적용한 MantineProvider 트리를 uiTree에 둔다. 같은 화면 요소를 bindUiDisplay에 전달하고 결과를 display에 둔다.
+        18. uiTree와 display를 반환한다.
     """
-    return uiTree
+    return uiTree, display
 
 
 def FastFigureShell():
