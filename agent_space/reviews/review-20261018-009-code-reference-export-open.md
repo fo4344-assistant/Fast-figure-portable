@@ -29,7 +29,7 @@ Implementation and patch017 committed together as `97dc58efa60b6e8e73c17f33664c8
 - Actions regression39056916573 SUCCESS at that HEAD: actual logs show cases1–52 passing in inline and split-zip; cases51/52 explicitly exercise reference measurement and target rejection/scaling.
 - Version39056916480 SUCCESS at that HEAD: Source39 closed/current, pseudocode13 current and code46 stale with fingerprint `sha256:97f73a1966367ee435633d7c0309c207fe32f9b7cc0931a5e7a229b3a4e11f96`.
 - Build39056916610 SUCCESS from that source: both distributions verified and dist-only bot `0946be422fd08d0380469b1f309c20fcc6dd1dbc` fast-forwarded locally.
-- Actual logs retained under `.work/reference-r46-evidence/`. No observed failed run in this unit. Later result-only documentation is not the executed implementation HEAD.
+- Actual logs retained in [저장소에 보관한 실행 로그](../logs/20261023-work-archive/reference-r46-evidence/regression.log). No observed failed run in this unit. Later result-only documentation is not the executed implementation HEAD.
 
 No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Byte fingerprinting, semantic whitespace checks and isolated-index reverse apply passed as file operations only. Whole diff whitespace inspection additionally reports existing whitespace in patch context; the actual diff is not rewritten to hide it.
 

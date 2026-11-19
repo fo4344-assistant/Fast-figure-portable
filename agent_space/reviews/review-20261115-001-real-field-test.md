@@ -6,7 +6,7 @@
 - 기준 commit: `9e58bdf0381b62bb59068a44ca78d75be6edcaed`.
 - 계층: Source Script 46 → pseudocode 26 → source code 157. 기존 `stale` 상태와 Source Script `open` 판정은 변경하지 않았다.
 - 환경: Windows, ego-browser / Chrome 156.0.0.0, viewport 1637×916, TaskSpace 3.
-- 기존 dist를 대신 검증한 것이 아니다. 현재 작업 파일에서 `python Fast-figure-portable/scripts/build-portable.py --dist-dir .work/field-test-20261114-2348/build`를 실행하고, 생성한 inline HTML을 실제 `file://` 페이지로 열었다. split 배포본은 별도 페이지에서 시작만 확인했다.
+- 기존 dist를 대신 검증한 것이 아니다. 현재 작업 파일에서 `scripts/build-portable.py`를 별도 출력 디렉터리로 실행하고, 생성한 inline HTML을 실제 `file://` 페이지로 열었다. split 배포본은 별도 페이지에서 시작만 확인했다.
 - inline HTML SHA256: `3cd9bf09bceaf0473882f3083f358f433efcc986ef79597c2cba997d2316af6d`.
 - 실제 포인터·키보드·파일 선택·다운로드 작업과 보조 public API 실험을 구분했다. 상태 관찰은 공개 read 경계를 사용했으며 Backend 내부 상태 주입이나 함수 교체를 하지 않았다.
 - **판정: 전체 통과 아님. 핵심 UI 두 경로에서 실패를 재현했다. 선택 슬롯 참조 전달 누락이라는 공통 source code 경계 문제가 확인된다.**

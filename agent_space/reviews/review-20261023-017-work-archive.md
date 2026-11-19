@@ -11,7 +11,7 @@
 - `ffsx-r48-evidence/`, `graph-r47-evidence/`, `image-r44-evidence/`, `merge-r43-evidence/`, `print-r45-evidence/`, `reference-r46-evidence/`: 과거 Actions build/regression/version 및 watch 원시 로그 33개. 실패와 보정 후 로그를 모두 보존한다.
 - `grid-r42-evidence/source-pseudocode-trace.md`: 당시 static coverage/binding trace 1개. 원문의 `Coverage/binding only; not semantic execution, PlusCal parser or TLC evidence.`를 그대로 유지한다. 현재 Source/PlusCal 대응 검증으로 승격하지 않는다.
 - `plan016-snapshots/plan016-{code,local,pluscal,sources}.diff`: 출처 조사 대상 원본 4개. 정식 적용 patch가 아니라 과거 비교 범위/폐기 초안의 원시 기록이다.
-- 저장소 상위 `.work/plan022/verified-trace/source-pseudocode-trace.md`는 위 grid trace와 byte-identical이었다. 이동된 원본의 SHA-256을 다시 확인한 뒤 중복 1개만 제거했다.
+- Plan022의 임시 대조 기록은 위에 옮긴 grid 대조 기록과 바이트 단위로 같았다. 이동된 원본의 SHA-256을 다시 확인한 뒤 중복 1개만 제거했다.
 
 `agent_space/logs/20261023-work-archive/inventory.json`은 각 이전/이후 경로, byte 수, SHA-256 및 중복 제거 근거를 기록한다. 원본 bytes는 줄바꿈까지 보존했으며 이동 전후 hash를 대조했다. 인덱스, 일회성 publish/record/hash 스크립트, context dump와 기존 Git에 남은 hierarchy 원본은 이번 중요 자료 이동에 포함하지 않았다. 상위 `.work` 전체를 삭제하거나 프로젝트 내부 `.work`와 합치지 않았다.
 

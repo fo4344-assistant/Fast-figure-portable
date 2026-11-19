@@ -34,7 +34,7 @@
 
 ## 3. 작업본과 활성본 구분
 
-현재 checker는 변경된 활성 pseudocode가 전체 번역을 끝내 current가 되도록 요구한다. 일부 파일만 바꾼 채 current라고 기록하지 않는다. 진행 중 작업본은 저장소 밖이지만 현재 작업 경로 안인 `.work/plan022/pseudocode/`에 일시 보관한다. 작업본은 public/구현/다른 계층의 읽기 authority가 아니며 아직 활성 fingerprint나 branch 번역에 포함되지 않는다. 전체 활성화 시 제거한다. 완료되지 않은 작업본을 별도 영구 명세/중복 registry로 유지하지 않는다.
+현재 checker는 변경된 활성 pseudocode가 전체 번역을 끝내 current가 되도록 요구한다. 일부 파일만 바꾼 채 current라고 기록하지 않는다. 진행 중 번역 초안은 별도로 작성한다. 작업본은 public/구현/다른 계층의 읽기 authority가 아니며 아직 활성 fingerprint나 branch 번역에 포함되지 않는다. 전체 활성화 시 제거한다. 완료되지 않은 작업본을 별도 영구 명세/중복 registry로 유지하지 않는다.
 
 이는 의미를 하위 구현으로 미루는 것이 아니라, 전체 활성 계층의 완성 조건을 지키면서 번역을 시작하는 작업 방식이다. 새 semantic branch/state/module을 도입하지 않는다. Source의 부재가 확인되면 임의 구현 대신 Source로 돌아간다.
 
@@ -49,7 +49,7 @@
 
 ## 5. 현재 진행 상태
 
-착수 단위: Source closure 기록과 metadata, stale README 정리. 임시 번역 작업본은 `.work/plan022/pseudocode/system.pcal`(initializeFastFigure), `backend/layout_annotations.pcal`(Source 11개 함수 및 formatter/group 계산 전개), `application/adapter.pcal`(5개 함수), `portable_build/portable_build.pcal`(build)까지 작성했다. 이 경로는 현재 작업 디렉터리 기준이며 Git branch 활성 번역이 아니다.
+착수 단위: Source closure 기록과 metadata, stale README 정리. 임시 번역 작업본은 `system.pcal`(initializeFastFigure), `backend/layout_annotations.pcal`(Source 11개 함수 및 formatter/group 계산 전개), `application/adapter.pcal`(5개 함수), `portable_build/portable_build.pcal`(build)까지 작성했다. 이 절에 나열한 파일명은 당시 초안의 모듈 이름이다.
 
 정책 §4.4/§5.1을 다시 확인하여 Source 함수 식별자와 public 입력/반환을 유지했다. formatter/group rendering은 Source 안의 계산을 call-local 절차로 펼친 것이며 새 public operation/authority가 아니다. registry/FSM imported method의 밑줄 표기는 qualified 식별자의 기계적 표기다. task invocation/copy/byte I/O 같은 primitive만 환경중립적으로 남긴다.
 
@@ -59,11 +59,11 @@
 
 ## 6. 후속 진행 — command/FSM/reference 경계
 
-기준 HEAD `a485dc8f9cad56ccf25d370bff583dac78fe6374`에서 같은 Source r37을 직접 번역했다. §3과 동일하게 아래 경로는 현재 작업 디렉터리 안의 일시 작업본이며 branch의 활성 .pcal이 아니다.
+기준 HEAD `a485dc8f9cad56ccf25d370bff583dac78fe6374`에서 같은 Source r37을 직접 번역했다. §3과 동일하게 아래 목록은 당시 초안에서 작성한 절차다.
 
-- `.work/plan022/pseudocode/backend/project_state.pcal`: `validateFrontendIntent`, `buildFrontendReconciliationInput` 전개. invalid identity와 explicit none 구별, model-to-fsm graph-only clear, canonical asset kind/path, editable object/current CSV 검증을 절차로 옮겼다. reconciliation은 reset→swap/merge/path 변환→current resolve→명시적 matching index hint→chart별 original-index map→기존 index 유지 순서다. Source 0-based index와 PlusCal sequence의 1-based subscript 변환을 명시했다.
-- `.work/plan022/pseudocode/backend/project_efsm.pcal`: `ProjectStateMachine.send` 공통 transaction, graph add/move/edit/delete/palette branch와 CSV cascade의 original-index filter/map 계산을 작업본으로 전개했다. current authority reference 재검사→whole validation→단일 commit→실제 changed/hints 계산을 분리하고, commit 직전 guard/교체 사이 interleaving을 도입하지 않아야 함을 명시했다. 이 reference는 기존 ProjectObject 내부 state reference이며 새 version/token/persistent state가 아니다. **각 command의 전체 domain builder 및 실제 결과 계산 호출 전개는 아직 남았다.** `InvokeSourceCommandCalculationAndAwait` 같은 미완성 호출은 그 남은 범위 표기이지 새 공통 command engine/API의 설계가 아니다.
-- `.work/plan022/pseudocode/frontend/interface_fsm.pcal`: Source의 4개 method(`readState`, `send`, `reconcileProjectResult`, `notify`)와 declared selection/overlay/zoom/lifecycle event 전이를 전개했다. Frontend는 immutable validated scalar만 소비하고 Backend를 import/query하지 않는다. model-to-fsm 선택의 독립 asset 보존, repeated zoom lock width 보존, unlock/reset 100, 실패 error projection 후 ready 순서를 반영했다.
+- `backend/project_state.pcal`: `validateFrontendIntent`, `buildFrontendReconciliationInput` 전개. invalid identity와 explicit none 구별, model-to-fsm graph-only clear, canonical asset kind/path, editable object/current CSV 검증을 절차로 옮겼다. reconciliation은 reset→swap/merge/path 변환→current resolve→명시적 matching index hint→chart별 original-index map→기존 index 유지 순서다. Source 0-based index와 PlusCal sequence의 1-based subscript 변환을 명시했다.
+- `backend/project_efsm.pcal`: `ProjectStateMachine.send` 공통 transaction, graph add/move/edit/delete/palette branch와 CSV cascade의 original-index filter/map 계산을 작업본으로 전개했다. current authority reference 재검사→whole validation→단일 commit→실제 changed/hints 계산을 분리하고, commit 직전 guard/교체 사이 interleaving을 도입하지 않아야 함을 명시했다. 이 reference는 기존 ProjectObject 내부 state reference이며 새 version/token/persistent state가 아니다. **각 command의 전체 domain builder 및 실제 결과 계산 호출 전개는 아직 남았다.** `InvokeSourceCommandCalculationAndAwait` 같은 미완성 호출은 그 남은 범위 표기이지 새 공통 command engine/API의 설계가 아니다.
+- `frontend/interface_fsm.pcal`: Source의 4개 method(`readState`, `send`, `reconcileProjectResult`, `notify`)와 declared selection/overlay/zoom/lifecycle event 전이를 전개했다. Frontend는 immutable validated scalar만 소비하고 Backend를 import/query하지 않는다. model-to-fsm 선택의 독립 asset 보존, repeated zoom lock width 보존, unlock/reset 100, 실패 error projection 후 ready 순서를 반영했다.
 
 정적 경계 사례 대조: invalid selection 무변경/명시적 deselection, index 0 유지, unrelated chart hint 무시, explicit none 우선, `[A,B,C]`의 A/B cascade 제거와 duplicate object 위치 구분, model-to-fsm 같은 slot 선택의 asset 보존, direct delete의 explicit-none 대 cascade-map 차이, file wait 뒤 stale candidate 재계산, 미commit 시 성공 hint 부재, first/repeated/invalid zoom lock, lifecycle 실패 error→ready를 Source와 대조했다. 이는 실제 PlusCal translation/parser/TLC 실행 또는 전체 파일 연결 검증이 아니다.
 
@@ -71,9 +71,9 @@ Source/metadata/활성 pseudocode/Source Code는 이번 진행에서 변경하�
 
 ## 7. 후속 진행 — 전체 목표 경로로 번역 작업 확대
 
-사용자의 가능한 한 충실한 최대 진행 요청에 따라 기준 HEAD `e9c1a795aa7cf9fafc919bf484ca5c47be138408`의 Source r37을 직접 읽고 아래 작업본을 확장했다. **전체 목표 15개 경로에 작업본이 존재한다는 뜻이지, 전체 번역이 끝났다는 뜻은 아니다.** 현재 일시 작업본은 총 4,582행이며 branch 밖 `.work/plan022/pseudocode/`에만 있다. 이번 branch patch는 이 진행 기록만 포함하고 작업본을 포함하지 않는다.
+사용자의 가능한 한 충실한 최대 진행 요청에 따라 기준 HEAD `e9c1a795aa7cf9fafc919bf484ca5c47be138408`의 Source r37을 직접 읽고 아래 작업본을 확장했다. **전체 목표 15개 경로에 작업본이 존재한다는 뜻이지, 전체 번역이 끝났다는 뜻은 아니다.** 현재 일시 작업본은 총 4,582행이다. 이번 branch patch는 이 진행 기록만 포함하고 작업본을 포함하지 않는다.
 
-| 작업본 경로(§3 임시 루트 기준) | 이번 전개 내용 |
+| 작업본 경로(초안의 모듈 이름) | 이번 전개 내용 |
 |---|---|
 | backend/assets_files.pcal | 21개 Source 함수의 VFS canonical path/이동 계획/충돌 choice 재검증, 파일 분류, asset candidate, FFPX/FFSX byte inventory·typed XML/CSV·package remap, reference 수집 절차와 private 계산 전개 |
 | backend/graphs.pcal | 15개 Source 함수의 table/header/column, object candidate, paired numeric/divide/log/reciprocal, trace/axis placeholder, layout/extension 병합, 정규화/검증, Plotly import와 editable 전환 전개 |
@@ -100,7 +100,7 @@ Source/metadata/활성 pseudocode/Source Code는 이번 진행에서 변경하�
 
 ## 8. 후속 진행 — 나머지 command 계산과 query 조립·모듈 연결
 
-사용자의 남은 부분 번역 요청에 따라 기준 HEAD `ac5439e04e33f2c61e6dd5d28eff19cf049f4341`에서 Source r37과 작업본을 대조했다. 2026-10-17 현재 임시 목표 15개 파일은 총 **4,933행**이다. §7의 4,582행에서 계속 확장·수정했으며, 여전히 `.work/plan022/pseudocode/`의 작업본이지 branch 활성 번역은 아니다.
+사용자의 남은 부분 번역 요청에 따라 기준 HEAD `ac5439e04e33f2c61e6dd5d28eff19cf049f4341`에서 Source r37과 작업본을 대조했다. 2026-10-17 현재 임시 목표 15개 파일은 총 **4,933행**이다. §7의 4,582행에서 계속 확장·수정했으며, 당시 아직 활성화하지 않은 초안이었다.
 
 - **EFSM**: `PendingSourceDomainCandidate`를 없애고 asset create/replace/delete, trash empty, node move/directory create, image link/import, merge/split/style의 명시 branch를 전개했다. cascade는 공통 `collectAssetReferences`의 `originalObjectIndex`를 사용해 chart별 filter/map 및 image reference clear를 계산한다. merge의 최대 한 non-default payload/top-left anchor, split의 anchor payload 보존/해제 cell 초기화, 새 입력과 current next-id/VFS의 분리를 기록했다. actual result 형성은 이번 attempt의 실제 facts/count/map과 post-commit owner를 사용하도록 나누었다. **branch 존재만으로 내부 helper 계산·실제 changed field 연결까지 완료되었다고 판단하지 않는다.**
 - **Backend query**: graph read의 explicit chart/selected slot, 독립 current CSV와 selected-object columns, image bytes/pure URL/settings copy, VFS tree/trash/movable/draggable/deletion/move-option/tree-selection을 private 계산으로 전개했다. renderer/print export는 같은 read source의 visible slots에서 figure/image/CSV-column/ordered-label/style 입력을 구성하며, Frontend가 CSV domain 계산을 다시 하지 않는다.
@@ -122,7 +122,7 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 
 아직 전체 번역 완료는 아니다. private metadata/header normalization·constructor 표현, 모든 import/FFSX/graph 경로의 await/retry/throw 문맥, 87개 API의 전체 producer/consumer·인자·반환·실패 연결과 Source 전체 충실도를 대조해야 한다. 해당 대조가 끝나기 전에는 작업본을 활성 .pcal로 섞거나 current라고 기록하지 않는다.
 
-이번 branch 변경은 이 진행 기록뿐이다. 작업 경로 안 `.work/plan022/`의 번역·연결 메모는 임시 작업본이며 이 diff에 포함하거나 복구 가능하다고 주장하지 않는다. Source r37 closed/활성 pseudocode r11 stale/하위 stale 및 fingerprint는 그대로다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+이번 branch 변경은 이 진행 기록뿐이다. 당시 번역 초안과 연결 메모는 임시 작업본이며 이 diff에 포함하거나 복구 가능하다고 주장하지 않는다. Source r37 closed/활성 pseudocode r11 stale/하위 stale 및 fingerprint는 그대로다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
 
 ## 10. 후속 진행 — command 문맥과 공개 wrapper의 명시적 인자 연결
 
@@ -135,7 +135,7 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 
 잔여는 codec/normalization/constructor 등의 primitive와 domain 계산 구분, 모든 Source 함수·분기와 query/command producer-consumer·반환/실패·await 문맥의 전체 충실도 대조다. 특히 명시적 call이 존재한다는 것만으로 각 callee의 세부 번역이 닫혔다고 판정하지 않는다. 이후 전체 hierarchy cutover/과거 활성 파일 제거와 lineage 갱신을 수행한다.
 
-이번 branch patch는 이 진행 기록만 포함하며 `.work/plan022/` 번역·연결 메모를 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale 및 fingerprint는 유지한다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+이번 패치에는 진행 기록만 담았다. 당시 번역 초안과 연결 메모는 패치에 포함하지 않았다. Source37 closed/활성 pseudocode11 stale/하위 stale 및 fingerprint는 유지한다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
 
 ## 11. 후속 진행 — 전체 항목 대조와 settings/package 계산 전개
 
@@ -148,7 +148,7 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 
 잔여를 다음으로 좁혔다: constructor/asset·chart·slot normalization 및 package document 조립 등 남은 operator의 domain 계산/실제 low-level primitive 구분과 전개, query/command/Frontend 전체 producer-consumer의 retry·취소·사후 throw/resource 수명 대조, 그 뒤 활성 hierarchy cutover/과거 파일 제거/전체 충실도 review와 lineage 갱신 및 Actions cumulative checker. 명시적 entry와 API key가 모두 있다는 것만으로 이 잔여를 완료로 판정하지 않는다. 따라서 이번 턴에 전체 완료했다고 선언하지 않는다.
 
-이번 저장소 변경은 이 진행 기록만 포함한다. `.work/plan022/` 작업본·체크리스트는 현재 경로 안의 transient 작업물이며 patch/remote/rollback에 포함하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint를 유지했다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+이번 저장소 변경은 이 진행 기록만 포함한다. 당시 초안과 체크리스트는 현재 경로 안의 transient 작업물이며 patch/remote/rollback에 포함하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint를 유지했다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
 
 ## 12. 후속 진행 — import constructor와 FFSX 참조·소유권 계산
 
@@ -163,7 +163,7 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 
 아직 필요한 작업: FFPX document producer/reader의 구체 조립과 normalizeSlotContent 등 남은 domain 계산/codec 경계의 전개·연결, 전체 query/command/UI producer-consumer의 retry/취소/사후 throw/resource 의미 대조, 전체 충실도 review 후 활성 hierarchy 교체·lineage 갱신과 Actions cumulative checker다. 이번 constructor/FFSX 전개만으로 전체 완료를 선언하지 않는다.
 
-저장소 patch에는 이 진행 기록만 들어간다. `.work/plan022/` 임시 번역·메모는 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint는 변경하지 않았다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+저장소 patch에는 이 진행 기록만 들어간다. 임시 번역과 메모는 포함/rollback하지 않는다. Source37 closed/활성 pseudocode11 stale/하위 stale와 fingerprint는 변경하지 않았다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
 
 ## 13. 후속 진행 — versioned package 문서와 slot-local 정규화
 
@@ -177,7 +177,7 @@ Source r37 closed, 활성 pseudocode r11 stale 및 하위 stale은 변경하지 
 
 텍스트 목록 대조에서 15개 작업본 6,164행, procedure 선언 242개에 explicit call의 미대응 이름·동일 procedure 이름 중복은 없었다. 이는 문자열 검색 결과일 뿐 parser/type/동작 검증이나 전체 충실도 증명이 아니다. helper를 이름만 연결해 둔 모든 domain 계산이 끝났다는 뜻도 아니다. 파일 본문을 도구 cache에 통째로 저장하려던 시도는 cache 크기 제한으로 실패했으며, 이 실패는 작업본/Source 실행과 무관하고 위 검색 결과를 runtime 통과로 바꾸지 않는다.
 
-잔여: 다른 owner의 미전개 domain 계산과 platform primitive 구분, query/command/UI/87 API 전체의 인자·반환·실패·재시도·resource producer-consumer 대조, Source 전체 충실도 기록, 활성 hierarchy 교체와 이전 파일/임시 작업본 정리, revision/fingerprint/lineage 및 허용된 Actions 검증이다. 아직 번역 완료/current가 아니다. 이번 branch patch는 이 기록만 포함하며 `.work/plan022/`의 작업본 자체나 rollback 자료는 포함하지 않는다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
+잔여: 다른 owner의 미전개 domain 계산과 platform primitive 구분, query/command/UI/87 API 전체의 인자·반환·실패·재시도·resource producer-consumer 대조, Source 전체 충실도 기록, 활성 hierarchy 교체와 이전 파일/임시 작업본 정리, revision/fingerprint/lineage 및 허용된 Actions 검증이다. 아직 번역 완료/current가 아니다. 이번 branch patch는 이 기록만 포함하며 번역 초안이나 복원 자료는 포함하지 않는다. 로컬 Source/application/PlusCal/parser/checker/test/build/TLC 실행·delegation·새 Actions dispatch는 하지 않았다.
 
 ## 14. 전체 번역 활성화 — Source 판단을 실제 상위 단계에 반영
 

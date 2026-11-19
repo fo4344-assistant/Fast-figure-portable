@@ -30,7 +30,7 @@ Implementation and patch011 committed together as `d79ecd8dfd0319eb0e26aadc1d951
 - Actions regression39055292839 SUCCESS: actual logs show cases1–48 passing in both inline and split-zip, including the new full-payload/current-authority/atomic-rejection assertions in case48.
 - Version39055292736 SUCCESS at the same implementation HEAD: Source39 closed/current, pseudocode13 current, code43 stale, code fingerprint `sha256:5eca1380e7ac8c55945c0f4c4b796f02020a2305cc2c52fbf6c981fb6c7a9ca5`.
 - Build39055292767 SUCCESS at the same implementation HEAD, verified both distributions and generated dist-only bot commit `404622235d319caaf99c3bbcbcae5ae49607b71d`, fast-forwarded locally.
-- Logs retained under `.work/merge-r43-evidence/`. Later result-only documentation is not the executed implementation HEAD.
+- Logs retained in [저장소에 보관한 실행 로그](../logs/20261023-work-archive/merge-r43-evidence/regression.log). Later result-only documentation is not the executed implementation HEAD.
 
 No local application, Source, PlusCal, parser, checker, test, build or TLC execution. Diff whitespace and isolated-index reverse patch checks passed; these are file-integrity checks, not runtime or whole-conformance evidence.
 

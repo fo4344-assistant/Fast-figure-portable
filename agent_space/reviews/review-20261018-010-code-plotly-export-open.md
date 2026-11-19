@@ -27,7 +27,7 @@ Implementation and patch019 committed together as `4d91c62d643e92113b6e62bbb3e6c
 
 Initial regression39057561684 passed cases1–53 in both formats but case54 failed `Error: successful handoff leaked URL/result/lifecycle`. Its assertion assumed this operation's revoke was the first global revoke entry, although prior raster tests schedule delayed revocations. Test-only patch020 checks membership of the operation-owned URL rather than unrelated global ordering, retains None/query/click/lifecycle assertions and adds diagnostic values. No production change or fingerprint/revision change. Test-only patch020 and actual changed files committed together as `e1fcd6fb5befa0fb725f98357585c69d98ecdc22`. Follow-up regression39057719398 SUCCESS: actual logs show cases1–54 passing in inline and split packages, including53/54. Version39057719402 SUCCESS on that same HEAD. No production code changed between the initial failure and this passing run; the initial failure remains recorded rather than relabelled as a pass.
 
-Actual logs are retained under `.work/graph-r47-evidence/`. No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are not runtime evidence. Any later result-only documentation is not the executed implementation HEAD.
+Actual logs are retained in [저장소에 보관한 실행 로그](../logs/20261023-work-archive/graph-r47-evidence/regression-fixed.log). No local application, Source, pseudocode/parser, checker, test, build or TLC execution. File diff/reverse-apply checks are not runtime evidence. Any later result-only documentation is not the executed implementation HEAD.
 
 ## Whole-goal audit
 

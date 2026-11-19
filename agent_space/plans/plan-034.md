@@ -33,10 +33,10 @@
 
 ## 4. 파일 위치와 실행 대상 준비
 
-모든 테스트 자료의 기준은 저장소의 부모인 작업 공간이다. 아래 `.work`는 `Fast-figure-portable/` 내부가 아닌 현재 작업 공간의 `.work/`다.
+실행마다 임시 디렉터리를 따로 사용한다. 아래는 실행 자료의 구성이다.
 
 ```text
-.work/ego-plan034/<실행일시>/
+<실행 디렉터리>/
   manifest.json                  # 실제 HEAD, dirty 파일 목록, 세 계층 fingerprint, build HTML hash, 환경
   build/                         # 현재 source code로 만든 inline HTML / split ZIP
   split-expanded/                # 같은 build ZIP의 압축 해제 결과
@@ -52,7 +52,7 @@
 - 현재 `dist/`는 이전 빌드일 수 있다. 실행 승인 후 `python Fast-figure-portable/scripts/build-portable.py --dist-dir <위 실행 디렉터리>/build`로 테스트 복사본을 만든다. 기존 의존성을 확인하고 새 설치가 필요하면 별도 보고한다. tracked `dist/`를 덮어쓰지 않는다.
 - inline과 split은 같은 빌드에서 생성한 파일을 사용한다. 소스 HTML 템플릿을 앱의 배포 실행 파일로 열지 않는다. 실제 build 결과의 `file://` URL과 hash를 manifest에 기록한다.
 - 자동 배포 빌드는 이미 수동 요청 방식으로 변경되어 있다. README의 과거 자동 빌드 안내를 실행 지시로 사용하지 않는다. Actions·배포물 갱신·Git 설정 변경은 포함하지 않는다.
-- 문서 결과는 이후 독립 review에 기록한다. 원본 테스트 자료와 실행 증거는 위 `.work`에 유지하고 review에서 정확한 경로·hash를 참조한다. 기존 fixtures와 기존 real-field 결과는 이번 실행 결과와 섞지 않는다.
+- 검토 문서에 실행 대상과 그 해시, 시작 상태, 실제 조작, 관찰값, 판정과 확인하지 못한 범위를 직접 기록한다. 이전 실사용 검증 결과는 이번 결과와 구분한다.
 
 ### 4.1 입력 fixture
 

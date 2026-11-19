@@ -495,7 +495,7 @@ Per user instruction, removed mocked adapter choreography cases156/157/159/169, 
 
 ## Temporary-file rule
 
-The user explicitly authorized this cleanup: removed only `.work/plan022/pseudocode/`, `.work/plan022/fidelity-checklist.md` and `.work/plan022/inter-module-notes.md`; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
+The user explicitly authorized this cleanup: removed only the obsolete Plan022 pseudocode drafts, fidelity checklist and inter-module notes; the downloaded verification artifact and regular repository files remain. The earlier denied deletion did not run; this later authorized deletion did. For subsequent work collect temporary files and clean once after the work finishes, not between steps. Do not remove verification evidence or unrelated files.
 
 ## Seventy-seventh bounded unit — public export lifecycle ownership (r129)
 

@@ -63,14 +63,14 @@ Plan035의 개정판. 기존 세 수정 목표를 유지하고 WF37의 빈 행 �
 
 ### 2.4 WF37 — 빈 행 입력과 실제 행 수의 표시 불일치
 
-- 근거: `agent_space/reviews/review-20261117-001-ego-workflows.md`의 WF37, `.work/ego-plan034/run-20261117/results/WF37/ready.log`와 `.work/ego-plan034/run-20261117/results/WF37/result.log`.
+- 근거: `agent_space/reviews/review-20261117-001-ego-workflows.md`의 WF37.
 - 빈 3×3 프로젝트에서 행 입력을 지우고 Tab으로 포커스를 옮겼다. 실제 배치는 3×3·9개 슬롯을 유지했지만 행 입력란은 빈칸으로 남았다.
 - 기존 PASS 판정은 프로젝트 배치 보존 범위다. 이번 수정은 편집 종료 후의 입력 표시와 현재 프로젝트 값도 일치시키는 것이다.
 - 기존 기록은 원인을 확정하지 않았다. 구현에서는 행·열 입력의 임시 편집값, 빈 값 처리, 포커스 이탈 시 표시 갱신 경로를 확인한다.
 
 ### 2.5 WF16 — 순서 변경 후 선택 대상 변경
 
-- 근거: 같은 결과 문서의 WF16, `.work/ego-plan034/run-20261117/results/WF16/before.log`와 `.work/ego-plan034/run-20261117/results/WF16/result.log`.
+- 근거: 같은 결과 문서의 WF16.
 - G checkpoint의 slot 0에서 첫 오브젝트를 선택하고 범례를 `First`로 지정한 뒤 둘째 행을 첫째 행 위로 드래그했다.
 - 순서는 `First, 기본`에서 `기본, First`로 바뀌었지만 선택 index는 0에 남았다. 편집기에는 다른 오브젝트의 빈 범례 이름이 표시됐다.
 - 이번 수정의 기준은 선택했던 오브젝트를 순서 변경 뒤에도 유지하는 것이다. 현재 index에서 변경 후 index로의 대응과 Frontend 선택 반영 경로를 확인한다. 기존 기록만으로 Backend의 대응 계산과 Frontend 반영 중 어느 단계가 원인인지 확정하지 않는다.
