@@ -1,5 +1,5 @@
 // Source: sourcescript/application/public_api/layout_annotations.py (same logical owner); pseudocode/application/public_api/layout_annotations.pcal.
-import { appFSM, dispatchProjectCommand, dispatchSlotSelection, transformWorkspace, applyUiPaletteValues } from '../adapter.js';
+import { appFSM, dispatchProjectCommand, dispatchSlotSelection, transformWorkspace, displayDashboardZoom, applyUiPaletteValues } from '../adapter.js';
 import { activeProject } from '../../backend/project_state.js';
 import { DEFAULT_UI_PALETTE } from '../../backend/settings.js';
 import { interfaceFSM } from '../../frontend/interface_fsm.js';
@@ -55,7 +55,6 @@ export function applyImageSettingsFromValues(slotId, values={}) {
   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
   if (!result.committed) return false;
 
-  appFSM.notify("images","IMAGE_SETTINGS_CHANGED");
   return appFSM.query("project-api", { operation: "images.readEditor", slotId });
 }
 
@@ -99,20 +98,15 @@ export function setAnnotationEnabled(kind, enabled) {
     appFSM.send("CAPTION_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
 
   debugLog(`annotation:${kind}`, { enabled });
-  appFSM.notify(
-    kind === "label" ? "labels" : "captions",
-    "ANNOTATION_VISIBILITY_CHANGED",
-  );
 }
 
-export function applyCaptionSettings(notify = true) {
+export function applyCaptionSettings() {
 
   debugLog("annotation:caption-settings", {
     name: activeProject.captionName,
     bold: activeProject.captionNameBold,
     ...activeProject.captionSettings,
   });
-  if (notify) appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
 }
 
 export function readGlobalCaptionState() {
@@ -129,7 +123,6 @@ export function setCaptionsApiEnabled(enabled) {
   const state = readGlobalCaptionState();
 
   debugLog("annotation:caption", { enabled: state.enabled });
-  appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
   return state;
 }
 
@@ -163,7 +156,6 @@ export function setCaptionsApiName(name) {
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
 
-  appFSM.notify("captions", "CAPTION_NAME_CHANGED");
   return state;
 }
 
@@ -172,7 +164,6 @@ export function setCaptionsApiNameBold(bold) {
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
 
-  appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
   return state;
 }
 
@@ -181,7 +172,6 @@ export function setCaptionsApiSettings(patch = {}) {
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
 
-  appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
   return state;
 }
 
@@ -219,7 +209,6 @@ export function setLabelsApiEnabled(enabled) {
   if (!result.committed) return false;
 
   debugLog("annotation:label", { enabled });
-  appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
   return readLabelsApiState();
 }
 
@@ -228,7 +217,6 @@ export function setLabelsApiSettings(patch = {}) {
   if (!result.committed) return false;
 
   debugLog("mantine:label-settings", { ...patch });
-  appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
   return readLabelsApiState();
 }
 
@@ -238,7 +226,6 @@ export function updateLabelsApiPosition(x, y, eventName = null) {
 
   if (eventName) {
     debugLog("mantine:label-settings", { x, y });
-    appFSM.notify("labels", eventName);
   }
   return readLabelsApiState();
 }
@@ -249,7 +236,6 @@ export function setLabelsApiPosition(x, y) {
 
 export function finishLabelsApiPositionInteraction() {
   debugLog("mantine:label-position", {});
-  appFSM.notify("labels","LABEL_POSITION_DRAGGED");
   return readLabelsApiState();
 }
 
@@ -257,7 +243,6 @@ export function resetLabelsApiPosition() {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
   if (!result.committed) return false;
 
-  appFSM.notify("labels", "LABEL_POSITION_RESET");
   return readLabelsApiState();
 }
 
@@ -288,7 +273,6 @@ export function setLayoutApiStyle(patch = {}) {
   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
   if (!result.committed) return false;
 
-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiControls();
 }
 
@@ -296,25 +280,25 @@ export function setLayoutApiGrid(rows, cols) {
   const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
   if (!result.committed) return false;
 
-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiControls();
 }
 
 export function setLayoutApiZoom(value) {
-  const session = interfaceFSM.readState();
-  const state = appFSM.send("SET_DASHBOARD_ZOOM", { value });
-  if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiControls();
+  appFSM.send("SET_DASHBOARD_ZOOM", { value });
+  transformWorkspace();
+  const layout = readLayoutApiControls();
+  displayDashboardZoom(layout.zoom);
+  return layout;
 }
 
 export function commitLayoutApiZoom() {
-  appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
   return readLayoutApiControls();
 }
 
 export function resetLayoutApiZoom() {
-  const session = interfaceFSM.readState();
-  const state = appFSM.send("RESET_DASHBOARD_ZOOM");
-  if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiControls();
+  appFSM.send("RESET_DASHBOARD_ZOOM");
+  transformWorkspace();
+  const layout = readLayoutApiControls();
+  displayDashboardZoom(layout.zoom);
+  return layout;
 }

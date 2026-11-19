@@ -54,7 +54,7 @@ function commitProjectCandidate(candidate, event, payload) {
   payload.commitFacts = { pre, post: activeProject._state };
 }
 
-// BuildActualChanged: call-local structural comparison, including removed identities.
+// Call-local structural comparison, including removed identities.
 function commitValueKey(value) {
   if (Array.isArray(value)) return JSON.stringify(value.map(item => JSON.parse(commitValueKey(item))));
   if (value && typeof value === "object") return JSON.stringify(Object.fromEntries(
@@ -62,13 +62,48 @@ function commitValueKey(value) {
   return JSON.stringify(value === undefined ? null : value);
 }
 
-function actualChanged(payload) {
+function collectTargetSlotAssetLinks(slotIds, state) {
+  const links = [];
+  for (const slotId of slotIds) {
+    const slot = state.slots.find(slot => slot.id === slotId && !slot.hidden);
+    if (!slot) continue;
+    const { imageId, chart: chartId } = slot.content;
+    if (imageId != null) links.push(["image", imageId]);
+    const chart = chartId == null ? null : state.charts.find(chart => chart.id === chartId);
+    if (chart && !chartUsesConversionView(chart))
+      for (const { csvId } of chart.editor.objects)
+        if (csvId != null) links.push(["csv", csvId]);
+  }
+  return links.sort(([kind, id], [otherKind, otherId]) => kind.localeCompare(otherKind) || id - otherId);
+}
+
+function buildProjectMutationChanges(event, payload) {
   const { pre, post } = payload.commitFacts,
     ids = (before, after) => [...new Set([...before, ...after].map(item => item.id))].filter(id =>
       commitValueKey(before.find(item => item.id === id)) !== commitValueKey(after.find(item => item.id === id))),
     changed = { ...payload.changed, slotIds: ids(pre.slots, post.slots), chartIds: ids(pre.charts, post.charts),
       csvIds: ids(pre.assets.csvFiles, post.assets.csvFiles), imageIds: ids(pre.assets.images, post.assets.images), assets: [] };
-  for (const fact of payload.changed?.assets || []) {
+  const commandFacts = payload.changed?.assets ?? [];
+  const assetFacts = [];
+  if (event === "PROJECT_NODE_MOVED" || event === "ASSETS_IMPORTED") assetFacts.push(...commandFacts);
+  else if (event !== "PROJECT_LOADED") {
+    for (const [kind, key] of [["csv", "csvFiles"], ["image", "images"]]) {
+      const before = pre.assets[key], after = post.assets[key];
+      const beforeIds = new Set(before.map(asset => asset.id)), afterIds = new Set(after.map(asset => asset.id));
+      for (const asset of after) {
+        if (!beforeIds.has(asset.id)) assetFacts.push({ role: "created", kind, id: asset.id, path: projectAssetPath(asset) });
+      }
+      for (const asset of before) {
+        if (!afterIds.has(asset.id)) assetFacts.push({ role: "deleted", kind, id: asset.id, path: projectAssetPath(asset), name: asset.name });
+      }
+    }
+    assetFacts.push(...commandFacts.filter(fact => fact.role === "updated"));
+    const before = new Set(pre.fileSystem.directories), after = new Set(post.fileSystem.directories);
+    for (const path of after) if (!before.has(path)) assetFacts.push({ role: "created", kind: "directory", id: null, path });
+    for (const path of before) if (!after.has(path)) assetFacts.push({ role: "deleted", kind: "directory", id: null, path });
+  }
+  for (const fact of assetFacts) {
+    if (fact.kind === "directory") { changed.assets.push({ ...fact }); continue; }
     const collection = fact.kind === "csv" ? "csvFiles" : "images",
       source = fact.role === "deleted" ? pre : post,
       asset = source.assets[collection].find(item => item.id === fact.id);
@@ -81,6 +116,51 @@ function actualChanged(payload) {
         return { slotId: slot.id, chartId: chart.id };
       }) : post.slots.filter(slot => slot.content.imageId === asset.id).map(slot => ({ slotId: slot.id, chartId: null }));
     changed.assets.push({ ...fact, id: asset.id, path: projectAssetPath(asset), owners });
+  }
+  const linkedCsvIds = new Set(), linkedImageIds = new Set();
+  for (const fact of changed.assets) {
+    if (fact.role !== "moved" && fact.role !== "deleted") continue;
+    if (fact.kind === "csv") linkedCsvIds.add(fact.id);
+    if (fact.kind === "image") linkedImageIds.add(fact.id);
+  }
+  const linked = linkedCsvIds.size || linkedImageIds.size
+    ? collectAssetReferences(linkedCsvIds, linkedImageIds, pre) : [];
+  changed.linkedAssetMovesOrRemovals = changed.assets
+    .filter(fact => linked.some(ref => ref.kind === fact.kind && ref.assetId === fact.id))
+    .map(({ kind, id }) => ({ kind, id }));
+
+  changed.targetSlotReferencesChanged = false;
+  if (["SLOT_TYPE_CHANGED", "SLOTS_RESET", "SLOT_IMAGE_LINKED", "SLOT_IMAGE_IMPORTED", "SLOT_CHART_IMPORTED",
+    "CHART_MODEL_REPLACED", "SLOTS_MERGED", "SLOTS_SPLIT", "GRID_LAYOUT_CHANGED"].includes(event)
+    || (event === "ASSETS_IMPORTED" && payload.targetSlotId != null)) {
+    const slotIds = new Set(changed.slotIds);
+    if (payload.slotId != null) slotIds.add(payload.slotId);
+    if (payload.targetSlotId != null) slotIds.add(payload.targetSlotId);
+    if (event === "CHART_MODEL_REPLACED" && payload.chartId != null) {
+      for (const state of [pre, post]) {
+        const slot = resolveOwningSlot(payload.chartId, state);
+        if (slot) slotIds.add(slot.id);
+      }
+    }
+    changed.targetSlotReferencesChanged = JSON.stringify(collectTargetSlotAssetLinks(slotIds, pre))
+      !== JSON.stringify(collectTargetSlotAssetLinks(slotIds, post));
+  }
+  changed.graphObjectCsvChanged = false;
+  if (event === "GRAPH_OBJECTS_REPLACED" && payload.operation === "graphs.setObjectValues") {
+    const csvId = state => state.charts.find(chart => chart.id === payload.chartId)?.editor.objects[payload.index]?.csvId;
+    changed.graphObjectCsvChanged = csvId(pre) !== csvId(post);
+  }
+  changed.removedObjectChartIds = (payload.selectionHints?.graphObjectIndexMaps ?? [])
+    .map(({ chartId }) => chartId).filter(chartId => post.charts.some(chart => chart.id === chartId));
+  changed.appendedObjectChartIds = [];
+  if (event === "ASSETS_IMPORTED" && payload.targetSlotId != null) {
+    const chartIdAtTarget = state => state.slots.find(slot =>
+      slot.id === payload.targetSlotId && !slot.hidden)?.content.chart;
+    const chartId = chartIdAtTarget(post);
+    if (chartId != null && chartId === chartIdAtTarget(pre)
+      && post.charts.find(chart => chart.id === chartId).editor.objects.length
+        > pre.charts.find(chart => chart.id === chartId).editor.objects.length)
+      changed.appendedObjectChartIds.push(chartId);
   }
   return changed;
 }
@@ -132,7 +212,7 @@ export class ProjectStateMachine {
     for (const key of ["changed", "selectionHints", "projectionEffect", "commitFacts",
       "removedGraphReferenceCount", "resetImageSlotCount"]) delete input[key];
     const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts,
-      changed = committed ? actualChanged(input) : {},
+      changed = committed ? buildProjectMutationChanges(event, input) : {},
       counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post)
         : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
     const selectionHints = committed ? { ...input.selectionHints } : {};
@@ -210,7 +290,6 @@ export function applySlotCaptionsInsertedAction({ machine, event, payload }) {
       if (original?.content) item.content = projectClone(original.content);
     }
     const text = insertSlotCaptions(candidate, payload.slotIds ?? null);
-    if (text === candidate.annotations.captions.text) return false;
     candidate.annotations.captions.text = text;
     normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
@@ -867,9 +946,6 @@ export function applyProjectDirectoryCreatedAction({ machine, event, payload }) 
     normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
-    const actual = projectVfs.resolve(path, activeProject._state);
-    payload.changed = { slotIds: [], chartIds: [], csvIds: [], imageIds: [], assets: [],
-      createdDirectoryPath: actual.path };
     return;
   }
 }
@@ -945,6 +1021,10 @@ export function applyProjectNodeMovedAction({ machine, event, payload }) {
       removed = removeProjectAssetReferences(csvIds, imageIds, candidate);
     }
     const rewrite = path => `${destination}${path.slice(plan.path.length)}`;
+    const movedAssets = (match.kind === "directory" ? [match, ...moving] : moving).map(node => {
+      const oldPath = node.kind === "directory" ? node.path : projectAssetPath(node.asset);
+      return { role: "moved", kind: node.kind, id: node.asset?.id ?? null, oldPath, path: rewrite(oldPath) };
+    });
     if (match.kind === "directory") {
       candidate.fileSystem.directories = candidate.fileSystem.directories.map(path =>
         projectPathInDirectory(path, plan.path) ? rewrite(path) : path).sort();
@@ -965,7 +1045,7 @@ export function applyProjectNodeMovedAction({ machine, event, payload }) {
     payload.changed = { slotIds: changedIds(source.slots, post.slots), chartIds: changedIds(source.charts, post.charts),
       csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
       imageIds: changedIds(source.assets.images, post.assets.images),
-      movedPathFrom: plan.path, movedPathTo: destination, ...removed };
+      assets: movedAssets, ...removed };
     payload.selectionHints = immutableProjectCopy({ movedPathFrom: plan.path, movedPathTo: destination,
       enteringTrash, graphObjectIndexMaps: removed.graphObjectIndexMaps });
     return;

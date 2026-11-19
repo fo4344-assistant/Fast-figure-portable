@@ -102,16 +102,13 @@ export function buildProjectAssetImportCandidate(source, payload) {
         chart.editor.objects.push(createCandidateBaseGraphObject(csv));
       }
     }
-    imported.push({ role: "imported", kind: assetKind, id: staged.id, path });
+    imported.push({ role: "imported", kind: assetKind, id: staged.id, path, replaced: plan.replaceId !== null });
   }
   const csvIds = new Set(imported.filter(item => item.kind === "csv").map(item => item.id));
   candidate.charts.forEach(chart => {
     if (chart.editor?.editable !== false && chartCsvIds(chart).some(id => csvIds.has(id)))
       rebuildEditableGraph(chart, candidate);
   });
-  for (const fact of imported)
-    fact.owners = collectAssetReferences(new Set(fact.kind === "csv" ? [fact.id] : []),
-      new Set(fact.kind === "image" ? [fact.id] : []), candidate);
   try { validateProjectObjectState(candidate, { requireSlots: true }); } catch { return null; }
   return { candidate, imported };
 }

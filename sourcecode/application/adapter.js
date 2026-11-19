@@ -74,10 +74,8 @@ export function renderWholeWorkspace() {
   const projection = dispatchProjectQuery("renderer", { operation: "whole-workspace" });
   return renderWholeWorkspaceProjection(projection, interfaceFSM.readState(), dashboardFrontendActions()).completion;
 }
-export function applySlotStyle(_fromControls = false, notify = true) {
-  const result = transformWorkspace();
-  if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return result;
+export function applySlotStyle() {
+  return transformWorkspace();
 }
 export function applyDashboardZoom() {
   return transformWorkspace();
@@ -91,6 +89,7 @@ export function updateFileAvailability() {
     appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
 }
 export function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
+  const before = interfaceFSM.readState();
   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
   let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), commandTuple = null;
@@ -99,13 +98,16 @@ export function dispatchSlotSelection(slotId, pendingContentType = null, directi
     if (context?.empty && context.contentType !== pendingContentType)
       commandTuple = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
         slotId: state.selectedSlotId, contentType: pendingContentType,
-      });
+      }, false);
   }
   state = interfaceFSM.readState();
+  if (before.overlay !== state.overlay) uiDisplay?.overlay(state.overlay);
+  uiDisplay?.selection(state);
   updateSelectionDecoration(state);
   if (state.selectedSlotId === null)
     return [state, commandTuple?.[0] ?? null, dispatchProjectQuery("renderer", { operation: "workspace-structure" })];
-  if (commandTuple && commandTuple[1].selectedSlotId === state.selectedSlotId)
+  if (commandTuple?.[0].committed && commandTuple[2] &&
+      commandTuple[1].selectedSlotId === state.selectedSlotId)
     return [state, commandTuple[0], commandTuple[2]];
   const projection = dispatchProjectQuery("renderer", { operation: "selected-slot" });
   updateGraphView(projection, state);
@@ -119,20 +121,22 @@ export function updateGraphView(projection = dispatchProjectQuery("renderer"), s
 export function swapSlotContents(source, target) {
   return swapSlots(source?.id, target?.id);
 }
-export function applyUiPalette(palette, notify = true) {
+export function applyUiPalette(palette) {
   const result = applyUiPaletteProjection(palette);
-  if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+  uiDisplay?.palette(palette);
   return result;
 }
-export function applyCurrentUiPalette(notify = true) {
-  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
+export function applyCurrentUiPalette() {
+  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
   return null;
 }
-export function applyUiPaletteValues(values, notify = true) {
+export function applyUiPaletteValues(values) {
   const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
   if (!result.committed) return false;
-  if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
-  return readAppearanceApiPalette();
+  const palette = readAppearanceApiPalette();
+  applyUiPaletteProjection(palette);
+  uiDisplay?.palette(palette);
+  return palette;
 }
 export function renderProjectObject(projection, state) {
   updateFileAvailability();
@@ -157,12 +161,22 @@ export function dispatchProjectQuery(query, payload = {}) {
 }
 
 export function dispatchInterfaceEvent(event, payload = {}) {
+  const before = interfaceFSM.readState();
   const request = event === "SELECT_GRAPH_OBJECT"
-    ? { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId } : payload ?? {},
+    ? { ...payload, selectedSlotId: before.selectedSlotId } : payload ?? {},
     validatedInput = BACKEND_REFERENCE_EVENTS.has(event) ? validateFrontendIntent(event, request)
       : { event, accepted: true, payload };
-  if (!validatedInput.accepted) return interfaceFSM.readState();
-  return interfaceFSM.send(event, { ...payload, validatedInput });
+  if (!validatedInput.accepted) return before;
+  const current = interfaceFSM.send(event, { ...payload, validatedInput });
+  if (event === "SELECT_ASSET" || event === "CLEAR_ASSET_SELECTION" ||
+      (event === "SELECT_GRAPH_OBJECT" &&
+        (before.assetSelection !== current.assetSelection || before.assetPath !== current.assetPath)))
+    uiDisplay?.assetSelection(current);
+  if (["SELECT_ASSET", "CLEAR_ASSET_SELECTION", "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT"].includes(event))
+    uiDisplay?.graphObject(current);
+  if (["TOGGLE_OVERLAY", "CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"].includes(event))
+    uiDisplay?.overlay?.(current.overlay);
+  return current;
 }
 
 export function runLifecycleTask(lifecycle, event, task) {
@@ -173,13 +187,22 @@ export function runLifecycleTask(lifecycle, event, task) {
     );
   if (lifecycle !== "importing" && lifecycle !== "exporting")
     return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
-  dispatchInterfaceEvent("LIFECYCLE_START", { lifecycle, event });
+  const started = dispatchInterfaceEvent("LIFECYCLE_START", { lifecycle, event });
+  uiDisplay?.lifecycle(started.lifecycle);
   const complete = (result) => {
-    dispatchInterfaceEvent("LIFECYCLE_COMPLETE", { event, outcome: result });
+    const completed = dispatchInterfaceEvent("LIFECYCLE_COMPLETE", { event, outcome: result });
+    uiDisplay?.lifecycle(completed.lifecycle);
     return result;
   };
   const fail = (error) => {
-    dispatchInterfaceEvent("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
+    try {
+      const failed = dispatchInterfaceEvent("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
+      uiDisplay?.taskError(failed.error);
+    } catch { /* Keep the original task error. */ }
+    try {
+      const recovered = interfaceFSM.recoverLifecycle();
+      uiDisplay?.lifecycle(recovered.lifecycle);
+    } catch { /* Keep the original task error. */ }
     throw error;
   };
   let completion;
@@ -188,7 +211,86 @@ export function runLifecycleTask(lifecycle, event, task) {
   return Promise.resolve(completion).then(complete, fail);
 }
 
-export function dispatchProjectCommand(event, payload = {}) {
+let uiDisplay = null;
+
+export function displayDashboardZoom(value) {
+  uiDisplay?.zoom(value);
+}
+
+export function setUiDisplay(display) {
+  uiDisplay = display;
+}
+
+function refreshCommittedUi(event, payload, result, before, current, showSelectedEditor) {
+  if (event === "PROJECT_LOADED") {
+    const palette = readAppearanceApiPalette();
+    applyUiPaletteProjection(palette);
+    if (uiDisplay) {
+      uiDisplay.palette(palette);
+      uiDisplay.projectName();
+      uiDisplay.assetTree();
+      uiDisplay.slotConnections();
+      const csvOptions = uiDisplay.csvOptions();
+      uiDisplay.selection?.(current, csvOptions, true);
+      if (before.overlay !== current.overlay) uiDisplay.overlay?.(current.overlay);
+    }
+    return;
+  }
+  if (!uiDisplay) return;
+  const { changed } = result, operation = payload.operation;
+  let tree = false, connections = false, options = false;
+  for (const { role, kind, replaced } of changed.assets) {
+    const listChanged = ["created", "deleted", "moved"].includes(role) || (role === "imported" && !replaced);
+    if (listChanged) {
+      tree = true;
+      if (kind === "csv") options = true;
+    } else if (kind === "csv" && (role === "updated" || (role === "imported" && replaced))) tree = true;
+  }
+  if (changed.linkedAssetMovesOrRemovals.length || [
+    "GRID_LAYOUT_CHANGED", "SLOTS_MERGED", "SLOTS_SPLIT", "SLOTS_SWAPPED", "SLOT_TYPE_CHANGED",
+    "SLOTS_RESET", "SLOT_IMAGE_LINKED", "SLOT_DATA_CONNECTED", "SLOT_IMAGE_IMPORTED",
+    "SLOT_CHART_IMPORTED", "CHART_MODEL_REPLACED",
+  ].includes(event) || (event === "ASSETS_IMPORTED" && payload.targetSlotId != null)) connections = true;
+  if (changed.targetSlotReferencesChanged || event === "SLOT_DATA_CONNECTED") tree = true;
+  if (event === "GRAPH_OBJECTS_REPLACED") {
+    if (operation === "graphs.addObject" || operation === "graphs.deleteObject" ||
+      (operation === "graphs.setObjectValues" && changed.graphObjectCsvChanged)) tree = connections = true;
+    else if (operation === "graphs.moveObject") connections = true;
+  }
+  if (event === "PROJECT_NAME_CHANGED") uiDisplay.projectName();
+  if (tree) uiDisplay.assetTree();
+  if (connections) uiDisplay.slotConnections();
+  const csvOptions = options ? uiDisplay.csvOptions() : null;
+  if (showSelectedEditor) {
+    let initialized = false;
+    if (before.selectedSlotId !== current.selectedSlotId || before.workspace !== current.workspace) {
+      initialized = uiDisplay.selection?.(current, csvOptions);
+    } else {
+      if (changed.slotIds.includes(current.selectedSlotId))
+        initialized = uiDisplay.slot?.(current, csvOptions, event);
+      if (!initialized) {
+        if (before.assetSelection !== current.assetSelection || before.assetPath !== current.assetPath)
+          uiDisplay.assetSelection?.(current);
+        if (before.graphObjectIndex !== current.graphObjectIndex) uiDisplay.graphObject?.(current);
+      }
+    }
+    if (before.overlay !== current.overlay) uiDisplay.overlay?.(current.overlay);
+    if (!initialized) {
+      if (changed.chartIds.length) uiDisplay.graph?.(changed.chartIds, event, operation,
+        changed.removedObjectChartIds, changed.appendedObjectChartIds);
+      if (changed.imageIds.length) uiDisplay.image?.(changed.imageIds);
+      if (changed.csvIds.length) uiDisplay.csv?.(changed.csvIds);
+    }
+  }
+  if (["GRID_LAYOUT_CHANGED", "LAYOUT_STYLE_CHANGED", "SLOTS_MERGED", "SLOTS_SPLIT",
+    "SLOTS_SWAPPED"].includes(event)) uiDisplay.layout?.();
+  if (["LABEL_SETTINGS_CHANGED", "LABEL_POSITION_CHANGED"].includes(event)) uiDisplay.labels?.(event);
+  if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event))
+    uiDisplay.captions?.(event, changed.slotIds);
+  if (event === "EXPORT_SETTINGS_CHANGED") uiDisplay.printSettings?.();
+}
+
+export function dispatchProjectCommand(event, payload = {}, showSelectedEditor = true) {
   if (!PROJECT_COMMANDS.has(event)) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
   const result = projectEFSM.send(event, payload), frontendBefore = interfaceFSM.readState();
   if (!result.committed) return [result, frontendBefore, null];
@@ -196,8 +298,6 @@ export function dispatchProjectCommand(event, payload = {}) {
     state = interfaceFSM.reconcileProjectResult(event, reconciliationInput),
     effect = reconciliationInput.projectionEffect ?? result.projectionEffect ?? {};
   if (event === "PROJECT_LOADED") clearWorkspacePresentation();
-  if (event === "PROJECT_LOADED" || event === "APPEARANCE_CHANGED")
-    applyUiPaletteProjection(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
   const structural = ["PROJECT_LOADED", "GRID_LAYOUT_CHANGED", "SLOTS_MERGED", "SLOTS_SPLIT",
     "SLOTS_SWAPPED", "LAYOUT_STYLE_CHANGED"].includes(event),
     skipContent = structural || (effect.pathOnly && !effect.referencesRemoved) || event === "EXPORT_SETTINGS_CHANGED",
@@ -206,6 +306,7 @@ export function dispatchProjectCommand(event, payload = {}) {
     });
   if (structural) applyWorkspaceTransform(projection, state);
   else if (!skipContent) applyCommittedDashboardProjection(event, result, state, projection);
+  refreshCommittedUi(event, payload, result, frontendBefore, state, event === "PROJECT_LOADED" || showSelectedEditor);
   return [result, state, projection];
 }
 
@@ -222,10 +323,12 @@ export const appFSM = Object.freeze({
     }
     return dispatchInterfaceEvent(event, payload);
   },
-  notify: (...args) => interfaceFSM.notify(...args),
   run: (...args) => runLifecycleTask(...args),
-  ready: () => interfaceFSM.ready(readWorkspaceHint()),
-  subscribe: (...args) => interfaceFSM.subscribe(...args),
+  ready() {
+    const state = interfaceFSM.ready(readWorkspaceHint());
+    uiDisplay?.lifecycle(state.lifecycle);
+    return state;
+  },
 });
 
 export function selectedProjectAsset() {

@@ -96,12 +96,8 @@ export function selectDirectoryFromTree(path) {
 export function selectProjectCsv(path) {
   const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
   if (resolved?.kind !== "csv") return null;
-  const priorRevision = interfaceFSM.readState().revision, state = appFSM.send("SELECT_ASSET", {
-    kind: "csv", path: resolved.path, direction: "ui-to-fsm",
-  });
-  if (!(state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path)) return null;
-  const current = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: resolved.path });
-  return current?.kind === "csv" ? current.target : null;
+  appFSM.send("SELECT_ASSET", { kind: "csv", path: resolved.target.path, direction: "ui-to-fsm" });
+  return resolved.target;
 }
 
 export function selectImageFromTree(path) {
@@ -138,19 +134,19 @@ export function moveProjectNode(plan, useUniqueName = false) {
     path: plan.path, directory: plan.directory, useUniqueName,
   });
   if (!result.committed) return null;
-  const path = result.changed.movedPathTo,
+  const { path, oldPath } = result.changed.assets.find(asset => asset.role === "moved" && asset.oldPath === plan.path),
     trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
 
   status(trashed
-    ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.`
-    : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
+    ? `${projectPathName(oldPath)}을 휴지통으로 이동했습니다.`
+    : `${projectPathName(oldPath)}을 ${projectParentPath(path)}로 이동했습니다.`);
   return immutableProjectCopy({ path, trashed });
 }
 
 export function createProjectDirectory(parent, name) {
   const [result] = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
   if (!result.committed) return null;
-  const path = result.changed.createdDirectoryPath;
+  const { path } = result.changed.assets.find(asset => asset.role === "created" && asset.kind === "directory");
   appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
   return path;
 }

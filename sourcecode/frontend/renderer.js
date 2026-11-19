@@ -7,38 +7,22 @@ import { auditApp } from '../system.js';
 
 export const $ = (id) => document.getElementById(id);
 
-export const uiTelemetryListeners = new Set();
+let statusDisplay = null;
+let statusText = "";
+let debugLines = [];
 
-export let uiTelemetryState = Object.freeze({
-  revision: 0,
-  status: "",
-  debugEnabled: false,
-  debugLines: [],
-});
-
-export function publishUiTelemetry(patch = {}) {
-  uiTelemetryState = Object.freeze({
-    ...uiTelemetryState,
-    ...patch,
-    revision: uiTelemetryState.revision + 1,
-  });
-  uiTelemetryListeners.forEach((listener) => listener());
-  return uiTelemetryState;
-}
-
-export function subscribeUiTelemetry(listener) {
-  uiTelemetryListeners.add(listener);
-  return () => uiTelemetryListeners.delete(listener);
-}
-
-export function getUiTelemetrySnapshot() {
-  return uiTelemetryState;
+export function setStatusDisplay(display) {
+  statusDisplay = display;
+  if (display === null) return;
+  display.statusText(statusText);
+  display.debugEnabled(debugEnabled);
+  display.debugLines(Object.freeze([...debugLines]));
 }
 
 export function status(message) {
-  let text = String(message ?? "");
-  publishUiTelemetry({ status: text });
-  return text;
+  statusText = String(message ?? "");
+  statusDisplay?.statusText(statusText);
+  return statusText;
 }
 
 export let debugEnabled = false;
@@ -51,13 +35,14 @@ export function readDebugEnabled() {
 
 export function setDebugEnabled(enabled) {
   debugEnabled = enabled === true;
-  publishUiTelemetry({ debugEnabled });
+  statusDisplay?.debugEnabled(debugEnabled);
   return debugEnabled;
 }
 
 export function clearDebugOutput() {
   debugSequence = 0;
-  publishUiTelemetry({ debugLines: [] });
+  debugLines = [];
+  statusDisplay?.debugLines(Object.freeze([]));
 }
 
 export function saveDebugOutput() {
@@ -67,7 +52,7 @@ export function saveDebugOutput() {
     userAgent: navigator.userAgent,
     location: location.href,
   });
-  let blob = new Blob([getUiTelemetrySnapshot().debugLines.join("\n")], {
+  let blob = new Blob([debugLines.join("\n")], {
       type: "text/plain;charset=utf-8",
     }),
     link = document.createElement("a"),
@@ -94,8 +79,8 @@ export function debugLog(event, data = {}, level = "debug") {
     line = `${String(++debugSequence).padStart(4, "0")} ${new Date().toISOString().slice(11, 23)} ${level.toUpperCase()} ${event} ${JSON.stringify(payload)}`;
   let method = console[level] || console.debug;
   method.call(console, "[chart-builder]", event, payload);
-  let lines = [...uiTelemetryState.debugLines, line].slice(-500);
-  publishUiTelemetry({ debugEnabled, debugLines: lines });
+  debugLines = [...debugLines, line].slice(-500);
+  statusDisplay?.debugLines(Object.freeze([...debugLines]));
 }
 
 export function readmeContentHtml() {
@@ -216,18 +201,6 @@ function releaseImageSurface(surface) {
   surface.frame?.remove();
   surface.element.remove();
   surface.element.removeAttribute("src");
-}
-
-export function installResizeObserver(frontendActions = {}) {
-  if (rendererRuntime.resizeObserverInstalled) return;
-  const handleResize = () => frontendActions.transformWorkspace?.();
-  if (window.ResizeObserver) {
-    const observer = new ResizeObserver(handleResize);
-    try { if ($("graphArea")) observer.observe($("graphArea")); }
-    catch (error) { observer.disconnect(); throw error; }
-    rendererRuntime.graphAreaObserver = observer;
-  } else window.addEventListener("resize", handleResize);
-  rendererRuntime.resizeObserverInstalled = true;
 }
 
 export function clearSlotDragState() {
@@ -539,7 +512,10 @@ export function updateSelectionDecoration(interfaceState) {
 
 export function applyWorkspaceTransform(projection, interfaceState) {
   cleanupSurfaceOwners(projection.visibleSlots);
-  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
+  if (hasContentFrames() && !canReuseGrid(projection)) {
+    wholeRenderingRequired();
+    return $("dashboard");
+  }
   renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
   for (const surface of [...rendererRuntime.graphInstances.values(), ...rendererRuntime.imageSurfaces.values()])
     scaleSurface(surface);
@@ -677,7 +653,6 @@ export function startupCoreRuntimeProjection(projection, interfaceState, fronten
   const clickController = installSlotClickControllerProjection(frontendActions),
     dropController = installDashboardFileDropControllerProjection(),
     presentation = applyWorkspaceTransform(projection, interfaceState);
-  installResizeObserver(frontendActions);
   return { clickController, dropController, presentation };
 }
 
@@ -1439,8 +1414,6 @@ export function applyUiPaletteProjection(palette) {
 export const rendererRuntime = {
   graphInstances: new Map(),
   imageSurfaces: new Map(),
-  graphAreaObserver: null,
-  resizeObserverInstalled: false,
   programmaticPlotlyRelayout: new WeakMap(),
   workspaceLifetime: 0,
   slotOperations: new Map(),

@@ -1,7 +1,7 @@
 // Source: sourcescript/frontend/mantine_ui.py (same logical owner); pseudocode/frontend/mantine_ui.pcal.
 import { transformWorkspace, appFSM } from '../application/adapter.js';
 import { PROJECT_TRASH_DIRECTORY, projectParentPath, projectPathInDirectory, projectPathName } from '../backend/assets_files.js';
-import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, getUiTelemetrySnapshot, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, setDebugEnabled, status, subscribeUiTelemetry } from './renderer.js';
+import { bindDashboardFileDropReceiver, clearDebugOutput, dataTransferHasFiles, debugLog, renderDashboardFrame, readDebugEnabled, readmeContentHtml, saveDebugOutput, setDebugEnabled, status } from './renderer.js';
 
 // Source DashboardExternalFileDrop: the public import binding owns lifecycle;
 // the mounted UI owns only its collision resolver and drag finalization.
@@ -108,7 +108,7 @@ export class UiCommand {
   dispose() { this.changed = () => {}; this.cancel(); this.active = false; }
 }
 
-export function mountMantineUi() {
+export function mountMantineUi(connectDisplay) {
   const runtime = window.FastFigureUiRuntime;
   if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
   if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
@@ -145,7 +145,20 @@ export function mountMantineUi() {
     createTheme,
     useTree,
   } = MantineCore;
-  const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
+  const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
+  const StatusContext = React.createContext(null);
+  const AssetTreeContext = React.createContext({ nodes: [], trash: null });
+  const AppearancePaletteContext = React.createContext(null);
+  const SlotConnectionsContext = React.createContext([]);
+  const CsvOptionsContext = React.createContext([]);
+  const ProjectNameContext = React.createContext("");
+  const SelectedSlotContext = React.createContext(null);
+  const AppStateContext = React.createContext(null);
+  const OverlayContext = React.createContext(null);
+  const ImageEditorContext = React.createContext(null);
+  const GraphDataContext = React.createContext(null);
+  const GraphLayoutContext = React.createContext(null);
+  const GraphPaletteContext = React.createContext([]);
   const Button = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeButton, controlRef: ref }));
   const ActionIcon = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeActionIcon, controlRef: ref }));
   const UnstyledButton = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeUnstyledButton, controlRef: ref }));
@@ -213,44 +226,46 @@ Modal: Modal.extend({
   ]);
   // Binding metadata contains only group/field/axis identifiers; every read is fresh.
   function numericBinding(group, field, axis = null) {
-    const read = () => {
-      const api = window.FastFigureApi, state = appFSM.readState();
+    const describe = (state, projection = null) => {
+      const api = window.FastFigureApi;
+      const read = (key, query) => projection ? projection[key] : query();
       if (state.lifecycle !== "ready") return { target: null, value: null, companions: null, ready: false };
       let view, target, value;
       if (group === "image") {
-        view = api.images.readSettings(); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
+        view = read('image', api.images.readSettings); target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
         value = view?.settings?.[field];
       } else if (group === "csv" || group === "object") {
-        view = api.graphs.readControls();
+        view = read('csv', api.graphs.readControls) ?? {};
         target = group === "csv" ? (view.currentCsv ? [group, view.currentCsv.id] : null)
           : (view.chart?.editor?.editable !== false && view.selectedIndex != null
             ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null);
         value = group === "csv" ? view.currentCsv?.headerLines : view.object?.[field];
       } else if (group === "axis" || group === "global") {
-        view = api.graphs.readLayout();
+        view = read('graphLayout', api.graphs.readLayout);
         target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
         value = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
       } else if (group === "label") {
-        view = api.labels.readSettings(); target = state.overlay === "label" ? [group] : null; value = view.settings[field];
+        view = read('label', api.labels.readSettings); target = state.overlay === "label" ? [group] : null; value = view?.settings?.[field];
       } else if (group === "caption") {
-        view = api.captions.readSettings(); target = state.overlay === "caption" ? [group] : null; value = view.settings[field];
+        view = read('caption', api.captions.readSettings); target = state.overlay === "caption" ? [group] : null; value = view?.settings?.[field];
       } else if (group === "print") {
-        view = api.print.readSettings(); target = state.overlay === "print" ? [group] : null;
+        view = read('print', api.print.readSettings) ?? {}; target = state.overlay === "print" ? [group] : null;
         value = field === "height" && view.heightMode !== "explicit" ? null : view[field];
       } else {
-        view = api.layout.readControls(); target = state.overlay === "layout" ? [group] : null;
+        view = read('layout', api.layout.readControls) ?? {}; target = state.overlay === "layout" ? [group] : null;
         value = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"]
-          : group === "zoom" ? view.zoom : view.slotStyle[field];
+          : group === "zoom" ? view.zoom : view.slotStyle?.[field];
       }
       if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) value = Number(value);
       return { target: target === null ? null : [...target, field], value, ready: true,
         companions: group === "grid" ? { gridRows: view.gridRows, gridCols: view.gridCols, gridLimits: view.gridLimits }
-          : group === "label" ? { x: view.settings.x, y: view.settings.y } : null };
+          : group === "label" ? { x: view?.settings?.x, y: view?.settings?.y } : null };
     };
     const allowEmpty = (group === "axis" && ["min", "max", "tick"].includes(field))
       || group === "global" || (group === "print" && field === "height");
     return {
-      readCurrent: read,
+      describe,
+      readCurrent: () => describe(appFSM.readState()),
       prepare: (text, current) => prepareNumericInput(text, current, allowEmpty,
         group === "print" && field === "height" ? null : ""),
       invoke: (target, value, companions) => {
@@ -276,17 +291,12 @@ Modal: Modal.extend({
       }
     };
   }
-  function useControlSnapshot(readCurrent) {
-    const ref = useRef(readCurrent); ref.current = readCurrent;
-    const snapshot = React.useCallback(() => JSON.stringify(ref.current()), []);
-    return JSON.parse(useSyncExternalStore(subscribeAppState, snapshot, snapshot));
-  }
-  function useUiCommand(binding, stepSize = null) {
+  function useUiCommand(binding, current, stepSize = null) {
     const [, render] = useState(0), ref = useRef(null);
     if (!ref.current) ref.current = new UiCommand(binding.readCurrent, binding.prepare, binding.invoke, stepSize);
     const command = ref.current; Object.assign(command, binding, { stepSize });
     command.changed = () => render(value => value + 1);
-    const current = useControlSnapshot(binding.readCurrent), target = JSON.stringify(current.target);
+    const target = JSON.stringify(current.target);
     useEffect(() => { command.cancel(); }, [target, current.ready]);
     useEffect(() => {
       command.active = true; command.changed = () => render(value => value + 1);
@@ -303,7 +313,16 @@ Modal: Modal.extend({
       const applied = result => { if (result !== false && result != null) onApplied?.(result); return result; };
       return outcome && typeof outcome.then === "function" ? outcome.then(applied) : applied(outcome);
     };
-    const command = useUiCommand(binding, props.step ?? 1);
+    const state = useAppState();
+    const graph = React.useContext(GraphDataContext)?.editor;
+    const image = React.useContext(ImageEditorContext);
+    const graphLayout = React.useContext(GraphLayoutContext);
+    const overlay = React.useContext(OverlayContext);
+    const current = binding.describe(state, {
+      image, csv: graph && { ...graph, object: graph.objects[graph.selectedIndex] },
+      graphLayout, label: overlay.label, caption: overlay.caption, print: overlay.print, layout: overlay.controls,
+    });
+    const command = useUiCommand(binding, current, props.step ?? 1);
     const { value, onChange, onBlur, min, max, step, allowDecimal, clampBehavior, ...inputProps } = props;
     const run = callback => { try { const result = callback(); if (result?.catch) result.catch(error => reportTaskError("UI_COMMAND", error)); }
       catch (error) { reportTaskError("UI_COMMAND", error); } };
@@ -329,14 +348,16 @@ Modal: Modal.extend({
     return React.createElement("div", { style: { display: "contents" }, onClick: event => event.stopPropagation() }, control);
   }
   function CommandButton({ control = NativeButton, controlRef, localAction = false, onClick, ...props }) {
-    const rendered = appFSM.readState();
+    const rendered = useAppState();
     const displayedTarget = [rendered.selectedSlotId, rendered.assetPath, rendered.graphObjectIndex, rendered.overlay];
     const readTarget = () => {
       const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
       return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
     };
     const command = useUiCommand({ readCurrent: () => ({ target: readTarget(), value: null, companions: null,
-      ready: appFSM.readState().lifecycle === "ready" }), prepare: null, invoke: (_target, event) => onClick?.(event) });
+      ready: appFSM.readState().lifecycle === "ready" }), prepare: null, invoke: (_target, event) => onClick?.(event) },
+      { target: rendered.lifecycle === "ready" && !props.disabled ? displayedTarget : null,
+        value: null, ready: rendered.lifecycle === "ready" });
     return React.createElement(control, { ...props, ref: controlRef, disabled: props.disabled || command.running,
       onClick: onClick ? event => localAction ? onClick(event) : command.send(event) : undefined });
   }
@@ -406,10 +427,6 @@ label: option.label,
 : null;
   }
 
-  function subscribeAppState(onStoreChange) {
-    return appFSM.subscribe(onStoreChange);
-  }
-
   function getAppStateSnapshot() {
     const state = appFSM.readState();
     return JSON.stringify([state.lifecycle, state.workspace, state.overlay, state.selectedSlotId,
@@ -417,8 +434,7 @@ label: option.label,
   }
 
   function useAppState() {
-    useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
-    return appFSM.readState();
+    return React.useContext(AppStateContext);
   }
 
   function addSelectedGraphObject() {
@@ -452,17 +468,8 @@ label: option.label,
     return window.FastFigureApi.graphs.importFile(current.selectedSlotId, file);
   }
 
-  function useUiTelemetry() {
-    return useSyncExternalStore(
-subscribeUiTelemetry,
-getUiTelemetrySnapshot,
-getUiTelemetrySnapshot,
-    );
-  }
-
-  function selectedTargetText(state) {
+  function selectedTargetText(state, slot) {
     if (state.workspace === "project") return "빈 슬롯 또는 그래프를 선택하세요.";
-    const slot = window.FastFigureApi.slots.readSelected();
     return slot ? `선택한 슬롯: ${slot.row}행 ${slot.col}열` : "빈 슬롯 또는 그래프를 선택하세요.";
   }
 
@@ -568,7 +575,7 @@ collision
 
   function FastFigureToolbar() {
     const state = useAppState();
-    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
+    const slot = React.useContext(SelectedSlotContext);
     const activeOverlay = state.overlay;
     const buttonProps = (overlay) => ({
 variant: activeOverlay === overlay ? "filled" : "light",
@@ -589,7 +596,7 @@ React.createElement(
     c: "dimmed",
     style: { flex: "1 1 auto", minWidth: 0 },
   },
-  selectedTargetText(state),
+  selectedTargetText(state, slot),
 ),
 React.createElement(Button, { disabled: state.lifecycle !== "ready", "aria-label": "작업영역 전체 렌더링", onClick: () => window.FastFigureApi.workspace.render() }, "렌더"),
 React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트"),
@@ -598,10 +605,9 @@ React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트"
 
   function FastFigureDataActions() {
     const state = useAppState();
-    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
+    const slot = React.useContext(SelectedSlotContext);
     const busy = state.lifecycle !== "ready";
     const slotApi = window.FastFigureApi.slots;
-    const slot = state.workspace === "project" ? null : slotApi.readSelected();
     const slotType = slot?.content.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
     const assetApi = window.FastFigureApi.assets;
@@ -779,11 +785,10 @@ React.createElement(
 
   function FastFigureImageEditor() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.image" ? window.FastFigureApi.images.readEditor() : null);
+    const image = React.useContext(ImageEditorContext);
     if (state.workspace !== "slot.image") return null;
     const busy = state.lifecycle !== "ready";
     const imageApi = window.FastFigureApi.images;
-    const image = imageApi.readEditor();
     const settings = image?.settings;
     const updateSettings = (patch) => {
 if (!settings) return;
@@ -877,17 +882,11 @@ command: ["image","y"],
     );
   }
 
-  function readProjectAssetDisplay() {
-    const assetNodes = window.FastFigureApi.assets.readTree();
-    const slotRows = window.FastFigureApi.slots.readDisplay();
-    return { assetNodes, slotRows };
-  }
-
   function FastFigureProjectDataTree() {
     const state = useAppState();
-    useControlSnapshot(() => [window.FastFigureApi.assets.readTree(), window.FastFigureApi.slots.readDisplay()]);
     const assetApi = window.FastFigureApi.assets;
-    const { assetNodes, slotRows } = readProjectAssetDisplay();
+    const { nodes: assetNodes, trash } = React.useContext(AssetTreeContext);
+    const slotRows = React.useContext(SlotConnectionsContext);
     const snapshot = {
       directories: assetNodes.filter(node => node.kind === "directory").map(node => node.path),
       data: assetNodes.filter(node => node.kind === "csv").map(node => ({
@@ -943,7 +942,6 @@ try {
     };
     const trashSelected =
 state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
-    const trash = assetApi.readTrash();
     const trashHasContents = trash ? !trash.empty : false;
     const trashReferenceCount = trash?.referenceCount ?? 0;
     const openTrashDialog = () => {
@@ -1562,7 +1560,7 @@ slotsExpanded
   }
   function FastFigureProjectActions() {
     const state = useAppState();
-    useControlSnapshot(() => window.FastFigureApi.project.readName());
+    const projectName = React.useContext(ProjectNameContext);
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     const projectApi = window.FastFigureApi.project;
@@ -1591,9 +1589,9 @@ Stack,
 { gap: "xs", p: "md" },
 React.createElement(Text, { fw: 600 }, "프로젝트"),
 React.createElement(TextInput, {
-  key: `project-name-${projectApi.readName()}`,
+  key: `project-name-${projectName}`,
   label: "프로젝트 이름",
-  defaultValue: projectApi.readName(),
+  defaultValue: projectName,
   disabled: busy,
   onChange: (event) => {
     projectApi.setName(event.target.value);
@@ -1635,22 +1633,21 @@ React.createElement(
 
   function FastFigureGraphDataEditor() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readData(), window.FastFigureApi.assets.readList("csv")] : null);
+    const csvAssets = React.useContext(CsvOptionsContext);
+    const view = React.useContext(GraphDataContext);
     const busy = state.lifecycle !== "ready";
     const dragRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
     const assetApi = window.FastFigureApi.assets;
-    const editor = graphApi.readData();
+    if (!view) return null;
+    const { editor, columns, objectColumns, rows } = view;
     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
-    const csvAssets = assetApi.readList("csv");
     const csvOptions = csvAssets.map(csv => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
     const activeCsv = editor.currentCsv;
-    const columns = activeCsv ? graphApi.readColumns(activeCsv.id) : [];
-    const objectColumns = selected ? graphApi.readColumns(selected.csvId, chartId) : [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
@@ -1710,7 +1707,7 @@ activeCsv && columns.length
         React.createElement(
           TableTbody,
           null,
-          ...(assetApi.readPreview(activeCsv.id, 0, 30)?.rows ?? []).map((row, rowIndex) =>
+          ...rows.map((row, rowIndex) =>
             React.createElement(
               TableTr,
               { key: rowIndex },
@@ -1830,11 +1827,10 @@ selected && activeCsv && editable ? React.createElement(Stack, { gap: "xs" },
   }
   function FastFigureGraphLayoutEditor() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? window.FastFigureApi.graphs.readLayout() : null);
+    const editor = React.useContext(GraphLayoutContext);
     const busy = state.lifecycle !== "ready";
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readLayout();
     if (!editor) return null;
     const settings = editor.settings;
     const editable = editor.editable;
@@ -2033,12 +2029,13 @@ React.createElement(FoldSection, { title: "Y축" }, axisEditor("yLeft"), axisEdi
   }
   function FastFigureGraphPaletteActions() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readControls(), window.FastFigureApi.graphs.readPalette()] : null);
+    const view = React.useContext(GraphDataContext);
+    const colors = React.useContext(GraphPaletteContext);
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
-    if (state.workspace !== "slot.graph") return null;
+    if (state.workspace !== "slot.graph" || !view) return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readControls(), colors = graphApi.readPalette();
+    const { editor } = view;
     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
     const commitColors = (colors) => graphApi.applyPalette(editor.chart?.id ?? null, colors);
     const resetPalette = () => {
@@ -2200,9 +2197,8 @@ React.createElement(
     const busy = state.lifecycle !== "ready";
     const appearanceApi = window.FastFigureApi.appearance;
     const [opened, setOpened] = useState(false);
-    const [draft, setDraft] = useState(() => ({
-...appearanceApi.readPalette(),
-    }));
+    const palette = React.useContext(AppearancePaletteContext);
+    const [draft, setDraft] = useState(() => ({ ...palette }));
     const fields = [
 ["uiColor", "강조색"],
 ["uiBackgroundColor", "UI 배경"],
@@ -2216,7 +2212,7 @@ React.createElement(
 ["fontColor", "그래프 글자"],
     ];
     const openPalette = () => {
-setDraft({ ...appearanceApi.readPalette() });
+setDraft({ ...palette });
 setOpened(true);
     };
     const applyPalette = () => {
@@ -2304,7 +2300,7 @@ React.createElement(
   }
 
   function FastFigureStatusDebug() {
-    const telemetry = useUiTelemetry();
+    const telemetry = React.useContext(StatusContext);
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
     return React.createElement(
@@ -2534,14 +2530,14 @@ React.createElement(
 
   function FastFigureLabelOverlay() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().overlay === "label" ? window.FastFigureApi.labels.readState() : null);
+    const label = React.useContext(OverlayContext).label;
     const previewRef = useRef(null);
     const dragRef = useRef(null);
     const [, setPreviewRevision] = useState(0);
     if (state.overlay !== "label") return null;
     const busy = state.lifecycle !== "ready";
     const labelApi = window.FastFigureApi.labels;
-    const label = labelApi.readState();
+    if (!label) return null;
     const settings = label.settings;
     const reference = label.reference;
     const previewWidth = 420;
@@ -2741,25 +2737,11 @@ command: ["label","y"],
 
   function FastFigureCaptionOverlay() {
     const state = useAppState();
-    const [targetMode, setTargetMode] = useState("global");
-    useControlSnapshot(() => {
-      const current = appFSM.readState();
-      return current.overlay === "caption" ? [window.FastFigureApi.captions.readGlobal(),
-        targetMode === "slot" && current.selectedSlotId != null ? window.FastFigureApi.captions.readSlot(current.selectedSlotId) : null] : null;
-    });
-    useEffect(() => {
-if (state.overlay !== "caption") setTargetMode("global");
-    }, [state.overlay]);
-    if (state.overlay !== "caption") return null;
+    const { caption: globalCaption, slotCaption, captionMode: targetMode, setCaptionMode: setTargetMode } = React.useContext(OverlayContext);
+    const selectedSlot = React.useContext(SelectedSlotContext);
+    if (state.overlay !== "caption" || !globalCaption) return null;
     const busy = state.lifecycle !== "ready";
     const captionApi = window.FastFigureApi.captions;
-    const slotApi = window.FastFigureApi.slots;
-    const globalCaption = captionApi.readGlobal();
-    const selectedSlot = slotApi.readSelected();
-    const slotCaption =
-targetMode === "slot" && selectedSlot
-  ? captionApi.readSlot(selectedSlot.id)
-  : null;
     const settings = globalCaption.settings;
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-caption" });
     const commitSettings = (patch) => captionApi.setSettings(patch);
@@ -2890,26 +2872,17 @@ command: ["caption","lineHeight"],
 
   function FastFigurePrintOverlay() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().overlay === "print" ? window.FastFigureApi.print.readSettings() : null);
     const printApi = window.FastFigureApi.print;
-    const initial = printApi.readSettings();
-    const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
-    const [format, setFormat] = useState(initial.format);
+    const initial = React.useContext(OverlayContext).print;
     const [message, setMessage] = useState("");
-    useEffect(() => {
-if (state.overlay !== "print") return;
-const saved = printApi.readSettings();
-setFormat(saved.format);
-    }, [state.overlay]);
-    if (state.overlay !== "print") return null;
+    if (state.overlay !== "print" || !initial) return null;
+    const { width, dpi, format } = initial, height = initial.heightMode === "explicit" ? initial.height : "";
     const busy = state.lifecycle !== "ready";
 
     const close = () =>
 appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
     const commit = (patch) => {
-const next = printApi.setSettings(patch);
-setFormat(next.format);
-return next;
+return printApi.setSettings(patch);
     };
     const save = () =>
 printApi.save(setMessage)
@@ -2999,12 +2972,10 @@ command: ["print","height"],
 
   function FastFigureLayoutOverlay() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().overlay === "layout" ? window.FastFigureApi.layout.readControls() : null);
     const [layoutSelection, setLayoutSelection] = useState(() => new Set());
-    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
     const previewFrameRef = useRef(null);
     const layoutApi = window.FastFigureApi.layout;
-    const layout = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
+    const { layout, resizePreview } = React.useContext(OverlayContext);
     useEffect(() => {
 setLayoutSelection(new Set());
     }, [state.overlay, layout?.gridRows, layout?.gridCols]);
@@ -3014,14 +2985,15 @@ const element = previewFrameRef.current;
 if (!element) return;
 const updateRenderedWidth = () => {
   const width = element.getBoundingClientRect().width;
-  if (width > 0) setRenderedPreviewWidth(width);
+  if (width > 0) resizePreview(width);
 };
 updateRenderedWidth();
+if (typeof ResizeObserver === "undefined") return;
 const observer = new ResizeObserver(updateRenderedWidth);
 observer.observe(element);
 return () => observer.disconnect();
-    }, [state.overlay]);
-    if (state.overlay !== "layout") return null;
+    }, [state.overlay, !!layout]);
+    if (state.overlay !== "layout" || !layout) return null;
     const busy = state.lifecycle !== "ready";
     const style = layout.slotStyle;
 
@@ -3258,18 +3230,36 @@ return bindDashboardFileDropReceiver(handleDrop);
     const shellGeometry = fastFigureTheme.other.shell;
     const [navbarWidth, setNavbarWidth] = useState(shellGeometry.navbarWidth);
     const [navbarCollapsed, setNavbarCollapsed] = useState(false);
-    const navbarDragRef = useRef(null);
+    const navbarDragRef = useRef(null), lastGraphAreaSize = useRef(null);
     const clampNavbarWidth = (value) =>
 Math.max(shellGeometry.navbarMinWidth, Math.min(shellGeometry.navbarMaxWidth, value));
-    useEffect(() => {
-const app = document.querySelector(".app");
-if (!app) return;
-app.style.setProperty(
-  "--ff-renderer-navbar-width",
-  navbarCollapsed ? "0px" : `${navbarWidth}px`,
-);
-requestAnimationFrame(() => transformWorkspace());
-    }, [navbarWidth, navbarCollapsed]);
+    const syncGraphAreaSize = useCallback(() => {
+      const area = document.getElementById("graphArea");
+      if (!area) return;
+      const { width, height } = area.getBoundingClientRect();
+      const previous = lastGraphAreaSize.current;
+      if (!(width > 0 && height > 0) || (previous?.width === width && previous?.height === height)) return;
+      transformWorkspace();
+      lastGraphAreaSize.current = { width, height };
+    }, []);
+    useLayoutEffect(() => {
+      const app = document.querySelector(".app");
+      if (!app) return;
+      app.style.setProperty("--ff-renderer-navbar-width", navbarCollapsed ? "0px" : `${navbarWidth}px`);
+      syncGraphAreaSize();
+    }, [navbarWidth, navbarCollapsed, syncGraphAreaSize]);
+    useLayoutEffect(() => {
+      const area = document.getElementById("graphArea");
+      if (!area) return;
+      const observer = window.ResizeObserver ? new window.ResizeObserver(syncGraphAreaSize) : null;
+      if (observer) observer.observe(area);
+      else window.addEventListener("resize", syncGraphAreaSize);
+      return () => {
+        if (observer) observer.disconnect();
+        else window.removeEventListener("resize", syncGraphAreaSize);
+        lastGraphAreaSize.current = null;
+      };
+    }, [syncGraphAreaSize]);
     const toggleNavbar = () => {
 setNavbarCollapsed((collapsed) => !collapsed);
     };
@@ -3398,8 +3388,227 @@ React.createElement(FastFigureDashboardFileDrop),
   });
 
   function FastFigureApp() {
-    useAppState();
-    const palette = useControlSnapshot(() => window.FastFigureApi.appearance.readPalette());
+    const [status, setStatusText] = useState("");
+    const [debugEnabled, setDebugEnabledDisplay] = useState(false);
+    const [debugLines, setDebugLines] = useState([]);
+    const api = window.FastFigureApi;
+    const [palette, setPalette] = useState(() => api.appearance.readPalette());
+    const [projectName, setProjectName] = useState(() => api.project.readName());
+    const [assetNodes, setAssetNodes] = useState(() => api.assets.readTree());
+    const [trash, setTrash] = useState(null);
+    function showTrash(current) {
+      setTrash(current.assetSelection === "directory" && current.assetPath === PROJECT_TRASH_DIRECTORY
+        ? api.assets.readTrash() : null);
+    }
+    const [slotRows, setSlotRows] = useState(() => api.slots.readDisplay());
+    const [csvOptions, setCsvOptions] = useState(() => api.assets.readList("csv"));
+    const [selectedSlot, setSelectedSlot] = useState(null);
+    const [imageEditor, setImageEditor] = useState(null);
+    const [graphData, setGraphData] = useState(null);
+    const [graphLayout, setGraphLayout] = useState(null);
+    const [graphPalette, setGraphPalette] = useState([]);
+    const [appState, setAppState] = useState(() => appFSM.readState());
+    const [label, setLabel] = useState(null);
+    const [caption, setCaption] = useState(null);
+    const [slotCaption, setSlotCaption] = useState(null);
+    const [captionMode, setCaptionModeDisplay] = useState("global");
+    const captionModeRef = useRef("global");
+    const [print, setPrint] = useState(null);
+    const [controls, setControls] = useState(null);
+    const [layout, setLayout] = useState(null);
+    const previewWidth = useRef(null);
+    function showLayout() {
+      setControls(api.layout.readControls());
+      if (appFSM.readState().overlay === "layout") setLayout(api.layout.readState(previewWidth.current));
+    }
+    function resizePreview(width) {
+      if (previewWidth.current === width || appFSM.readState().overlay !== "layout") return;
+      previewWidth.current = width;
+      setLayout(api.layout.readState(width));
+    }
+    function setCaptionMode(mode) {
+      const { selectedSlotId } = appFSM.readState();
+      captionModeRef.current = mode;
+      setCaptionModeDisplay(mode);
+      setSlotCaption(mode === "slot" && selectedSlotId != null ? api.captions.readSlot(selectedSlotId) : null);
+    }
+    function showOverlay(name) {
+      setAppState(appFSM.readState());
+      if (name === "label") setLabel(api.labels.readState());
+      else setLabel(null);
+      if (name === "caption") setCaption(api.captions.readGlobal());
+      else {
+        setCaption(null);
+        setCaptionMode("global");
+      }
+      if (name === "print") setPrint(api.print.readSettings());
+      else setPrint(null);
+      if (name === "layout") showLayout();
+      else {
+        previewWidth.current = null;
+        setLayout(null);
+      }
+    }
+    const graphView = useRef(null);
+    const identity = useRef(null);
+    const lastSelection = useRef(null);
+
+    function showAssetSelection(current, refreshTrash = true) {
+      const previous = lastSelection.current;
+      lastSelection.current = current;
+      setAppState(current);
+      if (refreshTrash) showTrash(current);
+      const editor = graphView.current?.editor;
+      if (!editor || current.workspace !== "slot.graph") return;
+      const assetChanged = previous?.assetSelection !== current.assetSelection || previous?.assetPath !== current.assetPath;
+      const objectChanged = previous?.graphObjectIndex !== current.graphObjectIndex;
+      if (!assetChanged && !objectChanged) return;
+      const currentCsv = assetChanged ? api.graphs.readControls().currentCsv : editor.currentCsv;
+      showGraphData({ ...editor, currentCsv, selectedIndex: current.graphObjectIndex },
+        { current: assetChanged, object: objectChanged });
+    }
+
+    // Only display callbacks read graph projections. Re-rendering controls does not read CSV rows.
+    function showGraphData(editor, { current = true, object = true } = {}) {
+      const previous = graphView.current;
+      if (!editor) {
+        graphView.current = null;
+        setGraphData(null);
+        return;
+      }
+      const active = editor.currentCsv;
+      const selected = editor.objects[editor.selectedIndex];
+      const columns = current ? (active ? api.graphs.readColumns(active.id) : []) : previous.columns;
+      const objectColumns = object ? (selected
+        ? (active && selected.csvId === active.id ? columns : api.graphs.readColumns(selected.csvId, editor.chart?.id))
+        : []) : previous.objectColumns;
+      const rows = current ? (active && columns.length ? api.assets.readPreview(active.id, 0, 30)?.rows ?? [] : [])
+        : previous.rows;
+      graphView.current = { editor, columns, objectColumns, rows };
+      setGraphData(graphView.current);
+    }
+    const editorIdentity = (current, slot) => {
+      if (!slot) return null;
+      const { contentType, imageId, chart } = slot.content;
+      return JSON.stringify([slot.id, current.workspace, contentType, contentType === "image" ? imageId : chart]);
+    };
+    function showSelection(current, options = null, force = false,
+      slot = current.selectedSlotId == null ? null : api.slots.readSelected()) {
+      setAppState(current);
+      setSelectedSlot(slot);
+      if (lastSelection.current?.selectedSlotId !== current.selectedSlotId) {
+        if (current.overlay === "label") setLabel(api.labels.readState());
+        if (current.overlay === "caption" && captionModeRef.current === "slot")
+          setSlotCaption(current.selectedSlotId == null ? null : api.captions.readSlot(current.selectedSlotId));
+      }
+      const next = editorIdentity(current, slot);
+      if (!force && next === identity.current) {
+        showAssetSelection(current, lastSelection.current?.assetPath !== current.assetPath);
+        return false;
+      }
+      if (!force && lastSelection.current?.assetPath !== current.assetPath) showTrash(current);
+      lastSelection.current = current;
+      identity.current = next;
+      setImageEditor(slot && current.workspace === "slot.image" ? api.images.readEditor() : null);
+      if (slot && current.workspace === "slot.graph") {
+        showGraphData(api.graphs.readData());
+        setGraphLayout(api.graphs.readLayout());
+        setGraphPalette(api.graphs.readPalette());
+        if (options === null) setCsvOptions(api.assets.readList("csv"));
+      } else {
+        showGraphData(null);
+        setGraphLayout(null);
+        setGraphPalette([]);
+      }
+      return true;
+    }
+    useLayoutEffect(() => connectDisplay({
+      uiDisplay: {
+        palette: setPalette,
+        selection: showSelection,
+        slot: (current, options, event) => {
+          const slot = api.slots.readSelected();
+          if (editorIdentity(current, slot) !== identity.current) return showSelection(current, options, false, slot);
+          setSelectedSlot(slot);
+          if (event === "SLOT_IMAGE_SETTINGS_CHANGED" && current.workspace === "slot.image") {
+            const next = api.images.readSettings();
+            if (next) setImageEditor(previous => previous && { ...previous, settings: next.settings });
+          }
+          return false;
+        },
+        image: ids => {
+          const key = identity.current && JSON.parse(identity.current);
+          if (key?.[1] === "slot.image" && ids.includes(key[3])) setImageEditor(api.images.readEditor());
+        },
+        assetSelection: current => showAssetSelection(current),
+        graphObject: current => showAssetSelection(current, false),
+        graph: (ids, event, operation, removed, appended) => {
+          const editor = graphView.current?.editor;
+          const ownerId = editor?.chart?.id;
+          if (ownerId == null || !ids.includes(ownerId)) return;
+          if (event === "CHART_LAYOUT_CHANGED") {
+            const layout = api.graphs.readLayout();
+            setGraphLayout(layout);
+            if (layout) showGraphData({ ...editor, chart: { ...editor.chart,
+              editor: { ...editor.chart.editor, title: layout.title } } }, { current: false, object: false });
+            return;
+          }
+          const next = api.graphs.readData();
+          const selected = next.objects[next.selectedIndex];
+          const previous = editor.objects[editor.selectedIndex];
+          showGraphData(next, { current: next.currentCsv?.id !== editor.currentCsv?.id,
+            object: selected?.csvId !== previous?.csvId || !!selected !== !!previous ||
+              next.chart?.editor.editable !== editor.chart?.editor.editable });
+          if (event === "CHART_MODEL_REPLACED") setGraphLayout(api.graphs.readLayout());
+          if (event === "CHART_MODEL_REPLACED" || removed.includes(ownerId) || appended.includes(ownerId) ||
+              (event === "GRAPH_OBJECTS_REPLACED" && ["graphs.addObject", "graphs.deleteObject",
+                "graphs.moveObject", "graphs.setObjectValues", "graphs.applyPalette"].includes(operation)))
+            setGraphPalette(api.graphs.readPalette());
+        },
+        csv: ids => {
+          const editor = graphView.current?.editor;
+          if (!editor) return;
+          const active = editor.currentCsv, selected = editor.objects[editor.selectedIndex];
+          const current = active != null && ids.includes(active.id), object = selected != null && ids.includes(selected.csvId);
+          if (!current && !object) return;
+          const currentCsv = current ? api.graphs.readControls(active.id).currentCsv : active;
+          showGraphData({ ...editor, currentCsv }, { current, object });
+        },
+        overlay: showOverlay,
+        lifecycle: value => setAppState(previous => ({ ...previous, lifecycle: value })),
+        taskError: error => setStatusText(error.message),
+        layout: showLayout,
+        labels: () => {
+          if (appFSM.readState().overlay === "label") setLabel(api.labels.readState());
+        },
+        captions: (event, slotIds) => {
+          const { overlay, selectedSlotId } = appFSM.readState();
+          if (overlay !== "caption") return;
+          if (event === "CAPTION_SETTINGS_CHANGED" || event === "CAPTION_TEXT_INPUT") setCaption(api.captions.readGlobal());
+          if (captionModeRef.current === "slot" && selectedSlotId != null && slotIds.includes(selectedSlotId))
+            setSlotCaption(api.captions.readSlot(selectedSlotId));
+        },
+        printSettings: () => {
+          if (appFSM.readState().overlay === "print") setPrint(api.print.readSettings());
+        },
+        zoom: zoom => {
+          setControls(previous => previous && { ...previous, zoom });
+          setLayout(previous => previous && { ...previous, zoom });
+        },
+        projectName: () => setProjectName(api.project.readName()),
+        assetTree: () => {
+          setAssetNodes(api.assets.readTree());
+          showTrash(appFSM.readState());
+        },
+        slotConnections: () => setSlotRows(api.slots.readDisplay()),
+        csvOptions: () => {
+          const next = api.assets.readList("csv");
+          setCsvOptions(next);
+          return next;
+        },
+      },
+      statusDisplay: { statusText: setStatusText, debugEnabled: setDebugEnabledDisplay, debugLines: setDebugLines },
+    }), []);
     const paletteKey = JSON.stringify(palette);
     const theme = useMemo(() => createTheme({ ...fastFigureTheme,
       colors: { ffui: Array(10).fill(palette.uiColor) }, primaryColor: "ffui" }), [paletteKey]);
@@ -3458,7 +3667,20 @@ MantineProvider,
   theme,
   cssVariablesResolver,
 },
-React.createElement(FastFigureShell),
+React.createElement(AppearancePaletteContext.Provider, { value: palette },
+React.createElement(AppStateContext.Provider, { value: appState },
+  React.createElement(OverlayContext.Provider, { value: { label, caption, slotCaption, captionMode, setCaptionMode, print, controls, layout, resizePreview } },
+React.createElement(StatusContext.Provider, { value: { status, debugEnabled, debugLines } },
+  React.createElement(ProjectNameContext.Provider, { value: projectName },
+    React.createElement(AssetTreeContext.Provider, { value: { nodes: assetNodes, trash } },
+      React.createElement(SlotConnectionsContext.Provider, { value: slotRows },
+        React.createElement(CsvOptionsContext.Provider, { value: csvOptions },
+          React.createElement(SelectedSlotContext.Provider, { value: selectedSlot },
+            React.createElement(ImageEditorContext.Provider, { value: imageEditor },
+              React.createElement(GraphDataContext.Provider, { value: graphData },
+                React.createElement(GraphLayoutContext.Provider, { value: graphLayout },
+                  React.createElement(GraphPaletteContext.Provider, { value: graphPalette },
+                    React.createElement(FastFigureShell)))))))))))))),
     );
   }
 

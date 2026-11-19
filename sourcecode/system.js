@@ -1,5 +1,5 @@
 // Source: sourcescript/system.py (same logical owner); pseudocode/system.pcal.
-import { appFSM, readWorkspaceHint, renderDashboard, startupCoreRuntime, renderProjectObject } from './application/adapter.js';
+import { appFSM, readWorkspaceHint, renderDashboard, startupCoreRuntime, renderProjectObject, setUiDisplay } from './application/adapter.js';
 import { downloadProject, importProjectFile, publishPublicApi } from './application/public_api/index.js';
 import { applyImageSettingsFromValues } from './application/public_api/layout_annotations.js';
 import { buildProjectObject, ffpxBase64ToBytes, ffpxBytesToBase64, ffpxDataUrlBytes, ffpxReadProject, projectVfs } from './backend/assets_files.js';
@@ -9,7 +9,7 @@ import { ProjectStateMachine, initializeProjectEFSM, projectEFSM } from './backe
 import { ProjectObject, ProjectObjectRegistry, activeProject, createProjectState, getProjectCsv, initializeActiveProject, initializeProjectObjects, projectClone, projectObjects, readProjectNumber, validateProjectObject } from './backend/project_state.js';
 import { APP_STATE_DEFINITIONS, InterfaceStateMachine, initializeInterfaceFSM, interfaceFSM } from './frontend/interface_fsm.js';
 import { mountMantineUi } from './frontend/mantine_ui.js';
-import { debugLog } from './frontend/renderer.js';
+import { debugLog, setStatusDisplay } from './frontend/renderer.js';
 
 export const REQUIRED_RENDERER_HOSTS = ["dashboard", "dashboardCaption", "graphArea", "readmeContent"];
 
@@ -329,7 +329,14 @@ debugLog(
   "info",
 );
 
-  const uiMount = mountMantineUi();
+  const uiMount = mountMantineUi(display => {
+    setUiDisplay(display.uiDisplay);
+    setStatusDisplay(display.statusDisplay);
+    return () => {
+      setUiDisplay(null);
+      setStatusDisplay(null);
+    };
+  });
   auditApp("app:init");
   return { frontendActions, coreRuntime, uiMount };
 }

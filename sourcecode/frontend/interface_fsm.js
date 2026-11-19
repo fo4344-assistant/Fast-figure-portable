@@ -11,8 +11,7 @@ export class InterfaceStateMachine {
     this.definitions = definitions;
     this.state = Object.freeze({ lifecycle: "booting", workspace: "project", overlay: "none",
       assetSelection: "none", assetPath: null, graphObject: "none", graphObjectIndex: null,
-      direction: "model-to-ui", revision: 0, error: null });
-    this.listeners = new Set();
+      direction: "model-to-ui", error: null });
     this.writeLocks = new Set();
     Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100 });
   }
@@ -25,7 +24,6 @@ export class InterfaceStateMachine {
     if (this.writeLocks.has(scope)) throw Error(`${event} 전이 중 잠긴 ${scope} 모델을 수정할 수 없습니다.`);
   }
   publish(event) {
-    this.state = Object.freeze({ ...this.state, revision: this.state.revision + 1 });
     const state = this.readState(), busy = state.lifecycle === "importing" || state.lifecycle === "exporting";
     document.body.classList.toggle("app-busy", busy);
     document.body.setAttribute("aria-busy", String(busy));
@@ -34,8 +32,6 @@ export class InterfaceStateMachine {
     document.body.dataset.appOverlay = state.overlay;
     document.body.dataset.appAssetSelection = state.assetSelection;
     document.body.dataset.appGraphObject = state.graphObject;
-    const listeners = [...this.listeners];
-    for (const listener of listeners) listener();
     debugLog("fsm:transition", { event, ...state });
     return state;
   }
@@ -90,9 +86,7 @@ export class InterfaceStateMachine {
       next.lifecycle = "error";
       next.error = Object.freeze({ event: values.event, message: values.message });
       this.state = Object.freeze(next);
-      this.publish(`${values.event}:failed`);
-      this.state = Object.freeze({ ...this.state, lifecycle: "ready" });
-      return this.publish(`${values.event}:recovered`);
+      return this.publish(`${values.event}:failed`);
     }
     this.state = Object.freeze(next);
     const outcomeLabel = event === "LIFECYCLE_COMPLETE"
@@ -112,17 +106,14 @@ export class InterfaceStateMachine {
       graphObject: input.graphObject === null ? "none" : "selected", graphObjectIndex: input.graphObject });
     return this.publish(`${event}:reconcile`);
   }
-  notify(objectName, event, payload = {}) {
-    this.state = Object.freeze({ ...this.state, direction: "model-to-fsm" });
-    return this.publish(event);
+  recoverLifecycle() {
+    const event = this.state.error?.event;
+    this.state = Object.freeze({ ...this.state, lifecycle: "ready" });
+    return this.publish(`${event}:recovered`);
   }
   ready(workspaceHint = "project") {
     this.state = Object.freeze({ ...this.state, workspace: workspaceHint, overlay: "none" });
     return this.send("LIFECYCLE_COMPLETE", { event: "READY" });
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
   }
 }
 
