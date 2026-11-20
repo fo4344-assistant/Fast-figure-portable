@@ -12005,19 +12005,13 @@ function buildProjectAssetImportCandidate(source, payload) {
         chart.editor.objects.push(createCandidateBaseGraphObject(csv));
       }
     }
-    imported.push({ role: "imported", kind: assetKind, id: staged.id, path });
+    imported.push({ role: "imported", kind: assetKind, id: staged.id, path, replaced: plan.replaceId !== null });
   }
   const csvIds = new Set(imported.filter((item) => item.kind === "csv").map((item) => item.id));
   candidate.charts.forEach((chart) => {
     if (chart.editor?.editable !== false && chartCsvIds(chart).some((id) => csvIds.has(id)))
       rebuildEditableGraph(chart, candidate);
   });
-  for (const fact of imported)
-    fact.owners = collectAssetReferences(
-      new Set(fact.kind === "csv" ? [fact.id] : []),
-      new Set(fact.kind === "image" ? [fact.id] : []),
-      candidate
-    );
   try {
     validateProjectObjectState(candidate, { requireSlots: true });
   } catch {
@@ -13358,7 +13352,22 @@ function commitValueKey(value2) {
   ));
   return JSON.stringify(value2 === void 0 ? null : value2);
 }
-function actualChanged(payload) {
+function collectTargetSlotAssetLinks(slotIds, state) {
+  const links = [];
+  for (const slotId of slotIds) {
+    const slot = state.slots.find((slot2) => slot2.id === slotId && !slot2.hidden);
+    if (!slot) continue;
+    const { imageId, chart: chartId } = slot.content;
+    if (imageId != null) links.push(["image", imageId]);
+    const chart = chartId == null ? null : state.charts.find((chart2) => chart2.id === chartId);
+    if (chart && !chartUsesConversionView(chart)) {
+      for (const { csvId } of chart.editor.objects)
+        if (csvId != null) links.push(["csv", csvId]);
+    }
+  }
+  return links.sort(([kind, id], [otherKind, otherId]) => kind.localeCompare(otherKind) || id - otherId);
+}
+function buildProjectMutationChanges(event, payload) {
   const { pre, post } = payload.commitFacts, ids = (before, after) => [...new Set([...before, ...after].map((item) => item.id))].filter((id) => commitValueKey(before.find((item) => item.id === id)) !== commitValueKey(after.find((item) => item.id === id))), changed = {
     ...payload.changed,
     slotIds: ids(pre.slots, post.slots),
@@ -13367,7 +13376,30 @@ function actualChanged(payload) {
     imageIds: ids(pre.assets.images, post.assets.images),
     assets: []
   };
-  for (const fact of payload.changed?.assets || []) {
+  const commandFacts = payload.changed?.assets ?? [];
+  const assetFacts = [];
+  if (event === "PROJECT_NODE_MOVED" || event === "ASSETS_IMPORTED") assetFacts.push(...commandFacts);
+  else if (event !== "PROJECT_LOADED") {
+    for (const [kind, key] of [["csv", "csvFiles"], ["image", "images"]]) {
+      const before2 = pre.assets[key], after2 = post.assets[key];
+      const beforeIds = new Set(before2.map((asset) => asset.id)), afterIds = new Set(after2.map((asset) => asset.id));
+      for (const asset of after2) {
+        if (!beforeIds.has(asset.id)) assetFacts.push({ role: "created", kind, id: asset.id, path: projectAssetPath(asset) });
+      }
+      for (const asset of before2) {
+        if (!afterIds.has(asset.id)) assetFacts.push({ role: "deleted", kind, id: asset.id, path: projectAssetPath(asset), name: asset.name });
+      }
+    }
+    assetFacts.push(...commandFacts.filter((fact) => fact.role === "updated"));
+    const before = new Set(pre.fileSystem.directories), after = new Set(post.fileSystem.directories);
+    for (const path of after) if (!before.has(path)) assetFacts.push({ role: "created", kind: "directory", id: null, path });
+    for (const path of before) if (!after.has(path)) assetFacts.push({ role: "deleted", kind: "directory", id: null, path });
+  }
+  for (const fact of assetFacts) {
+    if (fact.kind === "directory") {
+      changed.assets.push({ ...fact });
+      continue;
+    }
     const collection = fact.kind === "csv" ? "csvFiles" : "images", source = fact.role === "deleted" ? pre : post, asset = source.assets[collection].find((item) => item.id === fact.id);
     if (!asset || projectAssetPath(asset) !== fact.path) throw Error("commit 결과의 asset identity/path가 일치하지 않습니다.");
     if (fact.role === "deleted") {
@@ -13380,6 +13412,50 @@ function actualChanged(payload) {
       return { slotId: slot.id, chartId: chart.id };
     }) : post.slots.filter((slot) => slot.content.imageId === asset.id).map((slot) => ({ slotId: slot.id, chartId: null }));
     changed.assets.push({ ...fact, id: asset.id, path: projectAssetPath(asset), owners });
+  }
+  const linkedCsvIds = /* @__PURE__ */ new Set(), linkedImageIds = /* @__PURE__ */ new Set();
+  for (const fact of changed.assets) {
+    if (fact.role !== "moved" && fact.role !== "deleted") continue;
+    if (fact.kind === "csv") linkedCsvIds.add(fact.id);
+    if (fact.kind === "image") linkedImageIds.add(fact.id);
+  }
+  const linked = linkedCsvIds.size || linkedImageIds.size ? collectAssetReferences(linkedCsvIds, linkedImageIds, pre) : [];
+  changed.linkedAssetMovesOrRemovals = changed.assets.filter((fact) => linked.some((ref) => ref.kind === fact.kind && ref.assetId === fact.id)).map(({ kind, id }) => ({ kind, id }));
+  changed.targetSlotReferencesChanged = false;
+  if ([
+    "SLOT_TYPE_CHANGED",
+    "SLOTS_RESET",
+    "SLOT_IMAGE_LINKED",
+    "SLOT_IMAGE_IMPORTED",
+    "SLOT_CHART_IMPORTED",
+    "CHART_MODEL_REPLACED",
+    "SLOTS_MERGED",
+    "SLOTS_SPLIT",
+    "GRID_LAYOUT_CHANGED"
+  ].includes(event) || event === "ASSETS_IMPORTED" && payload.targetSlotId != null) {
+    const slotIds = new Set(changed.slotIds);
+    if (payload.slotId != null) slotIds.add(payload.slotId);
+    if (payload.targetSlotId != null) slotIds.add(payload.targetSlotId);
+    if (event === "CHART_MODEL_REPLACED" && payload.chartId != null) {
+      for (const state of [pre, post]) {
+        const slot = resolveOwningSlot(payload.chartId, state);
+        if (slot) slotIds.add(slot.id);
+      }
+    }
+    changed.targetSlotReferencesChanged = JSON.stringify(collectTargetSlotAssetLinks(slotIds, pre)) !== JSON.stringify(collectTargetSlotAssetLinks(slotIds, post));
+  }
+  changed.graphObjectCsvChanged = false;
+  if (event === "GRAPH_OBJECTS_REPLACED" && payload.operation === "graphs.setObjectValues") {
+    const csvId = (state) => state.charts.find((chart) => chart.id === payload.chartId)?.editor.objects[payload.index]?.csvId;
+    changed.graphObjectCsvChanged = csvId(pre) !== csvId(post);
+  }
+  changed.removedObjectChartIds = (payload.selectionHints?.graphObjectIndexMaps ?? []).map(({ chartId }) => chartId).filter((chartId) => post.charts.some((chart) => chart.id === chartId));
+  changed.appendedObjectChartIds = [];
+  if (event === "ASSETS_IMPORTED" && payload.targetSlotId != null) {
+    const chartIdAtTarget = (state) => state.slots.find((slot) => slot.id === payload.targetSlotId && !slot.hidden)?.content.chart;
+    const chartId = chartIdAtTarget(post);
+    if (chartId != null && chartId === chartIdAtTarget(pre) && post.charts.find((chart) => chart.id === chartId).editor.objects.length > pre.charts.find((chart) => chart.id === chartId).editor.objects.length)
+      changed.appendedObjectChartIds.push(chartId);
   }
   return changed;
 }
@@ -13433,7 +13509,7 @@ var ProjectStateMachine = class {
       "removedGraphReferenceCount",
       "resetImageSlotCount"
     ]) delete input[key];
-    const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts, changed = committed ? actualChanged(input) : {}, counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post) : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
+    const outcome = action({ machine: this, event, payload: input }), committed = outcome !== false && !!input.commitFacts, changed = committed ? buildProjectMutationChanges(event, input) : {}, counts = committed ? removedReferenceCounts(input.commitFacts.pre, input.commitFacts.post) : { removedGraphReferenceCount: 0, resetImageSlotCount: 0 };
     const selectionHints = committed ? { ...input.selectionHints } : {};
     if (committed && input.operation === "graphs.moveObject") {
       const { pre, post } = input.commitFacts, before = pre.charts.find((chart) => chart.id === input.chartId), after = post.charts.find((chart) => chart.id === input.chartId), from = input.from, to = input.to;
@@ -13513,7 +13589,6 @@ function applySlotCaptionsInsertedAction({ machine, event, payload }) {
       if (original?.content) item.content = projectClone(original.content);
     }
     const text = insertSlotCaptions(candidate, payload.slotIds ?? null);
-    if (text === candidate.annotations.captions.text) return false;
     candidate.annotations.captions.text = text;
     normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
@@ -14158,15 +14233,6 @@ function applyProjectDirectoryCreatedAction({ machine, event, payload }) {
     normalizeAndValidateCandidate(candidate);
     if (activeProject._state !== source) continue;
     commitProjectCandidate(candidate, event, payload);
-    const actual = projectVfs.resolve(path, activeProject._state);
-    payload.changed = {
-      slotIds: [],
-      chartIds: [],
-      csvIds: [],
-      imageIds: [],
-      assets: [],
-      createdDirectoryPath: actual.path
-    };
     return;
   }
 }
@@ -14240,6 +14306,10 @@ function applyProjectNodeMovedAction({ machine, event, payload }) {
       removed = removeProjectAssetReferences(csvIds, imageIds, candidate);
     }
     const rewrite = (path) => `${destination}${path.slice(plan.path.length)}`;
+    const movedAssets = (match.kind === "directory" ? [match, ...moving] : moving).map((node) => {
+      const oldPath = node.kind === "directory" ? node.path : projectAssetPath(node.asset);
+      return { role: "moved", kind: node.kind, id: node.asset?.id ?? null, oldPath, path: rewrite(oldPath) };
+    });
     if (match.kind === "directory") {
       candidate.fileSystem.directories = candidate.fileSystem.directories.map((path) => projectPathInDirectory(path, plan.path) ? rewrite(path) : path).sort();
       moving.filter((node) => node.kind !== "directory").forEach(({ asset }) => {
@@ -14258,8 +14328,7 @@ function applyProjectNodeMovedAction({ machine, event, payload }) {
       chartIds: changedIds(source.charts, post.charts),
       csvIds: changedIds(source.assets.csvFiles, post.assets.csvFiles),
       imageIds: changedIds(source.assets.images, post.assets.images),
-      movedPathFrom: plan.path,
-      movedPathTo: destination,
+      assets: movedAssets,
       ...removed
     };
     payload.selectionHints = immutableProjectCopy({
@@ -14642,33 +14711,20 @@ function applyProjectLoadedAction({ machine, event, payload }) {
 
 // sourcecode/frontend/renderer.js
 var $ = (id) => document.getElementById(id);
-var uiTelemetryListeners = /* @__PURE__ */ new Set();
-var uiTelemetryState = Object.freeze({
-  revision: 0,
-  status: "",
-  debugEnabled: false,
-  debugLines: []
-});
-function publishUiTelemetry(patch = {}) {
-  uiTelemetryState = Object.freeze({
-    ...uiTelemetryState,
-    ...patch,
-    revision: uiTelemetryState.revision + 1
-  });
-  uiTelemetryListeners.forEach((listener) => listener());
-  return uiTelemetryState;
-}
-function subscribeUiTelemetry(listener) {
-  uiTelemetryListeners.add(listener);
-  return () => uiTelemetryListeners.delete(listener);
-}
-function getUiTelemetrySnapshot() {
-  return uiTelemetryState;
+var statusDisplay = null;
+var statusText = "";
+var debugLines = [];
+function setStatusDisplay(display) {
+  statusDisplay = display;
+  if (display === null) return;
+  display.statusText(statusText);
+  display.debugEnabled(debugEnabled);
+  display.debugLines(Object.freeze([...debugLines]));
 }
 function status(message) {
-  let text = String(message ?? "");
-  publishUiTelemetry({ status: text });
-  return text;
+  statusText = String(message ?? "");
+  statusDisplay?.statusText(statusText);
+  return statusText;
 }
 var debugEnabled = false;
 var debugSequence = 0;
@@ -14677,12 +14733,13 @@ function readDebugEnabled() {
 }
 function setDebugEnabled(enabled) {
   debugEnabled = enabled === true;
-  publishUiTelemetry({ debugEnabled });
+  statusDisplay?.debugEnabled(debugEnabled);
   return debugEnabled;
 }
 function clearDebugOutput() {
   debugSequence = 0;
-  publishUiTelemetry({ debugLines: [] });
+  debugLines = [];
+  statusDisplay?.debugLines(Object.freeze([]));
 }
 function saveDebugOutput() {
   auditApp("debug:save");
@@ -14691,7 +14748,7 @@ function saveDebugOutput() {
     userAgent: navigator.userAgent,
     location: location.href
   });
-  let blob = new Blob([getUiTelemetrySnapshot().debugLines.join("\n")], {
+  let blob = new Blob([debugLines.join("\n")], {
     type: "text/plain;charset=utf-8"
   }), link = document.createElement("a"), stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
   link.href = URL.createObjectURL(blob);
@@ -14713,8 +14770,8 @@ function debugLog(event, data = {}, level = "debug") {
   let payload = debugValue(data), line = `${String(++debugSequence).padStart(4, "0")} ${(/* @__PURE__ */ new Date()).toISOString().slice(11, 23)} ${level.toUpperCase()} ${event} ${JSON.stringify(payload)}`;
   let method = console[level] || console.debug;
   method.call(console, "[chart-builder]", event, payload);
-  let lines = [...uiTelemetryState.debugLines, line].slice(-500);
-  publishUiTelemetry({ debugEnabled, debugLines: lines });
+  debugLines = [...debugLines, line].slice(-500);
+  statusDisplay?.debugLines(Object.freeze([...debugLines]));
 }
 function readmeContentHtml() {
   let template = $("readmeContent");
@@ -14849,21 +14906,6 @@ function releaseImageSurface(surface) {
   surface.frame?.remove();
   surface.element.remove();
   surface.element.removeAttribute("src");
-}
-function installResizeObserver(frontendActions = {}) {
-  if (rendererRuntime.resizeObserverInstalled) return;
-  const handleResize = () => frontendActions.transformWorkspace?.();
-  if (window.ResizeObserver) {
-    const observer = new ResizeObserver(handleResize);
-    try {
-      if ($("graphArea")) observer.observe($("graphArea"));
-    } catch (error) {
-      observer.disconnect();
-      throw error;
-    }
-    rendererRuntime.graphAreaObserver = observer;
-  } else window.addEventListener("resize", handleResize);
-  rendererRuntime.resizeObserverInstalled = true;
 }
 function clearSlotDragState() {
   rendererRuntime.slotDragSourceId = null;
@@ -15180,7 +15222,10 @@ function updateSelectionDecoration(interfaceState) {
 }
 function applyWorkspaceTransform(projection, interfaceState) {
   cleanupSurfaceOwners(projection.visibleSlots);
-  if (hasContentFrames() && !canReuseGrid(projection)) return wholeRenderingRequired();
+  if (hasContentFrames() && !canReuseGrid(projection)) {
+    wholeRenderingRequired();
+    return $("dashboard");
+  }
   renderDashboardFrame($("dashboard"), projection.layout, projection.visibleSlots, projection.geometry);
   for (const surface of [...rendererRuntime.graphInstances.values(), ...rendererRuntime.imageSurfaces.values()])
     scaleSurface(surface);
@@ -15367,7 +15412,6 @@ function updateGraphViewProjection(projection, interfaceState, frontendActions =
 }
 function startupCoreRuntimeProjection(projection, interfaceState, frontendActions) {
   const clickController = installSlotClickControllerProjection(frontendActions), dropController = installDashboardFileDropControllerProjection(), presentation = applyWorkspaceTransform(projection, interfaceState);
-  installResizeObserver(frontendActions);
   return { clickController, dropController, presentation };
 }
 function plotlyConfig(chart, extra = {}) {
@@ -16086,8 +16130,6 @@ function applyUiPaletteProjection(palette) {
 var rendererRuntime = {
   graphInstances: /* @__PURE__ */ new Map(),
   imageSurfaces: /* @__PURE__ */ new Map(),
-  graphAreaObserver: null,
-  resizeObserverInstalled: false,
   programmaticPlotlyRelayout: /* @__PURE__ */ new WeakMap(),
   workspaceLifetime: 0,
   slotOperations: /* @__PURE__ */ new Map(),
@@ -16124,10 +16166,8 @@ var InterfaceStateMachine = class {
       graphObject: "none",
       graphObjectIndex: null,
       direction: "model-to-ui",
-      revision: 0,
       error: null
     });
-    this.listeners = /* @__PURE__ */ new Set();
     this.writeLocks = /* @__PURE__ */ new Set();
     Object.assign(interfaceRuntime, { selectedSlotId: null, dashboardZoomIntent: 100 });
   }
@@ -16140,7 +16180,6 @@ var InterfaceStateMachine = class {
     if (this.writeLocks.has(scope)) throw Error(`${event} 전이 중 잠긴 ${scope} 모델을 수정할 수 없습니다.`);
   }
   publish(event) {
-    this.state = Object.freeze({ ...this.state, revision: this.state.revision + 1 });
     const state = this.readState(), busy = state.lifecycle === "importing" || state.lifecycle === "exporting";
     document.body.classList.toggle("app-busy", busy);
     document.body.setAttribute("aria-busy", String(busy));
@@ -16149,8 +16188,6 @@ var InterfaceStateMachine = class {
     document.body.dataset.appOverlay = state.overlay;
     document.body.dataset.appAssetSelection = state.assetSelection;
     document.body.dataset.appGraphObject = state.graphObject;
-    const listeners = [...this.listeners];
-    for (const listener of listeners) listener();
     debugLog("fsm:transition", { event, ...state });
     return state;
   }
@@ -16209,9 +16246,7 @@ var InterfaceStateMachine = class {
       next.lifecycle = "error";
       next.error = Object.freeze({ event: values.event, message: values.message });
       this.state = Object.freeze(next);
-      this.publish(`${values.event}:failed`);
-      this.state = Object.freeze({ ...this.state, lifecycle: "ready" });
-      return this.publish(`${values.event}:recovered`);
+      return this.publish(`${values.event}:failed`);
     }
     this.state = Object.freeze(next);
     const outcomeLabel = event === "LIFECYCLE_COMPLETE" ? typeof values.outcome === "string" ? values.outcome : values.outcome?.outcome : null;
@@ -16238,19 +16273,14 @@ var InterfaceStateMachine = class {
     });
     return this.publish(`${event}:reconcile`);
   }
-  notify(objectName, event, payload = {}) {
-    this.state = Object.freeze({ ...this.state, direction: "model-to-fsm" });
-    return this.publish(event);
+  recoverLifecycle() {
+    const event = this.state.error?.event;
+    this.state = Object.freeze({ ...this.state, lifecycle: "ready" });
+    return this.publish(`${event}:recovered`);
   }
   ready(workspaceHint = "project") {
     this.state = Object.freeze({ ...this.state, workspace: workspaceHint, overlay: "none" });
     return this.send("LIFECYCLE_COMPLETE", { event: "READY" });
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
   }
 };
 function requestedWorkspaceState({ payload }) {
@@ -16540,7 +16570,6 @@ function applyImageSettingsFromValues(slotId, values = {}) {
   if (!appFSM.query("project-api", { operation: "images.readEditor", slotId })) return false;
   let [result, frontendState, projection] = dispatchProjectCommand("SLOT_IMAGE_SETTINGS_CHANGED", { slotId, settings: values });
   if (!result.committed) return false;
-  appFSM.notify("images", "IMAGE_SETTINGS_CHANGED");
   return appFSM.query("project-api", { operation: "images.readEditor", slotId });
 }
 function readSelectedSlotApi() {
@@ -16577,18 +16606,13 @@ function setAnnotationEnabled(kind, enabled) {
   else
     appFSM.send("CAPTION_SETTINGS_CHANGED", { enabled, direction: "ui-to-fsm" });
   debugLog(`annotation:${kind}`, { enabled });
-  appFSM.notify(
-    kind === "label" ? "labels" : "captions",
-    "ANNOTATION_VISIBILITY_CHANGED"
-  );
 }
-function applyCaptionSettings(notify = true) {
+function applyCaptionSettings() {
   debugLog("annotation:caption-settings", {
     name: activeProject.captionName,
     bold: activeProject.captionNameBold,
     ...activeProject.captionSettings
   });
-  if (notify) appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
 }
 function readGlobalCaptionState() {
   return appFSM.query("project-api", { operation: "captions.readGlobal" });
@@ -16601,7 +16625,6 @@ function setCaptionsApiEnabled(enabled) {
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
   debugLog("annotation:caption", { enabled: state.enabled });
-  appFSM.notify("captions", "ANNOTATION_VISIBILITY_CHANGED");
   return state;
 }
 function setGlobalCaptionText(text) {
@@ -16630,21 +16653,18 @@ function setCaptionsApiName(name) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { name });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  appFSM.notify("captions", "CAPTION_NAME_CHANGED");
   return state;
 }
 function setCaptionsApiNameBold(bold) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { nameBold: bold });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  appFSM.notify("captions", "CAPTION_NAME_WEIGHT_CHANGED");
   return state;
 }
 function setCaptionsApiSettings(patch = {}) {
   let [result, frontendState, projection] = dispatchProjectCommand("CAPTION_SETTINGS_CHANGED", { settings: patch });
   if (!result.committed) return false;
   const state = readGlobalCaptionState();
-  appFSM.notify("captions", "CAPTION_SETTINGS_CHANGED");
   return state;
 }
 function readPrintApiSettings() {
@@ -16676,14 +16696,12 @@ function setLabelsApiEnabled(enabled) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { enabled });
   if (!result.committed) return false;
   debugLog("annotation:label", { enabled });
-  appFSM.notify("labels", "ANNOTATION_VISIBILITY_CHANGED");
   return readLabelsApiState();
 }
 function setLabelsApiSettings(patch = {}) {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_SETTINGS_CHANGED", { settings: patch });
   if (!result.committed) return false;
   debugLog("mantine:label-settings", { ...patch });
-  appFSM.notify("labels", "LABEL_SETTINGS_CHANGED");
   return readLabelsApiState();
 }
 function updateLabelsApiPosition(x, y, eventName = null) {
@@ -16691,7 +16709,6 @@ function updateLabelsApiPosition(x, y, eventName = null) {
   if (!result.committed) return false;
   if (eventName) {
     debugLog("mantine:label-settings", { x, y });
-    appFSM.notify("labels", eventName);
   }
   return readLabelsApiState();
 }
@@ -16700,13 +16717,11 @@ function setLabelsApiPosition(x, y) {
 }
 function finishLabelsApiPositionInteraction() {
   debugLog("mantine:label-position", {});
-  appFSM.notify("labels", "LABEL_POSITION_DRAGGED");
   return readLabelsApiState();
 }
 function resetLabelsApiPosition() {
   let [result, frontendState, projection] = dispatchProjectCommand("LABEL_POSITION_CHANGED", { reset: true });
   if (!result.committed) return false;
-  appFSM.notify("labels", "LABEL_POSITION_RESET");
   return readLabelsApiState();
 }
 function readAppearanceApiPalette() {
@@ -16731,30 +16746,29 @@ function readLayoutApiState(previewWidth = null) {
 function setLayoutApiStyle(patch = {}) {
   const [result, frontendState, projection] = dispatchProjectCommand("LAYOUT_STYLE_CHANGED", patch);
   if (!result.committed) return false;
-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiControls();
 }
 function setLayoutApiGrid(rows, cols) {
   const [result, frontendState, projection] = dispatchProjectCommand("GRID_LAYOUT_CHANGED", { rows, cols });
   if (!result.committed) return false;
-  appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
   return readLayoutApiControls();
 }
 function setLayoutApiZoom(value2) {
-  const session = interfaceFSM.readState();
-  const state = appFSM.send("SET_DASHBOARD_ZOOM", { value: value2 });
-  if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiControls();
+  appFSM.send("SET_DASHBOARD_ZOOM", { value: value2 });
+  transformWorkspace();
+  const layout2 = readLayoutApiControls();
+  displayDashboardZoom(layout2.zoom);
+  return layout2;
 }
 function commitLayoutApiZoom() {
-  appFSM.notify("layout", "DASHBOARD_ZOOM_CHANGED");
   return readLayoutApiControls();
 }
 function resetLayoutApiZoom() {
-  const session = interfaceFSM.readState();
-  const state = appFSM.send("RESET_DASHBOARD_ZOOM");
-  if (state.revision !== session.revision) transformWorkspace();
-  return readLayoutApiControls();
+  appFSM.send("RESET_DASHBOARD_ZOOM");
+  transformWorkspace();
+  const layout2 = readLayoutApiControls();
+  displayDashboardZoom(layout2.zoom);
+  return layout2;
 }
 
 // sourcecode/application/adapter.js
@@ -16814,10 +16828,8 @@ function renderWholeWorkspace() {
   const projection = dispatchProjectQuery("renderer", { operation: "whole-workspace" });
   return renderWholeWorkspaceProjection(projection, interfaceFSM.readState(), dashboardFrontendActions()).completion;
 }
-function applySlotStyle(_fromControls = false, notify = true) {
-  const result = transformWorkspace();
-  if (notify) appFSM.notify("layout", "LAYOUT_STYLE_CHANGED");
-  return result;
+function applySlotStyle() {
+  return transformWorkspace();
 }
 function applyDashboardZoom() {
   return transformWorkspace();
@@ -16831,6 +16843,7 @@ function updateFileAvailability() {
     appFSM.send("CLOSE_OVERLAY", { reason: "slot-selected" });
 }
 function dispatchSlotSelection(slotId, pendingContentType = null, direction = "ui-to-fsm") {
+  const before = interfaceFSM.readState();
   const validatedInput = validateFrontendIntent("SELECT_SLOT", { slotId, direction });
   if (!validatedInput.accepted) return [interfaceFSM.readState(), null, null];
   let state = interfaceFSM.send("SELECT_SLOT", { validatedInput }), commandTuple = null;
@@ -16840,13 +16853,15 @@ function dispatchSlotSelection(slotId, pendingContentType = null, direction = "u
       commandTuple = dispatchProjectCommand("SLOT_TYPE_CHANGED", {
         slotId: state.selectedSlotId,
         contentType: pendingContentType
-      });
+      }, false);
   }
   state = interfaceFSM.readState();
+  if (before.overlay !== state.overlay) uiDisplay?.overlay(state.overlay);
+  uiDisplay?.selection(state);
   updateSelectionDecoration(state);
   if (state.selectedSlotId === null)
     return [state, commandTuple?.[0] ?? null, dispatchProjectQuery("renderer", { operation: "workspace-structure" })];
-  if (commandTuple && commandTuple[1].selectedSlotId === state.selectedSlotId)
+  if (commandTuple?.[0].committed && commandTuple[2] && commandTuple[1].selectedSlotId === state.selectedSlotId)
     return [state, commandTuple[0], commandTuple[2]];
   const projection = dispatchProjectQuery("renderer", { operation: "selected-slot" });
   updateGraphView(projection, state);
@@ -16859,20 +16874,22 @@ function updateGraphView(projection = dispatchProjectQuery("renderer"), state = 
 function swapSlotContents(source, target) {
   return swapSlots(source?.id, target?.id);
 }
-function applyUiPalette(palette, notify = true) {
+function applyUiPalette(palette) {
   const result = applyUiPaletteProjection(palette);
-  if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
+  uiDisplay?.palette(palette);
   return result;
 }
-function applyCurrentUiPalette(notify = true) {
-  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }), notify);
+function applyCurrentUiPalette() {
+  applyUiPalette(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
   return null;
 }
-function applyUiPaletteValues(values, notify = true) {
+function applyUiPaletteValues(values) {
   const [result, state, projection] = dispatchProjectCommand("APPEARANCE_CHANGED", { palette: values });
   if (!result.committed) return false;
-  if (notify) appFSM.notify("ui", "UI_PALETTE_CHANGED");
-  return readAppearanceApiPalette();
+  const palette = readAppearanceApiPalette();
+  applyUiPaletteProjection(palette);
+  uiDisplay?.palette(palette);
+  return palette;
 }
 function renderProjectObject(projection, state) {
   updateFileAvailability();
@@ -16892,9 +16909,17 @@ function dispatchProjectQuery(query, payload = {}) {
   return readBackendProjection(query, request);
 }
 function dispatchInterfaceEvent(event, payload = {}) {
-  const request = event === "SELECT_GRAPH_OBJECT" ? { ...payload, selectedSlotId: interfaceFSM.readState().selectedSlotId } : payload ?? {}, validatedInput = BACKEND_REFERENCE_EVENTS.has(event) ? validateFrontendIntent(event, request) : { event, accepted: true, payload };
-  if (!validatedInput.accepted) return interfaceFSM.readState();
-  return interfaceFSM.send(event, { ...payload, validatedInput });
+  const before = interfaceFSM.readState();
+  const request = event === "SELECT_GRAPH_OBJECT" ? { ...payload, selectedSlotId: before.selectedSlotId } : payload ?? {}, validatedInput = BACKEND_REFERENCE_EVENTS.has(event) ? validateFrontendIntent(event, request) : { event, accepted: true, payload };
+  if (!validatedInput.accepted) return before;
+  const current = interfaceFSM.send(event, { ...payload, validatedInput });
+  if (event === "SELECT_ASSET" || event === "CLEAR_ASSET_SELECTION" || event === "SELECT_GRAPH_OBJECT" && (before.assetSelection !== current.assetSelection || before.assetPath !== current.assetPath))
+    uiDisplay?.assetSelection(current);
+  if (["SELECT_ASSET", "CLEAR_ASSET_SELECTION", "SELECT_GRAPH_OBJECT", "CLEAR_GRAPH_OBJECT"].includes(event))
+    uiDisplay?.graphObject(current);
+  if (["TOGGLE_OVERLAY", "CLOSE_OVERLAY", "OUTSIDE_CLICK", "ESCAPE"].includes(event))
+    uiDisplay?.overlay?.(current.overlay);
+  return current;
 }
 function runLifecycleTask(lifecycle, event, task) {
   const state = interfaceFSM.readState();
@@ -16904,13 +16929,24 @@ function runLifecycleTask(lifecycle, event, task) {
     );
   if (lifecycle !== "importing" && lifecycle !== "exporting")
     return Promise.reject(Error("작업 lifecycle은 importing 또는 exporting이어야 합니다."));
-  dispatchInterfaceEvent("LIFECYCLE_START", { lifecycle, event });
+  const started = dispatchInterfaceEvent("LIFECYCLE_START", { lifecycle, event });
+  uiDisplay?.lifecycle(started.lifecycle);
   const complete = (result) => {
-    dispatchInterfaceEvent("LIFECYCLE_COMPLETE", { event, outcome: result });
+    const completed = dispatchInterfaceEvent("LIFECYCLE_COMPLETE", { event, outcome: result });
+    uiDisplay?.lifecycle(completed.lifecycle);
     return result;
   };
   const fail = (error) => {
-    dispatchInterfaceEvent("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
+    try {
+      const failed = dispatchInterfaceEvent("LIFECYCLE_FAILED", { event, message: error?.message || String(error) });
+      uiDisplay?.taskError(failed.error);
+    } catch {
+    }
+    try {
+      const recovered = interfaceFSM.recoverLifecycle();
+      uiDisplay?.lifecycle(recovered.lifecycle);
+    } catch {
+    }
     throw error;
   };
   let completion;
@@ -16921,14 +16957,104 @@ function runLifecycleTask(lifecycle, event, task) {
   }
   return Promise.resolve(completion).then(complete, fail);
 }
-function dispatchProjectCommand(event, payload = {}) {
+var uiDisplay = null;
+function displayDashboardZoom(value2) {
+  uiDisplay?.zoom(value2);
+}
+function setUiDisplay(display) {
+  uiDisplay = display;
+}
+function refreshCommittedUi(event, payload, result, before, current, showSelectedEditor) {
+  if (event === "PROJECT_LOADED") {
+    const palette = readAppearanceApiPalette();
+    applyUiPaletteProjection(palette);
+    if (uiDisplay) {
+      uiDisplay.palette(palette);
+      uiDisplay.projectName();
+      uiDisplay.assetTree();
+      uiDisplay.slotConnections();
+      const csvOptions2 = uiDisplay.csvOptions();
+      uiDisplay.selection?.(current, csvOptions2, true);
+      if (before.overlay !== current.overlay) uiDisplay.overlay?.(current.overlay);
+    }
+    return;
+  }
+  if (!uiDisplay) return;
+  const { changed } = result, operation = payload.operation;
+  let tree = false, connections = false, options = false;
+  for (const { role, kind, replaced } of changed.assets) {
+    const listChanged = ["created", "deleted", "moved"].includes(role) || role === "imported" && !replaced;
+    if (listChanged) {
+      tree = true;
+      if (kind === "csv") options = true;
+    } else if (kind === "csv" && (role === "updated" || role === "imported" && replaced)) tree = true;
+  }
+  if (changed.linkedAssetMovesOrRemovals.length || [
+    "GRID_LAYOUT_CHANGED",
+    "SLOTS_MERGED",
+    "SLOTS_SPLIT",
+    "SLOTS_SWAPPED",
+    "SLOT_TYPE_CHANGED",
+    "SLOTS_RESET",
+    "SLOT_IMAGE_LINKED",
+    "SLOT_DATA_CONNECTED",
+    "SLOT_IMAGE_IMPORTED",
+    "SLOT_CHART_IMPORTED",
+    "CHART_MODEL_REPLACED"
+  ].includes(event) || event === "ASSETS_IMPORTED" && payload.targetSlotId != null) connections = true;
+  if (changed.targetSlotReferencesChanged || event === "SLOT_DATA_CONNECTED") tree = true;
+  if (event === "GRAPH_OBJECTS_REPLACED") {
+    if (operation === "graphs.addObject" || operation === "graphs.deleteObject" || operation === "graphs.setObjectValues" && changed.graphObjectCsvChanged) tree = connections = true;
+    else if (operation === "graphs.moveObject") connections = true;
+  }
+  if (event === "PROJECT_NAME_CHANGED") uiDisplay.projectName();
+  if (tree) uiDisplay.assetTree();
+  if (connections) uiDisplay.slotConnections();
+  const csvOptions = options ? uiDisplay.csvOptions() : null;
+  if (showSelectedEditor) {
+    let initialized = false;
+    if (before.selectedSlotId !== current.selectedSlotId || before.workspace !== current.workspace) {
+      initialized = uiDisplay.selection?.(current, csvOptions);
+    } else {
+      if (changed.slotIds.includes(current.selectedSlotId))
+        initialized = uiDisplay.slot?.(current, csvOptions, event);
+      if (!initialized) {
+        if (before.assetSelection !== current.assetSelection || before.assetPath !== current.assetPath)
+          uiDisplay.assetSelection?.(current);
+        if (before.graphObjectIndex !== current.graphObjectIndex) uiDisplay.graphObject?.(current);
+      }
+    }
+    if (before.overlay !== current.overlay) uiDisplay.overlay?.(current.overlay);
+    if (!initialized) {
+      if (changed.chartIds.length) uiDisplay.graph?.(
+        changed.chartIds,
+        event,
+        operation,
+        changed.removedObjectChartIds,
+        changed.appendedObjectChartIds
+      );
+      if (changed.imageIds.length) uiDisplay.image?.(changed.imageIds);
+      if (changed.csvIds.length) uiDisplay.csv?.(changed.csvIds);
+    }
+  }
+  if ([
+    "GRID_LAYOUT_CHANGED",
+    "LAYOUT_STYLE_CHANGED",
+    "SLOTS_MERGED",
+    "SLOTS_SPLIT",
+    "SLOTS_SWAPPED"
+  ].includes(event)) uiDisplay.layout?.();
+  if (["LABEL_SETTINGS_CHANGED", "LABEL_POSITION_CHANGED"].includes(event)) uiDisplay.labels?.(event);
+  if (["CAPTION_TEXT_INPUT", "SLOT_CAPTIONS_INSERTED", "CAPTION_SETTINGS_CHANGED"].includes(event))
+    uiDisplay.captions?.(event, changed.slotIds);
+  if (event === "EXPORT_SETTINGS_CHANGED") uiDisplay.printSettings?.();
+}
+function dispatchProjectCommand(event, payload = {}, showSelectedEditor = true) {
   if (!PROJECT_COMMANDS.has(event)) throw Error(`${event}는 등록된 ProjectObject command가 아닙니다.`);
   const result = projectEFSM.send(event, payload), frontendBefore = interfaceFSM.readState();
   if (!result.committed) return [result, frontendBefore, null];
   const reconciliationInput = buildFrontendReconciliationInput(event, result, frontendBefore), state = interfaceFSM.reconcileProjectResult(event, reconciliationInput), effect = reconciliationInput.projectionEffect ?? result.projectionEffect ?? {};
   if (event === "PROJECT_LOADED") clearWorkspacePresentation();
-  if (event === "PROJECT_LOADED" || event === "APPEARANCE_CHANGED")
-    applyUiPaletteProjection(dispatchProjectQuery("renderer", { operation: "ui-palette" }));
   const structural = [
     "PROJECT_LOADED",
     "GRID_LAYOUT_CHANGED",
@@ -16941,6 +17067,7 @@ function dispatchProjectCommand(event, payload = {}) {
   });
   if (structural) applyWorkspaceTransform(projection, state);
   else if (!skipContent) applyCommittedDashboardProjection(event, result, state, projection);
+  refreshCommittedUi(event, payload, result, frontendBefore, state, event === "PROJECT_LOADED" || showSelectedEditor);
   return [result, state, projection];
 }
 var appFSM = Object.freeze({
@@ -16960,10 +17087,12 @@ var appFSM = Object.freeze({
     }
     return dispatchInterfaceEvent(event, payload);
   },
-  notify: (...args) => interfaceFSM.notify(...args),
   run: (...args) => runLifecycleTask(...args),
-  ready: () => interfaceFSM.ready(readWorkspaceHint()),
-  subscribe: (...args) => interfaceFSM.subscribe(...args)
+  ready() {
+    const state = interfaceFSM.ready(readWorkspaceHint());
+    uiDisplay?.lifecycle(state.lifecycle);
+    return state;
+  }
 });
 function selectedProjectAsset() {
   let path = appFSM.state.assetPath;
@@ -17259,14 +17388,8 @@ function selectDirectoryFromTree(path) {
 function selectProjectCsv(path) {
   const resolved = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path });
   if (resolved?.kind !== "csv") return null;
-  const priorRevision = interfaceFSM.readState().revision, state = appFSM.send("SELECT_ASSET", {
-    kind: "csv",
-    path: resolved.path,
-    direction: "ui-to-fsm"
-  });
-  if (!(state.revision > priorRevision && state.assetSelection === "csv" && state.assetPath === resolved.path)) return null;
-  const current = appFSM.query("project-api", { operation: "assets.readDeletionTarget", path: resolved.path });
-  return current?.kind === "csv" ? current.target : null;
+  appFSM.send("SELECT_ASSET", { kind: "csv", path: resolved.target.path, direction: "ui-to-fsm" });
+  return resolved.target;
 }
 function selectImageFromTree(path) {
   return appFSM.send("SELECT_ASSET", { kind: "image", path, direction: "ui-to-fsm" });
@@ -17298,14 +17421,14 @@ function moveProjectNode(plan, useUniqueName = false) {
     useUniqueName
   });
   if (!result.committed) return null;
-  const path = result.changed.movedPathTo, trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
-  status(trashed ? `${projectPathName(result.changed.movedPathFrom)}을 휴지통으로 이동했습니다.` : `${projectPathName(result.changed.movedPathFrom)}을 ${projectParentPath(path)}로 이동했습니다.`);
+  const { path, oldPath } = result.changed.assets.find((asset) => asset.role === "moved" && asset.oldPath === plan.path), trashed = appFSM.query("project-api", { operation: "assets.isTrashed", path });
+  status(trashed ? `${projectPathName(oldPath)}을 휴지통으로 이동했습니다.` : `${projectPathName(oldPath)}을 ${projectParentPath(path)}로 이동했습니다.`);
   return immutableProjectCopy({ path, trashed });
 }
 function createProjectDirectory(parent, name) {
   const [result] = dispatchProjectCommand("PROJECT_DIRECTORY_CREATED", { parent, name });
   if (!result.committed) return null;
-  const path = result.changed.createdDirectoryPath;
+  const { path } = result.changed.assets.find((asset) => asset.role === "created" && asset.kind === "directory");
   appFSM.send("SELECT_ASSET", { kind: "directory", path, direction: "ui-to-fsm" });
   return path;
 }
@@ -17674,7 +17797,7 @@ var UiCommand = class {
     this.active = false;
   }
 };
-function mountMantineUi() {
+function mountMantineUi(connectDisplay) {
   const runtime = window.FastFigureUiRuntime;
   if (!runtime) throw new Error("Fast Figure UI runtime failed to load");
   if (!window.fastFigureUiRoot) throw new Error("Fast Figure React root is not initialized");
@@ -17710,7 +17833,20 @@ function mountMantineUi() {
     createTheme,
     useTree
   } = MantineCore;
-  const { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } = React;
+  const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
+  const StatusContext = React.createContext(null);
+  const AssetTreeContext = React.createContext({ nodes: [], trash: null });
+  const AppearancePaletteContext = React.createContext(null);
+  const SlotConnectionsContext = React.createContext([]);
+  const CsvOptionsContext = React.createContext([]);
+  const ProjectNameContext = React.createContext("");
+  const SelectedSlotContext = React.createContext(null);
+  const AppStateContext = React.createContext(null);
+  const OverlayContext = React.createContext(null);
+  const ImageEditorContext = React.createContext(null);
+  const GraphDataContext = React.createContext(null);
+  const GraphLayoutContext = React.createContext(null);
+  const GraphPaletteContext = React.createContext([]);
   const Button = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeButton, controlRef: ref }));
   const ActionIcon = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeActionIcon, controlRef: ref }));
   const UnstyledButton = React.forwardRef((props, ref) => React.createElement(CommandButton, { ...props, control: NativeUnstyledButton, controlRef: ref }));
@@ -17775,50 +17911,52 @@ function mountMantineUi() {
     { value: "Courier New, monospace", label: "Courier New" }
   ]);
   function numericBinding(group, field, axis = null) {
-    const read = () => {
-      const api = window.FastFigureApi, state = appFSM.readState();
+    const describe = (state, projection = null) => {
+      const api = window.FastFigureApi;
+      const read = (key, query) => projection ? projection[key] : query();
       if (state.lifecycle !== "ready") return { target: null, value: null, companions: null, ready: false };
       let view, target, value2;
       if (group === "image") {
-        view = api.images.readSettings();
+        view = read("image", api.images.readSettings);
         target = view?.imageId == null ? null : [group, state.selectedSlotId, view.imageId];
         value2 = view?.settings?.[field];
       } else if (group === "csv" || group === "object") {
-        view = api.graphs.readControls();
+        view = read("csv", api.graphs.readControls) ?? {};
         target = group === "csv" ? view.currentCsv ? [group, view.currentCsv.id] : null : view.chart?.editor?.editable !== false && view.selectedIndex != null ? [group, state.selectedSlotId, view.chart.id, view.selectedIndex] : null;
         value2 = group === "csv" ? view.currentCsv?.headerLines : view.object?.[field];
       } else if (group === "axis" || group === "global") {
-        view = api.graphs.readLayout();
+        view = read("graphLayout", api.graphs.readLayout);
         target = view && view.editable ? [group, state.selectedSlotId, view.chartId, axis] : null;
         value2 = group === "axis" ? view?.settings?.axes?.[axis]?.[field] : view?.settings?.[field];
       } else if (group === "label") {
-        view = api.labels.readSettings();
+        view = read("label", api.labels.readSettings);
         target = state.overlay === "label" ? [group] : null;
-        value2 = view.settings[field];
+        value2 = view?.settings?.[field];
       } else if (group === "caption") {
-        view = api.captions.readSettings();
+        view = read("caption", api.captions.readSettings);
         target = state.overlay === "caption" ? [group] : null;
-        value2 = view.settings[field];
+        value2 = view?.settings?.[field];
       } else if (group === "print") {
-        view = api.print.readSettings();
+        view = read("print", api.print.readSettings) ?? {};
         target = state.overlay === "print" ? [group] : null;
         value2 = field === "height" && view.heightMode !== "explicit" ? null : view[field];
       } else {
-        view = api.layout.readControls();
+        view = read("layout", api.layout.readControls) ?? {};
         target = state.overlay === "layout" ? [group] : null;
-        value2 = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"] : group === "zoom" ? view.zoom : view.slotStyle[field];
+        value2 = group === "grid" ? view[field === "rows" ? "gridRows" : "gridCols"] : group === "zoom" ? view.zoom : view.slotStyle?.[field];
       }
       if (typeof value2 === "string" && value2.trim() && Number.isFinite(Number(value2))) value2 = Number(value2);
       return {
         target: target === null ? null : [...target, field],
         value: value2,
         ready: true,
-        companions: group === "grid" ? { gridRows: view.gridRows, gridCols: view.gridCols, gridLimits: view.gridLimits } : group === "label" ? { x: view.settings.x, y: view.settings.y } : null
+        companions: group === "grid" ? { gridRows: view.gridRows, gridCols: view.gridCols, gridLimits: view.gridLimits } : group === "label" ? { x: view?.settings?.x, y: view?.settings?.y } : null
       };
     };
     const allowEmpty = group === "axis" && ["min", "max", "tick"].includes(field) || group === "global" || group === "print" && field === "height";
     return {
-      readCurrent: read,
+      describe,
+      readCurrent: () => describe(appFSM.readState()),
       prepare: (text, current) => prepareNumericInput(
         text,
         current,
@@ -17845,19 +17983,13 @@ function mountMantineUi() {
       }
     };
   }
-  function useControlSnapshot(readCurrent) {
-    const ref = useRef(readCurrent);
-    ref.current = readCurrent;
-    const snapshot = React.useCallback(() => JSON.stringify(ref.current()), []);
-    return JSON.parse(useSyncExternalStore(subscribeAppState, snapshot, snapshot));
-  }
-  function useUiCommand(binding, stepSize = null) {
+  function useUiCommand(binding, current, stepSize = null) {
     const [, render] = useState(0), ref = useRef(null);
     if (!ref.current) ref.current = new UiCommand(binding.readCurrent, binding.prepare, binding.invoke, stepSize);
     const command = ref.current;
     Object.assign(command, binding, { stepSize });
     command.changed = () => render((value2) => value2 + 1);
-    const current = useControlSnapshot(binding.readCurrent), target = JSON.stringify(current.target);
+    const target = JSON.stringify(current.target);
     useEffect(() => {
       command.cancel();
     }, [target, current.ready]);
@@ -17880,7 +18012,21 @@ function mountMantineUi() {
       };
       return outcome && typeof outcome.then === "function" ? outcome.then(applied) : applied(outcome);
     };
-    const command = useUiCommand(binding, props.step ?? 1);
+    const state = useAppState();
+    const graph = React.useContext(GraphDataContext)?.editor;
+    const image = React.useContext(ImageEditorContext);
+    const graphLayout = React.useContext(GraphLayoutContext);
+    const overlay = React.useContext(OverlayContext);
+    const current = binding.describe(state, {
+      image,
+      csv: graph && { ...graph, object: graph.objects[graph.selectedIndex] },
+      graphLayout,
+      label: overlay.label,
+      caption: overlay.caption,
+      print: overlay.print,
+      layout: overlay.controls
+    });
+    const command = useUiCommand(binding, current, props.step ?? 1);
     const { value: value2, onChange, onBlur, min, max, step, allowDecimal, clampBehavior, ...inputProps } = props;
     const run = (callback) => {
       try {
@@ -17928,18 +18074,25 @@ function mountMantineUi() {
     return React.createElement("div", { style: { display: "contents" }, onClick: (event) => event.stopPropagation() }, control);
   }
   function CommandButton({ control = NativeButton, controlRef, localAction = false, onClick, ...props }) {
-    const rendered = appFSM.readState();
+    const rendered = useAppState();
     const displayedTarget = [rendered.selectedSlotId, rendered.assetPath, rendered.graphObjectIndex, rendered.overlay];
     const readTarget = () => {
       const state = appFSM.readState(), current = [state.selectedSlotId, state.assetPath, state.graphObjectIndex, state.overlay];
       return state.lifecycle === "ready" && !props.disabled && sameUiTarget(current, displayedTarget) ? current : null;
     };
-    const command = useUiCommand({ readCurrent: () => ({
-      target: readTarget(),
-      value: null,
-      companions: null,
-      ready: appFSM.readState().lifecycle === "ready"
-    }), prepare: null, invoke: (_target, event) => onClick?.(event) });
+    const command = useUiCommand(
+      { readCurrent: () => ({
+        target: readTarget(),
+        value: null,
+        companions: null,
+        ready: appFSM.readState().lifecycle === "ready"
+      }), prepare: null, invoke: (_target, event) => onClick?.(event) },
+      {
+        target: rendered.lifecycle === "ready" && !props.disabled ? displayedTarget : null,
+        value: null,
+        ready: rendered.lifecycle === "ready"
+      }
+    );
     return React.createElement(control, {
       ...props,
       ref: controlRef,
@@ -18035,9 +18188,6 @@ function mountMantineUi() {
   function fontValueFromSelect(value2) {
     return typeof value2 === "string" && value2.startsWith(FONT_SELECT_PREFIX) ? value2.slice(FONT_SELECT_PREFIX.length) : null;
   }
-  function subscribeAppState(onStoreChange) {
-    return appFSM.subscribe(onStoreChange);
-  }
   function getAppStateSnapshot() {
     const state = appFSM.readState();
     return JSON.stringify([
@@ -18051,8 +18201,7 @@ function mountMantineUi() {
     ]);
   }
   function useAppState() {
-    useSyncExternalStore(subscribeAppState, getAppStateSnapshot, getAppStateSnapshot);
-    return appFSM.readState();
+    return React.useContext(AppStateContext);
   }
   function addSelectedGraphObject() {
     const current = appFSM.readState();
@@ -18081,16 +18230,8 @@ function mountMantineUi() {
     if (current.selectedSlotId == null) return null;
     return window.FastFigureApi.graphs.importFile(current.selectedSlotId, file);
   }
-  function useUiTelemetry() {
-    return useSyncExternalStore(
-      subscribeUiTelemetry,
-      getUiTelemetrySnapshot,
-      getUiTelemetrySnapshot
-    );
-  }
-  function selectedTargetText(state) {
+  function selectedTargetText(state, slot) {
     if (state.workspace === "project") return "빈 슬롯 또는 그래프를 선택하세요.";
-    const slot = window.FastFigureApi.slots.readSelected();
     return slot ? `선택한 슬롯: ${slot.row}행 ${slot.col}열` : "빈 슬롯 또는 그래프를 선택하세요.";
   }
   function toggleOverlay(overlay) {
@@ -18175,7 +18316,7 @@ function mountMantineUi() {
   }
   function FastFigureToolbar() {
     const state = useAppState();
-    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
+    const slot = React.useContext(SelectedSlotContext);
     const activeOverlay = state.overlay;
     const buttonProps = (overlay) => ({
       variant: activeOverlay === overlay ? "filled" : "light",
@@ -18195,7 +18336,7 @@ function mountMantineUi() {
           c: "dimmed",
           style: { flex: "1 1 auto", minWidth: 0 }
         },
-        selectedTargetText(state)
+        selectedTargetText(state, slot)
       ),
       React.createElement(Button, { disabled: state.lifecycle !== "ready", "aria-label": "작업영역 전체 렌더링", onClick: () => window.FastFigureApi.workspace.render() }, "렌더"),
       React.createElement(Button, { ...buttonProps("print"), "aria-label": "프린트" }, "프린트")
@@ -18203,10 +18344,9 @@ function mountMantineUi() {
   }
   function FastFigureDataActions() {
     const state = useAppState();
-    useControlSnapshot(() => window.FastFigureApi.slots.readSelected());
+    const slot = React.useContext(SelectedSlotContext);
     const busy = state.lifecycle !== "ready";
     const slotApi = window.FastFigureApi.slots;
-    const slot = state.workspace === "project" ? null : slotApi.readSelected();
     const slotType = slot?.content.contentType || "graph";
     const [resetSlotId, setResetSlotId] = useState(null);
     const assetApi = window.FastFigureApi.assets;
@@ -18372,11 +18512,10 @@ function mountMantineUi() {
   }
   function FastFigureImageEditor() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.image" ? window.FastFigureApi.images.readEditor() : null);
+    const image = React.useContext(ImageEditorContext);
     if (state.workspace !== "slot.image") return null;
     const busy = state.lifecycle !== "ready";
     const imageApi = window.FastFigureApi.images;
-    const image = imageApi.readEditor();
     const settings = image?.settings;
     const updateSettings = (patch) => {
       if (!settings) return;
@@ -18461,16 +18600,11 @@ function mountMantineUi() {
       ) : null
     );
   }
-  function readProjectAssetDisplay() {
-    const assetNodes = window.FastFigureApi.assets.readTree();
-    const slotRows = window.FastFigureApi.slots.readDisplay();
-    return { assetNodes, slotRows };
-  }
   function FastFigureProjectDataTree() {
     const state = useAppState();
-    useControlSnapshot(() => [window.FastFigureApi.assets.readTree(), window.FastFigureApi.slots.readDisplay()]);
     const assetApi = window.FastFigureApi.assets;
-    const { assetNodes, slotRows } = readProjectAssetDisplay();
+    const { nodes: assetNodes, trash } = React.useContext(AssetTreeContext);
+    const slotRows = React.useContext(SlotConnectionsContext);
     const snapshot = {
       directories: assetNodes.filter((node) => node.kind === "directory").map((node) => node.path),
       data: assetNodes.filter((node) => node.kind === "csv").map((node) => ({
@@ -18520,7 +18654,6 @@ function mountMantineUi() {
       }
     };
     const trashSelected = state.assetSelection === "directory" && state.assetPath === PROJECT_TRASH_DIRECTORY;
-    const trash = assetApi.readTrash();
     const trashHasContents = trash ? !trash.empty : false;
     const trashReferenceCount = trash?.referenceCount ?? 0;
     const openTrashDialog = () => {
@@ -19082,7 +19215,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureProjectActions() {
     const state = useAppState();
-    useControlSnapshot(() => window.FastFigureApi.project.readName());
+    const projectName = React.useContext(ProjectNameContext);
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
     const projectApi = window.FastFigureApi.project;
@@ -19109,9 +19242,9 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       { gap: "xs", p: "md" },
       React.createElement(Text, { fw: 600 }, "프로젝트"),
       React.createElement(TextInput, {
-        key: `project-name-${projectApi.readName()}`,
+        key: `project-name-${projectName}`,
         label: "프로젝트 이름",
-        defaultValue: projectApi.readName(),
+        defaultValue: projectName,
         disabled: busy,
         onChange: (event) => {
           projectApi.setName(event.target.value);
@@ -19151,22 +19284,21 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureGraphDataEditor() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readData(), window.FastFigureApi.assets.readList("csv")] : null);
+    const csvAssets = React.useContext(CsvOptionsContext);
+    const view = React.useContext(GraphDataContext);
     const busy = state.lifecycle !== "ready";
     const dragRef = useRef(null);
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
     const assetApi = window.FastFigureApi.assets;
-    const editor = graphApi.readData();
+    if (!view) return null;
+    const { editor, columns, objectColumns, rows } = view;
     const chartId = editor.chart?.id ?? null, editable = editor.chart?.editor?.editable !== false;
-    const csvAssets = assetApi.readList("csv");
     const csvOptions = csvAssets.map((csv) => ({ value: String(csv.id), label: csv.name }));
     const objects = editor.objects;
     const selectedIndex = editor.selectedIndex;
     const selected = selectedIndex === null ? null : objects[selectedIndex];
     const activeCsv = editor.currentCsv;
-    const columns = activeCsv ? graphApi.readColumns(activeCsv.id) : [];
-    const objectColumns = selected ? graphApi.readColumns(selected.csvId, chartId) : [];
     const columnOptions = objectColumns.map((column) => ({ value: column.id, label: column.label }));
     const update = (values) => selectedIndex !== null && graphApi.setObjectValues(chartId, selectedIndex, values);
     const selectField = (label, key, data) => React.createElement(Select, {
@@ -19237,7 +19369,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
           React.createElement(
             TableTbody,
             null,
-            ...(assetApi.readPreview(activeCsv.id, 0, 30)?.rows ?? []).map(
+            ...rows.map(
               (row, rowIndex) => React.createElement(
                 TableTr,
                 { key: rowIndex },
@@ -19397,11 +19529,10 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureGraphLayoutEditor() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? window.FastFigureApi.graphs.readLayout() : null);
+    const editor = React.useContext(GraphLayoutContext);
     const busy = state.lifecycle !== "ready";
     if (state.workspace !== "slot.graph") return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readLayout();
     if (!editor) return null;
     const settings = editor.settings;
     const editable = editor.editable;
@@ -19573,12 +19704,13 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureGraphPaletteActions() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().workspace === "slot.graph" ? [window.FastFigureApi.graphs.readControls(), window.FastFigureApi.graphs.readPalette()] : null);
+    const view = React.useContext(GraphDataContext);
+    const colors = React.useContext(GraphPaletteContext);
     const busy = state.lifecycle !== "ready";
     const importResetRef = useRef(null);
-    if (state.workspace !== "slot.graph") return null;
+    if (state.workspace !== "slot.graph" || !view) return null;
     const graphApi = window.FastFigureApi.graphs;
-    const editor = graphApi.readControls(), colors = graphApi.readPalette();
+    const { editor } = view;
     const canEdit = !!editor.chart && editor.chart.editor.editable !== false;
     const commitColors = (colors2) => graphApi.applyPalette(editor.chart?.id ?? null, colors2);
     const resetPalette = () => {
@@ -19734,9 +19866,8 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const busy = state.lifecycle !== "ready";
     const appearanceApi = window.FastFigureApi.appearance;
     const [opened, setOpened] = useState(false);
-    const [draft, setDraft] = useState(() => ({
-      ...appearanceApi.readPalette()
-    }));
+    const palette = React.useContext(AppearancePaletteContext);
+    const [draft, setDraft] = useState(() => ({ ...palette }));
     const fields = [
       ["uiColor", "강조색"],
       ["uiBackgroundColor", "UI 배경"],
@@ -19750,7 +19881,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       ["fontColor", "그래프 글자"]
     ];
     const openPalette = () => {
-      setDraft({ ...appearanceApi.readPalette() });
+      setDraft({ ...palette });
       setOpened(true);
     };
     const applyPalette = () => {
@@ -19834,7 +19965,7 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     );
   }
   function FastFigureStatusDebug() {
-    const telemetry = useUiTelemetry();
+    const telemetry = React.useContext(StatusContext);
     const state = useAppState();
     const busy = state.lifecycle !== "ready";
     return React.createElement(
@@ -20052,14 +20183,14 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureLabelOverlay() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().overlay === "label" ? window.FastFigureApi.labels.readState() : null);
+    const label = React.useContext(OverlayContext).label;
     const previewRef = useRef(null);
     const dragRef = useRef(null);
     const [, setPreviewRevision] = useState(0);
     if (state.overlay !== "label") return null;
     const busy = state.lifecycle !== "ready";
     const labelApi = window.FastFigureApi.labels;
-    const label = labelApi.readState();
+    if (!label) return null;
     const settings = label.settings;
     const reference = label.reference;
     const previewWidth = 420;
@@ -20252,24 +20383,11 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureCaptionOverlay() {
     const state = useAppState();
-    const [targetMode, setTargetMode] = useState("global");
-    useControlSnapshot(() => {
-      const current = appFSM.readState();
-      return current.overlay === "caption" ? [
-        window.FastFigureApi.captions.readGlobal(),
-        targetMode === "slot" && current.selectedSlotId != null ? window.FastFigureApi.captions.readSlot(current.selectedSlotId) : null
-      ] : null;
-    });
-    useEffect(() => {
-      if (state.overlay !== "caption") setTargetMode("global");
-    }, [state.overlay]);
-    if (state.overlay !== "caption") return null;
+    const { caption: globalCaption, slotCaption, captionMode: targetMode, setCaptionMode: setTargetMode } = React.useContext(OverlayContext);
+    const selectedSlot = React.useContext(SelectedSlotContext);
+    if (state.overlay !== "caption" || !globalCaption) return null;
     const busy = state.lifecycle !== "ready";
     const captionApi = window.FastFigureApi.captions;
-    const slotApi = window.FastFigureApi.slots;
-    const globalCaption = captionApi.readGlobal();
-    const selectedSlot = slotApi.readSelected();
-    const slotCaption = targetMode === "slot" && selectedSlot ? captionApi.readSlot(selectedSlot.id) : null;
     const settings = globalCaption.settings;
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-caption" });
     const commitSettings = (patch) => captionApi.setSettings(patch);
@@ -20390,24 +20508,15 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigurePrintOverlay() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().overlay === "print" ? window.FastFigureApi.print.readSettings() : null);
     const printApi = window.FastFigureApi.print;
-    const initial = printApi.readSettings();
-    const width = initial.width, height = initial.heightMode === "explicit" ? initial.height : "", dpi = initial.dpi;
-    const [format, setFormat] = useState(initial.format);
+    const initial = React.useContext(OverlayContext).print;
     const [message, setMessage] = useState("");
-    useEffect(() => {
-      if (state.overlay !== "print") return;
-      const saved = printApi.readSettings();
-      setFormat(saved.format);
-    }, [state.overlay]);
-    if (state.overlay !== "print") return null;
+    if (state.overlay !== "print" || !initial) return null;
+    const { width, dpi, format } = initial, height = initial.heightMode === "explicit" ? initial.height : "";
     const busy = state.lifecycle !== "ready";
     const close = () => appFSM.send("CLOSE_OVERLAY", { reason: "mantine-print" });
     const commit = (patch) => {
-      const next = printApi.setSettings(patch);
-      setFormat(next.format);
-      return next;
+      return printApi.setSettings(patch);
     };
     const save = () => printApi.save(setMessage).catch((error) => reportTaskError("PRINT_EXPORT", error));
     const capture = () => printApi.capture(setMessage).catch((error) => reportTaskError("CAPTURE_EXPORT", error));
@@ -20487,12 +20596,10 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
   }
   function FastFigureLayoutOverlay() {
     const state = useAppState();
-    useControlSnapshot(() => appFSM.readState().overlay === "layout" ? window.FastFigureApi.layout.readControls() : null);
     const [layoutSelection, setLayoutSelection] = useState(() => /* @__PURE__ */ new Set());
-    const [renderedPreviewWidth, setRenderedPreviewWidth] = useState(null);
     const previewFrameRef = useRef(null);
     const layoutApi = window.FastFigureApi.layout;
-    const layout2 = state.overlay === "layout" ? layoutApi.readState(renderedPreviewWidth) : null;
+    const { layout: layout2, resizePreview } = React.useContext(OverlayContext);
     useEffect(() => {
       setLayoutSelection(/* @__PURE__ */ new Set());
     }, [state.overlay, layout2?.gridRows, layout2?.gridCols]);
@@ -20502,14 +20609,15 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
       if (!element) return;
       const updateRenderedWidth = () => {
         const width = element.getBoundingClientRect().width;
-        if (width > 0) setRenderedPreviewWidth(width);
+        if (width > 0) resizePreview(width);
       };
       updateRenderedWidth();
+      if (typeof ResizeObserver === "undefined") return;
       const observer = new ResizeObserver(updateRenderedWidth);
       observer.observe(element);
       return () => observer.disconnect();
-    }, [state.overlay]);
-    if (state.overlay !== "layout") return null;
+    }, [state.overlay, !!layout2]);
+    if (state.overlay !== "layout" || !layout2) return null;
     const busy = state.lifecycle !== "ready";
     const style = layout2.slotStyle;
     const commitStyle = (patch) => layoutApi.setStyle(patch);
@@ -20738,17 +20846,35 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     const shellGeometry = fastFigureTheme.other.shell;
     const [navbarWidth, setNavbarWidth] = useState(shellGeometry.navbarWidth);
     const [navbarCollapsed, setNavbarCollapsed] = useState(false);
-    const navbarDragRef = useRef(null);
+    const navbarDragRef = useRef(null), lastGraphAreaSize = useRef(null);
     const clampNavbarWidth = (value2) => Math.max(shellGeometry.navbarMinWidth, Math.min(shellGeometry.navbarMaxWidth, value2));
-    useEffect(() => {
+    const syncGraphAreaSize = useCallback(() => {
+      const area = document.getElementById("graphArea");
+      if (!area) return;
+      const { width, height } = area.getBoundingClientRect();
+      const previous = lastGraphAreaSize.current;
+      if (!(width > 0 && height > 0) || previous?.width === width && previous?.height === height) return;
+      transformWorkspace();
+      lastGraphAreaSize.current = { width, height };
+    }, []);
+    useLayoutEffect(() => {
       const app = document.querySelector(".app");
       if (!app) return;
-      app.style.setProperty(
-        "--ff-renderer-navbar-width",
-        navbarCollapsed ? "0px" : `${navbarWidth}px`
-      );
-      requestAnimationFrame(() => transformWorkspace());
-    }, [navbarWidth, navbarCollapsed]);
+      app.style.setProperty("--ff-renderer-navbar-width", navbarCollapsed ? "0px" : `${navbarWidth}px`);
+      syncGraphAreaSize();
+    }, [navbarWidth, navbarCollapsed, syncGraphAreaSize]);
+    useLayoutEffect(() => {
+      const area = document.getElementById("graphArea");
+      if (!area) return;
+      const observer = window.ResizeObserver ? new window.ResizeObserver(syncGraphAreaSize) : null;
+      if (observer) observer.observe(area);
+      else window.addEventListener("resize", syncGraphAreaSize);
+      return () => {
+        if (observer) observer.disconnect();
+        else window.removeEventListener("resize", syncGraphAreaSize);
+        lastGraphAreaSize.current = null;
+      };
+    }, [syncGraphAreaSize]);
     const toggleNavbar = () => {
       setNavbarCollapsed((collapsed) => !collapsed);
     };
@@ -20875,8 +21001,228 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
     selectedTargetText
   });
   function FastFigureApp() {
-    useAppState();
-    const palette = useControlSnapshot(() => window.FastFigureApi.appearance.readPalette());
+    const [status2, setStatusText] = useState("");
+    const [debugEnabled2, setDebugEnabledDisplay] = useState(false);
+    const [debugLines2, setDebugLines] = useState([]);
+    const api = window.FastFigureApi;
+    const [palette, setPalette] = useState(() => api.appearance.readPalette());
+    const [projectName, setProjectName2] = useState(() => api.project.readName());
+    const [assetNodes, setAssetNodes] = useState(() => api.assets.readTree());
+    const [trash, setTrash] = useState(null);
+    function showTrash(current) {
+      setTrash(current.assetSelection === "directory" && current.assetPath === PROJECT_TRASH_DIRECTORY ? api.assets.readTrash() : null);
+    }
+    const [slotRows, setSlotRows] = useState(() => api.slots.readDisplay());
+    const [csvOptions, setCsvOptions] = useState(() => api.assets.readList("csv"));
+    const [selectedSlot, setSelectedSlot2] = useState(null);
+    const [imageEditor, setImageEditor] = useState(null);
+    const [graphData, setGraphData] = useState(null);
+    const [graphLayout, setGraphLayout] = useState(null);
+    const [graphPalette, setGraphPalette] = useState([]);
+    const [appState, setAppState] = useState(() => appFSM.readState());
+    const [label, setLabel] = useState(null);
+    const [caption, setCaption] = useState(null);
+    const [slotCaption, setSlotCaption] = useState(null);
+    const [captionMode, setCaptionModeDisplay] = useState("global");
+    const captionModeRef = useRef("global");
+    const [print, setPrint] = useState(null);
+    const [controls, setControls] = useState(null);
+    const [layout2, setLayout] = useState(null);
+    const previewWidth = useRef(null);
+    function showLayout() {
+      setControls(api.layout.readControls());
+      if (appFSM.readState().overlay === "layout") setLayout(api.layout.readState(previewWidth.current));
+    }
+    function resizePreview(width) {
+      if (previewWidth.current === width || appFSM.readState().overlay !== "layout") return;
+      previewWidth.current = width;
+      setLayout(api.layout.readState(width));
+    }
+    function setCaptionMode(mode) {
+      const { selectedSlotId } = appFSM.readState();
+      captionModeRef.current = mode;
+      setCaptionModeDisplay(mode);
+      setSlotCaption(mode === "slot" && selectedSlotId != null ? api.captions.readSlot(selectedSlotId) : null);
+    }
+    function showOverlay(name) {
+      setAppState(appFSM.readState());
+      if (name === "label") setLabel(api.labels.readState());
+      else setLabel(null);
+      if (name === "caption") setCaption(api.captions.readGlobal());
+      else {
+        setCaption(null);
+        setCaptionMode("global");
+      }
+      if (name === "print") setPrint(api.print.readSettings());
+      else setPrint(null);
+      if (name === "layout") showLayout();
+      else {
+        previewWidth.current = null;
+        setLayout(null);
+      }
+    }
+    const graphView = useRef(null);
+    const identity = useRef(null);
+    const lastSelection = useRef(null);
+    function showAssetSelection(current, refreshTrash = true) {
+      const previous = lastSelection.current;
+      lastSelection.current = current;
+      setAppState(current);
+      if (refreshTrash) showTrash(current);
+      const editor = graphView.current?.editor;
+      if (!editor || current.workspace !== "slot.graph") return;
+      const assetChanged = previous?.assetSelection !== current.assetSelection || previous?.assetPath !== current.assetPath;
+      const objectChanged = previous?.graphObjectIndex !== current.graphObjectIndex;
+      if (!assetChanged && !objectChanged) return;
+      const currentCsv = assetChanged ? api.graphs.readControls().currentCsv : editor.currentCsv;
+      showGraphData(
+        { ...editor, currentCsv, selectedIndex: current.graphObjectIndex },
+        { current: assetChanged, object: objectChanged }
+      );
+    }
+    function showGraphData(editor, { current = true, object = true } = {}) {
+      const previous = graphView.current;
+      if (!editor) {
+        graphView.current = null;
+        setGraphData(null);
+        return;
+      }
+      const active = editor.currentCsv;
+      const selected = editor.objects[editor.selectedIndex];
+      const columns = current ? active ? api.graphs.readColumns(active.id) : [] : previous.columns;
+      const objectColumns = object ? selected ? active && selected.csvId === active.id ? columns : api.graphs.readColumns(selected.csvId, editor.chart?.id) : [] : previous.objectColumns;
+      const rows = current ? active && columns.length ? api.assets.readPreview(active.id, 0, 30)?.rows ?? [] : [] : previous.rows;
+      graphView.current = { editor, columns, objectColumns, rows };
+      setGraphData(graphView.current);
+    }
+    const editorIdentity = (current, slot) => {
+      if (!slot) return null;
+      const { contentType, imageId, chart } = slot.content;
+      return JSON.stringify([slot.id, current.workspace, contentType, contentType === "image" ? imageId : chart]);
+    };
+    function showSelection(current, options = null, force = false, slot = current.selectedSlotId == null ? null : api.slots.readSelected()) {
+      setAppState(current);
+      setSelectedSlot2(slot);
+      if (lastSelection.current?.selectedSlotId !== current.selectedSlotId) {
+        if (current.overlay === "label") setLabel(api.labels.readState());
+        if (current.overlay === "caption" && captionModeRef.current === "slot")
+          setSlotCaption(current.selectedSlotId == null ? null : api.captions.readSlot(current.selectedSlotId));
+      }
+      const next = editorIdentity(current, slot);
+      if (!force && next === identity.current) {
+        showAssetSelection(current, lastSelection.current?.assetPath !== current.assetPath);
+        return false;
+      }
+      if (!force && lastSelection.current?.assetPath !== current.assetPath) showTrash(current);
+      lastSelection.current = current;
+      identity.current = next;
+      setImageEditor(slot && current.workspace === "slot.image" ? api.images.readEditor() : null);
+      if (slot && current.workspace === "slot.graph") {
+        showGraphData(api.graphs.readData());
+        setGraphLayout(api.graphs.readLayout());
+        setGraphPalette(api.graphs.readPalette());
+        if (options === null) setCsvOptions(api.assets.readList("csv"));
+      } else {
+        showGraphData(null);
+        setGraphLayout(null);
+        setGraphPalette([]);
+      }
+      return true;
+    }
+    useLayoutEffect(() => connectDisplay({
+      uiDisplay: {
+        palette: setPalette,
+        selection: showSelection,
+        slot: (current, options, event) => {
+          const slot = api.slots.readSelected();
+          if (editorIdentity(current, slot) !== identity.current) return showSelection(current, options, false, slot);
+          setSelectedSlot2(slot);
+          if (event === "SLOT_IMAGE_SETTINGS_CHANGED" && current.workspace === "slot.image") {
+            const next = api.images.readSettings();
+            if (next) setImageEditor((previous) => previous && { ...previous, settings: next.settings });
+          }
+          return false;
+        },
+        image: (ids) => {
+          const key = identity.current && JSON.parse(identity.current);
+          if (key?.[1] === "slot.image" && ids.includes(key[3])) setImageEditor(api.images.readEditor());
+        },
+        assetSelection: (current) => showAssetSelection(current),
+        graphObject: (current) => showAssetSelection(current, false),
+        graph: (ids, event, operation, removed, appended) => {
+          const editor = graphView.current?.editor;
+          const ownerId = editor?.chart?.id;
+          if (ownerId == null || !ids.includes(ownerId)) return;
+          if (event === "CHART_LAYOUT_CHANGED") {
+            const layout3 = api.graphs.readLayout();
+            setGraphLayout(layout3);
+            if (layout3) showGraphData({ ...editor, chart: {
+              ...editor.chart,
+              editor: { ...editor.chart.editor, title: layout3.title }
+            } }, { current: false, object: false });
+            return;
+          }
+          const next = api.graphs.readData();
+          const selected = next.objects[next.selectedIndex];
+          const previous = editor.objects[editor.selectedIndex];
+          showGraphData(next, {
+            current: next.currentCsv?.id !== editor.currentCsv?.id,
+            object: selected?.csvId !== previous?.csvId || !!selected !== !!previous || next.chart?.editor.editable !== editor.chart?.editor.editable
+          });
+          if (event === "CHART_MODEL_REPLACED") setGraphLayout(api.graphs.readLayout());
+          if (event === "CHART_MODEL_REPLACED" || removed.includes(ownerId) || appended.includes(ownerId) || event === "GRAPH_OBJECTS_REPLACED" && [
+            "graphs.addObject",
+            "graphs.deleteObject",
+            "graphs.moveObject",
+            "graphs.setObjectValues",
+            "graphs.applyPalette"
+          ].includes(operation))
+            setGraphPalette(api.graphs.readPalette());
+        },
+        csv: (ids) => {
+          const editor = graphView.current?.editor;
+          if (!editor) return;
+          const active = editor.currentCsv, selected = editor.objects[editor.selectedIndex];
+          const current = active != null && ids.includes(active.id), object = selected != null && ids.includes(selected.csvId);
+          if (!current && !object) return;
+          const currentCsv = current ? api.graphs.readControls(active.id).currentCsv : active;
+          showGraphData({ ...editor, currentCsv }, { current, object });
+        },
+        overlay: showOverlay,
+        lifecycle: (value2) => setAppState((previous) => ({ ...previous, lifecycle: value2 })),
+        taskError: (error) => setStatusText(error.message),
+        layout: showLayout,
+        labels: () => {
+          if (appFSM.readState().overlay === "label") setLabel(api.labels.readState());
+        },
+        captions: (event, slotIds) => {
+          const { overlay, selectedSlotId } = appFSM.readState();
+          if (overlay !== "caption") return;
+          if (event === "CAPTION_SETTINGS_CHANGED" || event === "CAPTION_TEXT_INPUT") setCaption(api.captions.readGlobal());
+          if (captionModeRef.current === "slot" && selectedSlotId != null && slotIds.includes(selectedSlotId))
+            setSlotCaption(api.captions.readSlot(selectedSlotId));
+        },
+        printSettings: () => {
+          if (appFSM.readState().overlay === "print") setPrint(api.print.readSettings());
+        },
+        zoom: (zoom) => {
+          setControls((previous) => previous && { ...previous, zoom });
+          setLayout((previous) => previous && { ...previous, zoom });
+        },
+        projectName: () => setProjectName2(api.project.readName()),
+        assetTree: () => {
+          setAssetNodes(api.assets.readTree());
+          showTrash(appFSM.readState());
+        },
+        slotConnections: () => setSlotRows(api.slots.readDisplay()),
+        csvOptions: () => {
+          const next = api.assets.readList("csv");
+          setCsvOptions(next);
+          return next;
+        }
+      },
+      statusDisplay: { statusText: setStatusText, debugEnabled: setDebugEnabledDisplay, debugLines: setDebugLines }
+    }), []);
     const paletteKey = JSON.stringify(palette);
     const theme = useMemo(() => createTheme({
       ...fastFigureTheme,
@@ -20936,7 +21282,59 @@ ${moveConfirm.uniqueName} 이름으로 이동할 수 있습니다.` : null,
         theme,
         cssVariablesResolver
       },
-      React.createElement(FastFigureShell)
+      React.createElement(
+        AppearancePaletteContext.Provider,
+        { value: palette },
+        React.createElement(
+          AppStateContext.Provider,
+          { value: appState },
+          React.createElement(
+            OverlayContext.Provider,
+            { value: { label, caption, slotCaption, captionMode, setCaptionMode, print, controls, layout: layout2, resizePreview } },
+            React.createElement(
+              StatusContext.Provider,
+              { value: { status: status2, debugEnabled: debugEnabled2, debugLines: debugLines2 } },
+              React.createElement(
+                ProjectNameContext.Provider,
+                { value: projectName },
+                React.createElement(
+                  AssetTreeContext.Provider,
+                  { value: { nodes: assetNodes, trash } },
+                  React.createElement(
+                    SlotConnectionsContext.Provider,
+                    { value: slotRows },
+                    React.createElement(
+                      CsvOptionsContext.Provider,
+                      { value: csvOptions },
+                      React.createElement(
+                        SelectedSlotContext.Provider,
+                        { value: selectedSlot },
+                        React.createElement(
+                          ImageEditorContext.Provider,
+                          { value: imageEditor },
+                          React.createElement(
+                            GraphDataContext.Provider,
+                            { value: graphData },
+                            React.createElement(
+                              GraphLayoutContext.Provider,
+                              { value: graphLayout },
+                              React.createElement(
+                                GraphPaletteContext.Provider,
+                                { value: graphPalette },
+                                React.createElement(FastFigureShell)
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
     );
   }
   window.fastFigureUiRoot.render(React.createElement(FastFigureApp));
@@ -21213,7 +21611,14 @@ function initializeFastFigure() {
     },
     "info"
   );
-  const uiMount = mountMantineUi();
+  const uiMount = mountMantineUi((display) => {
+    setUiDisplay(display.uiDisplay);
+    setStatusDisplay(display.statusDisplay);
+    return () => {
+      setUiDisplay(null);
+      setStatusDisplay(null);
+    };
+  });
   auditApp("app:init");
   return { frontendActions, coreRuntime, uiMount };
 }
